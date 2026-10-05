@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/toast'
 import { api } from '@/lib/client'
 import { GlobalSearch } from './global-search'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 
 export type ShellProperty = {
   id: string
@@ -69,6 +70,7 @@ export function AppShell({
   children,
   showPropertySwitcher = true,
   searchScope = 'org',
+  installName,
 }: {
   nav: NavSection[]
   user: ShellUser
@@ -77,6 +79,7 @@ export function AppShell({
   children: React.ReactNode
   showPropertySwitcher?: boolean
   searchScope?: 'org' | 'platform'
+  installName?: string
 }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = React.useState(false)
@@ -181,7 +184,10 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
+          {installName && <InstallPrompt appName={installName} className="mb-6 lg:hidden" />}
+          {children}
+        </main>
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} scope={searchScope} />

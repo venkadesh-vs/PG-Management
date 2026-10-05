@@ -4,6 +4,7 @@ import Script from 'next/script'
 import { ToastProvider } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/primitives'
 import { publicEnv } from '@/lib/env'
+import { ServiceWorkerRegistration } from '@/components/pwa/service-worker'
 import './globals.css'
 
 const sans = Inter({
@@ -55,6 +56,8 @@ export const metadata: Metadata = {
       'Replace notebooks, WhatsApp and phone calls with one automated PG management platform.',
   },
   robots: { index: true, follow: true },
+  appleWebApp: { capable: true, title: publicEnv.appName, statusBarStyle: 'default' },
+  icons: { apple: [{ url: '/icons/owner-180.png', sizes: '180x180' }] },
 }
 
 export const viewport: Viewport = {
@@ -80,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         </ToastProvider>
+        <ServiceWorkerRegistration />
 
         {/* Analytics stays optional and provider-agnostic; blank env = no tracking. */}
         {publicEnv.analyticsProvider === 'plausible' && publicEnv.analyticsDomain && (

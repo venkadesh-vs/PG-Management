@@ -112,7 +112,7 @@ export default async function MessagesPage({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Messages generated" value={total} icon="messages" tone="blue" />
         <StatCard
           label={live ? 'Sent' : 'Held in demo'}

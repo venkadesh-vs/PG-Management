@@ -177,14 +177,14 @@ export default async function ResidentDetailPage({
                 {formatPhone(resident.phone)}
               </span>
               {resident.email && (
-                <span className="flex items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 break-all">
                   <Mail className="size-3.5" />
                   {resident.email}
                 </span>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3 sm:w-auto">
+          <div className="grid grid-cols-3 gap-2 sm:w-auto sm:gap-3">
             <HeaderStat label="Rent" value={formatMoney(resident.rentAmount)} />
             <HeaderStat
               label="Outstanding"
@@ -197,7 +197,7 @@ export default async function ResidentDetailPage({
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="max-w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="rent">Rent & invoices</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
@@ -364,57 +364,98 @@ export default async function ResidentDetailPage({
               description="Invoices generate automatically on the first of each month."
             />
           ) : (
-            <TableWrap>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Paid</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {resident.invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>
-                        <p className="font-medium text-slate-800">{invoice.number}</p>
-                        <p className="text-xs text-slate-500">
-                          {invoice.lines.map((l) => l.label.split('—')[0].trim()).join(' · ')}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {formatDate(invoice.periodStart)}
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {formatDate(invoice.dueDate)}
-                      </TableCell>
-                      <TableCell className="text-right tabular">{formatMoney(invoice.total)}</TableCell>
-                      <TableCell className="text-right text-emerald-600 tabular">
-                        {formatMoney(invoice.amountPaid)}
-                      </TableCell>
-                      <TableCell
+            <>
+              {/* Desktop table */}
+              <TableWrap className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Due</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resident.invoices.map((invoice) => (
+                      <TableRow key={invoice.id}>
+                        <TableCell>
+                          <p className="font-medium text-slate-800">{invoice.number}</p>
+                          <p className="text-xs text-slate-500">
+                            {invoice.lines.map((l) => l.label.split('—')[0].trim()).join(' · ')}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {formatDate(invoice.periodStart)}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {formatDate(invoice.dueDate)}
+                        </TableCell>
+                        <TableCell className="text-right tabular">{formatMoney(invoice.total)}</TableCell>
+                        <TableCell className="text-right text-emerald-600 tabular">
+                          {formatMoney(invoice.amountPaid)}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            'text-right font-semibold tabular',
+                            invoice.balance > 0 ? 'text-red-600' : 'text-slate-400',
+                          )}
+                        >
+                          {invoice.balance > 0 ? formatMoney(invoice.balance) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <StatusChip
+                            label={INVOICE_STATUS_STYLE[invoice.status].label}
+                            chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableWrap>
+
+              {/* Mobile cards */}
+              <ul className="space-y-2 md:hidden">
+                {resident.invoices.map((invoice) => (
+                  <li
+                    key={invoice.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate font-medium text-slate-900">{invoice.number}</p>
+                      <StatusChip
+                        label={INVOICE_STATUS_STYLE[invoice.status].label}
+                        chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                      />
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {formatDate(invoice.periodStart)} · due {formatDate(invoice.dueDate)}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {invoice.lines.map((l) => l.label.split('—')[0].trim()).join(' · ')}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                      <span className="text-xs text-slate-500 tabular">
+                        {formatMoney(invoice.total)} ·{' '}
+                        <span className="text-emerald-600">{formatMoney(invoice.amountPaid)} paid</span>
+                      </span>
+                      <span
                         className={cn(
-                          'text-right font-semibold tabular',
+                          'font-semibold tabular',
                           invoice.balance > 0 ? 'text-red-600' : 'text-slate-400',
                         )}
                       >
-                        {invoice.balance > 0 ? formatMoney(invoice.balance) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <StatusChip
-                          label={INVOICE_STATUS_STYLE[invoice.status].label}
-                          chip={INVOICE_STATUS_STYLE[invoice.status].chip}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableWrap>
+                        {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           {resident.payments.length > 0 && (

@@ -57,25 +57,25 @@ export function StatCard({
       whileHover={href ? { y: -2 } : undefined}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
       className={cn(
-        'group relative h-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card transition-shadow',
+        'group relative h-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-shadow sm:p-5',
         href && 'cursor-pointer hover:shadow-elevated',
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">{label}</p>
         {Icon && (
-          <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-xl', tokens.icon)}>
+          <div className={cn('flex size-7 shrink-0 items-center justify-center rounded-xl sm:size-8', tokens.icon)}>
             <Icon className="size-4" />
           </div>
         )}
       </div>
 
-      <div className="mt-3 flex items-baseline gap-2">
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 sm:mt-3">
         <AnimatedNumber
           value={value}
           format={format}
-          className={cn('font-display text-2xl font-semibold tracking-tight', tokens.accent)}
+          className={cn('font-display text-xl font-semibold tracking-tight sm:text-2xl', tokens.accent)}
         />
         {suffix}
       </div>

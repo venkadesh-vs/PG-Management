@@ -140,7 +140,7 @@ export default async function VisitorsPage({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Today" value={todayCount} icon="userPlus" tone="blue" hint="Visitors signed in" />
         <StatCard
           label="Still inside"

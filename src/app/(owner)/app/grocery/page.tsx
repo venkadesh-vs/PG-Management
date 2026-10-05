@@ -157,7 +157,7 @@ export default async function GroceryPage({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Items tracked" value={plan.length} icon="boxes" tone="blue" />
         <StatCard
           label="Low on stock"
@@ -211,14 +211,15 @@ export default async function GroceryPage({
       )}
 
       <Tabs defaultValue="stock">
-        <TabsList>
+        <TabsList className="max-w-full">
           <TabsTrigger value="stock">Stock</TabsTrigger>
           <TabsTrigger value="list">Purchase list</TabsTrigger>
           <TabsTrigger value="purchases">Recent purchases</TabsTrigger>
         </TabsList>
 
         <TabsContent value="stock">
-          <TableWrap>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -271,6 +272,44 @@ export default async function GroceryPage({
               </TableBody>
             </Table>
           </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {plan.map((item) => {
+              const low = item.currentStock <= item.minimumStock
+              return (
+                <li
+                  key={item.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-medium text-slate-900">{item.name}</p>
+                    {low ? (
+                      <Badge variant="danger" size="sm">
+                        Restock
+                      </Badge>
+                    ) : (
+                      <Badge variant="success" size="sm">
+                        OK
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {item.category} · min {item.minimumStock} {UNIT_LABEL[item.unit]}
+                    {item.perResidentPerMeal ? ` · ${item.perResidentPerMeal}/resident/meal` : ''}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className={cn('tabular', low ? 'font-semibold text-red-600' : 'text-slate-700')}>
+                      {item.currentStock} {UNIT_LABEL[item.unit]} in stock
+                    </span>
+                    <span className="text-xs text-slate-500 tabular">
+                      {formatMoney(item.lastPurchasePrice)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </TabsContent>
 
         <TabsContent value="list">
@@ -287,7 +326,8 @@ export default async function GroceryPage({
                 item&apos;s configured per-resident quantity. Adjust those quantities on the item to
                 match how your kitchen actually cooks — nothing here is assumed for you.
               </div>
-              <TableWrap>
+              {/* Desktop table */}
+              <TableWrap className="hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -319,6 +359,33 @@ export default async function GroceryPage({
                   </TableBody>
                 </Table>
               </TableWrap>
+
+              {/* Mobile cards */}
+              <ul className="space-y-2 md:hidden">
+                {needsBuying.map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate font-medium text-slate-900">{item.name}</p>
+                      <span className="shrink-0 text-sm font-semibold text-amber-700 tabular">
+                        +{item.shortfall} {UNIT_LABEL[item.unit]}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {item.currentStock} {UNIT_LABEL[item.unit]} in stock ·{' '}
+                      {item.estimatedRequirement} {UNIT_LABEL[item.unit]} needed (7 days)
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                      <span className="text-xs text-slate-500">Estimated cost</span>
+                      <span className="font-semibold text-slate-800 tabular">
+                        {formatMoney(item.estimatedCost)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
               <p className="mt-3 text-right text-sm font-semibold text-slate-800">
                 Estimated total: {formatMoney(estimatedCost)}
               </p>
@@ -334,50 +401,88 @@ export default async function GroceryPage({
               description="Recording a purchase tops up stock and creates the matching expense automatically."
             />
           ) : (
-            <TableWrap>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>PG</TableHead>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {purchases.map((purchase) => {
-                    const theme = themeFor(purchase.property.type)
-                    return (
-                      <TableRow key={purchase.id}>
-                        <TableCell className="font-medium text-slate-800">
+            <>
+              {/* Desktop table */}
+              <TableWrap className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>PG</TableHead>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {purchases.map((purchase) => {
+                      const theme = themeFor(purchase.property.type)
+                      return (
+                        <TableRow key={purchase.id}>
+                          <TableCell className="font-medium text-slate-800">
+                            {purchase.groceryItem.name}
+                          </TableCell>
+                          <TableCell>
+                            <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                              <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
+                              {purchase.property.name}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {purchase.vendor ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {formatDate(purchase.purchaseDate)}
+                          </TableCell>
+                          <TableCell className="text-right tabular">
+                            {purchase.quantity} {UNIT_LABEL[purchase.groceryItem.unit]}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold tabular">
+                            {formatMoney(purchase.totalAmount)}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </TableWrap>
+
+              {/* Mobile cards */}
+              <ul className="space-y-2 md:hidden">
+                {purchases.map((purchase) => {
+                  const theme = themeFor(purchase.property.type)
+                  return (
+                    <li
+                      key={purchase.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate font-medium text-slate-900">
                           {purchase.groceryItem.name}
-                        </TableCell>
-                        <TableCell>
-                          <span className="flex items-center gap-1.5 text-sm text-slate-600">
-                            <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
-                            {purchase.property.name}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600">
-                          {purchase.vendor ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600">
-                          {formatDate(purchase.purchaseDate)}
-                        </TableCell>
-                        <TableCell className="text-right tabular">
+                        </p>
+                        <span className="shrink-0 text-sm text-slate-600 tabular">
                           {purchase.quantity} {UNIT_LABEL[purchase.groceryItem.unit]}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold tabular">
+                        </span>
+                      </div>
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                        <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
+                        <span className="truncate">
+                          {purchase.property.name}
+                          {purchase.vendor ? ` · ${purchase.vendor}` : ''}
+                        </span>
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                        <span className="text-xs text-slate-500">{formatDate(purchase.purchaseDate)}</span>
+                        <span className="font-semibold text-slate-800 tabular">
                           {formatMoney(purchase.totalAmount)}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableWrap>
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
           )}
         </TabsContent>
       </Tabs>

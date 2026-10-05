@@ -161,7 +161,7 @@ export default async function InventoryPage({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Item types" value={total} icon="boxes" tone="blue" />
         <StatCard
           label="Total units"
@@ -216,7 +216,8 @@ export default async function InventoryPage({
         />
       ) : (
         <>
-          <TableWrap>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -265,6 +266,42 @@ export default async function InventoryPage({
               </TableBody>
             </Table>
           </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {assets.map((asset) => {
+              const theme = themeFor(asset.property.type)
+              const style = CONDITION_STYLE[asset.condition]
+              return (
+                <li
+                  key={asset.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-medium text-slate-900">{asset.name}</p>
+                    <Badge variant={style.variant} size="sm">
+                      {style.label}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
+                    <span className="truncate">
+                      {asset.category} ·{' '}
+                      {asset.room ? `Room ${asset.room.number}` : (asset.location ?? asset.property.name)}
+                    </span>
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="text-xs text-slate-500">
+                      Qty {asset.quantity} · {formatDate(asset.purchaseDate)}
+                    </span>
+                    <span className="font-semibold text-slate-800 tabular">
+                      {formatMoney(asset.purchaseCost)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
 
           <Suspense fallback={null}>
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} />

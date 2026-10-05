@@ -100,7 +100,7 @@ export default async function OrganizationsPage({
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Organizations' }]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total accounts" value={total} icon="building" tone="blue" />
         <StatCard label="Active" value={countFor('ACTIVE')} icon="check" tone="emerald" />
         <StatCard label="On trial" value={countFor('TRIAL')} icon="clock" tone="violet" />
@@ -139,7 +139,8 @@ export default async function OrganizationsPage({
         />
       ) : (
         <>
-          <TableWrap>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -202,6 +203,51 @@ export default async function OrganizationsPage({
               </TableBody>
             </Table>
           </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {organizations.map((org) => {
+              const mrr = org.subscriptions
+                .filter((s) => s.status === 'ACTIVE')
+                .reduce((s, sub) => s + sub.amount, 0)
+              const nextBilling = org.subscriptions
+                .map((s) => s.nextBillingDate)
+                .sort((a, b) => a.getTime() - b.getTime())[0]
+
+              return (
+                <li key={org.id}>
+                  <Link
+                    href={`/admin/organizations/${org.id}`}
+                    className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate font-medium text-slate-900">{org.name}</p>
+                      <Badge variant={STATUS_VARIANT[org.status] ?? 'default'} size="sm">
+                        {org.status.replace('_', ' ').toLowerCase()}
+                      </Badge>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {org.ownerName} · {formatPhone(org.contactPhone)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {org.city ?? '—'} · {org._count.properties} PGs · {org._count.residents} residents
+                      {org.trialEndsAt && org.status === 'TRIAL'
+                        ? ` · trial ends ${relativeTime(org.trialEndsAt)}`
+                        : ''}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                      <span className="text-xs text-slate-500">
+                        Next billing {nextBilling ? formatDate(nextBilling) : '—'}
+                      </span>
+                      <span className="font-semibold tabular">
+                        {mrr > 0 ? `${formatMoney(mrr)}/mo` : '—'}
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
 
           <Suspense fallback={null}>
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} />

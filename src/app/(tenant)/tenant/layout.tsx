@@ -1,7 +1,12 @@
+import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireTenant } from '@/lib/auth'
 import { TENANT_MORE, TENANT_NAV } from '@/lib/navigation'
 import { MobileShell } from '@/components/app/mobile-shell'
+import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
+
+export const metadata: Metadata = pwaMetadata('tenant')
+export const viewport: Viewport = { themeColor: PWA_APPS.tenant.color }
 
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const user = await requireTenant()
@@ -31,6 +36,7 @@ export default async function TenantLayout({ children }: { children: React.React
       user={{ name: user.name, email: user.email }}
       subtitle={subtitle}
       unread={unread}
+      installName={PWA_APPS.tenant.shortName}
       accent={resident?.property.type === 'WOMENS' ? 'pink' : 'blue'}
     >
       {children}

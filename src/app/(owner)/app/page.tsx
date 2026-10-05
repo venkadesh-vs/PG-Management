@@ -217,7 +217,7 @@ export default async function OwnerDashboard({
       </div>
 
       {/* ----------------------------------------------------- Stat grid */}
-      <MotionGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Residents"
@@ -263,7 +263,7 @@ export default async function OwnerDashboard({
         </MotionItem>
       </MotionGrid>
 
-      <MotionGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
           <StatCard label="Vacant beds" value={summary.occupancy.available} icon="door" tone="emerald" hint={`${summary.occupancy.reserved} reserved`} href="/app/beds" />
         </MotionItem>

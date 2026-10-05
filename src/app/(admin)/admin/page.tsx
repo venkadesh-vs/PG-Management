@@ -121,7 +121,7 @@ export default async function AdminDashboard() {
       />
 
       {/* ------------------------------------------------------ Headline */}
-      <MotionGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Monthly recurring revenue"
@@ -164,7 +164,7 @@ export default async function AdminDashboard() {
         </MotionItem>
       </MotionGrid>
 
-      <MotionGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
           <StatCard label="Trial accounts" value={metrics.trials} icon="clock" tone="blue" hint={`${metrics.expiringTrials} expiring within 7 days`} />
         </MotionItem>

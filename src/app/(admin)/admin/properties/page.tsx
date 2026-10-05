@@ -86,7 +86,7 @@ export default async function AdminPropertiesPage({
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'PG Properties' }]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total PGs" value={total} icon="building" tone="blue" />
         <StatCard label="Men's PGs" value={countType('MENS')} icon="users" tone="blue" />
         <StatCard label="Women's PGs" value={countType('WOMENS')} icon="users" tone="pink" />
@@ -122,7 +122,8 @@ export default async function AdminPropertiesPage({
         />
       ) : (
         <>
-          <TableWrap>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -190,6 +191,53 @@ export default async function AdminPropertiesPage({
               </TableBody>
             </Table>
           </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {properties.map((property) => {
+              const theme = themeFor(property.type)
+              const beds = property.beds.length
+              const occupied = property.beds.filter((b) => b.status === 'OCCUPIED').length
+              return (
+                <li
+                  key={property.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className={cn('size-2 shrink-0 rounded-full', theme.bgSolid)} />
+                      <span className="truncate font-medium text-slate-900">{property.name}</span>
+                    </span>
+                    {property.subscription ? (
+                      <StatusChip
+                        label={SUBSCRIPTION_STATUS_STYLE[property.subscription.status].label}
+                        chip={SUBSCRIPTION_STATUS_STYLE[property.subscription.status].chip}
+                      />
+                    ) : (
+                      <span className="shrink-0 text-xs text-slate-400">No subscription</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                    <Link
+                      href={`/admin/organizations/${property.organization.id}`}
+                      className="text-slate-700 hover:text-blue-700"
+                    >
+                      {property.organization.name}
+                    </Link>{' '}
+                    · {property.city} · since {formatDate(property.createdAt)}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="text-xs text-slate-500">
+                      {property._count.rooms} rooms · {occupied}/{beds} beds ({percent(occupied, beds)}%)
+                    </span>
+                    <span className="font-semibold tabular">
+                      {property.subscription ? formatMoney(property.subscription.amount) : '—'}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
 
           <Suspense fallback={null}>
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} />

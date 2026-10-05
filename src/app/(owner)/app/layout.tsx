@@ -1,7 +1,12 @@
+import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireOrgUser } from '@/lib/auth'
 import { OWNER_NAV } from '@/lib/navigation'
 import { AppShell } from '@/components/app/app-shell'
+import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
+
+export const metadata: Metadata = pwaMetadata('owner')
+export const viewport: Viewport = { themeColor: PWA_APPS.owner.color }
 
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
   const user = await requireOrgUser()
@@ -40,6 +45,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       }}
       properties={properties}
       badges={{ complaints, notifications, tasks, leads: 0 }}
+      installName={PWA_APPS.owner.shortName}
     >
       {children}
     </AppShell>

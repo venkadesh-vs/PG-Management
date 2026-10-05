@@ -32,7 +32,7 @@ export default async function PlansPage() {
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Plans' }]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Plans" value={plans.length} icon="tags" tone="violet" />
         <StatCard
           label="Subscriptions on them"

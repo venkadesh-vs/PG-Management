@@ -104,7 +104,7 @@ export default async function AdminOrganizationPage({
         actions={<OrgStatusControl organizationId={org.id} status={org.status} name={org.name} />}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Monthly revenue" value={mrr} format="money" icon="sparkles" tone="violet" hint={`${org.subscriptions.length} subscriptions`} />
         <StatCard label="PGs" value={org._count.properties} icon="building" tone="blue" hint={`${occupancy.total} beds`} />
         <StatCard label="Residents" value={org._count.residents} icon="users" tone="emerald" hint={`${occupancy.rate}% occupancy`} />
@@ -163,10 +163,15 @@ export default async function AdminOrganizationPage({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{member.name}</p>
                     <p className="truncate text-xs text-slate-500">{member.email}</p>
+                    {member.lastLoginAt && (
+                      <p className="text-xs text-slate-400 sm:hidden">
+                        Last login {formatDateTime(member.lastLoginAt)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {member.lastLoginAt && (
-                      <span className="text-xs text-slate-400">
+                      <span className="hidden text-xs text-slate-400 sm:inline">
                         {formatDateTime(member.lastLoginAt)}
                       </span>
                     )}
@@ -210,7 +215,7 @@ export default async function AdminOrganizationPage({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                     <Metric label="Rooms" value={property._count.rooms} />
                     <Metric label="Beds" value={property._count.beds} />
                     <Metric label="Residents" value={property._count.residents} />
@@ -221,7 +226,7 @@ export default async function AdminOrganizationPage({
                   </div>
 
                   {property.subscription && (
-                    <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
                       <span className="text-slate-500">
                         {property.subscription.plan.name} plan
                         {property.subscription.autopayEnabled ? ' · AutoPay' : ''}
@@ -243,57 +248,99 @@ export default async function AdminOrganizationPage({
       {allInvoices.length === 0 ? (
         <EmptyState icon="receipt" title="No invoices yet" description="Billing starts after the trial." />
       ) : (
-        <TableWrap>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>PG</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {allInvoices
-                .sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime())
-                .map((invoice) => {
-                  const theme = themeFor(invoice.propertyType)
-                  const failed = invoice.payments.some((p) => p.status === 'FAILED')
-                  return (
-                    <TableRow key={invoice.id}>
-                      <TableCell className="font-mono text-sm">{invoice.number}</TableCell>
-                      <TableCell>
-                        <span className="flex items-center gap-1.5 text-sm text-slate-600">
-                          <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
-                          {invoice.propertyName}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {formatDate(invoice.issueDate)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular">
-                        {formatMoney(invoice.total)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusChip
-                            label={INVOICE_STATUS_STYLE[invoice.status].label}
-                            chip={INVOICE_STATUS_STYLE[invoice.status].chip}
-                          />
-                          {failed && (
-                            <Badge variant="danger" size="sm">
-                              Attempt failed
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-            </TableBody>
-          </Table>
-        </TableWrap>
+        <>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>PG</TableHead>
+                  <TableHead>Issued</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allInvoices
+                  .sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime())
+                  .map((invoice) => {
+                    const theme = themeFor(invoice.propertyType)
+                    const failed = invoice.payments.some((p) => p.status === 'FAILED')
+                    return (
+                      <TableRow key={invoice.id}>
+                        <TableCell className="font-mono text-sm">{invoice.number}</TableCell>
+                        <TableCell>
+                          <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                            <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
+                            {invoice.propertyName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {formatDate(invoice.issueDate)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular">
+                          {formatMoney(invoice.total)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <StatusChip
+                              label={INVOICE_STATUS_STYLE[invoice.status].label}
+                              chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                            />
+                            {failed && (
+                              <Badge variant="danger" size="sm">
+                                Attempt failed
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+              </TableBody>
+            </Table>
+          </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {allInvoices.map((invoice) => {
+              const theme = themeFor(invoice.propertyType)
+              const failed = invoice.payments.some((p) => p.status === 'FAILED')
+              return (
+                <li
+                  key={invoice.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-mono text-sm font-medium text-slate-900">
+                      {invoice.number}
+                    </p>
+                    <StatusChip
+                      label={INVOICE_STATUS_STYLE[invoice.status].label}
+                      chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                    />
+                  </div>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
+                    <span className="truncate">{invoice.propertyName}</span>
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                      Issued {formatDate(invoice.issueDate)}
+                      {failed && (
+                        <Badge variant="danger" size="sm">
+                          Attempt failed
+                        </Badge>
+                      )}
+                    </span>
+                    <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">

@@ -177,7 +177,7 @@ export default async function ReportsPage({
       />
 
       {/* -------------------------------------------------- Headline P&L */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Billed"
           value={totals.billed}
@@ -214,7 +214,7 @@ export default async function ReportsPage({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Outstanding" value={totals.outstanding} format="money" icon="warning" tone="amber" hint="All unpaid invoices" />
         <StatCard label="Check-ins" value={totals.checkIns} icon="userPlus" tone="blue" hint="In this period" />
         <StatCard label="Checkouts" value={totals.checkOuts} icon="door" tone="violet" hint="In this period" />
@@ -294,7 +294,8 @@ export default async function ReportsPage({
               />
             </CardContent>
           </Card>
-          <TableWrap>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -367,6 +368,69 @@ export default async function ReportsPage({
               </TableFooter>
             </Table>
           </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {comparison.map((property) => {
+              const theme = themeFor(property.type)
+              const net = property.collection - property.expenses
+              return (
+                <li
+                  key={property.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="flex min-w-0 items-center gap-2">
+                      <span className={cn('size-2 shrink-0 rounded-full', theme.bgSolid)} />
+                      <span className="truncate font-medium text-slate-900">{property.name}</span>
+                    </p>
+                    <span className="shrink-0 text-xs text-slate-500 tabular">
+                      {property.residents} residents · {property.occupancy.rate}%
+                    </span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <dt className="text-slate-500">Collected</dt>
+                      <dd className="font-medium text-emerald-600 tabular">
+                        {formatMoney(property.collection)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Pending</dt>
+                      <dd className="font-medium text-amber-600 tabular">
+                        {formatMoney(property.pending)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Expenses</dt>
+                      <dd className="font-medium text-red-600 tabular">
+                        {formatMoney(property.expenses)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
+                    <span className="text-xs text-slate-500">Net</span>
+                    <span
+                      className={cn(
+                        'font-semibold tabular',
+                        net >= 0 ? 'text-emerald-700' : 'text-red-700',
+                      )}
+                    >
+                      {formatMoney(net)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+            <li className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <span className="font-semibold text-slate-800">
+                Total · {comparison.reduce((s, p) => s + p.residents, 0)} residents
+              </span>
+              <span className="font-semibold tabular">
+                {formatMoney(comparison.reduce((s, p) => s + p.collection - p.expenses, 0))}
+              </span>
+            </li>
+          </ul>
         </section>
       )}
 
@@ -387,43 +451,76 @@ export default async function ReportsPage({
             </CardContent>
           </Card>
         ) : (
-          <TableWrap>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Resident</TableHead>
-                  <TableHead>PG · Room</TableHead>
-                  <TableHead>Oldest due</TableHead>
-                  <TableHead className="text-right">Outstanding</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {defaulters.map((resident) => {
-                  const theme = themeFor(resident.property.type)
-                  return (
-                    <TableRow key={resident.id}>
-                      <TableCell className="font-medium text-slate-800">
-                        {resident.fullName}
-                      </TableCell>
-                      <TableCell>
-                        <span className="flex items-center gap-1.5 text-sm text-slate-600">
-                          <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
-                          {resident.property.name}
-                          {resident.room ? ` · ${resident.room.number}` : ''}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {formatDate(resident.oldestDue)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-red-600 tabular">
+          <>
+            {/* Desktop table */}
+            <TableWrap className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Resident</TableHead>
+                    <TableHead>PG · Room</TableHead>
+                    <TableHead>Oldest due</TableHead>
+                    <TableHead className="text-right">Outstanding</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {defaulters.map((resident) => {
+                    const theme = themeFor(resident.property.type)
+                    return (
+                      <TableRow key={resident.id}>
+                        <TableCell className="font-medium text-slate-800">
+                          {resident.fullName}
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                            <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
+                            {resident.property.name}
+                            {resident.room ? ` · ${resident.room.number}` : ''}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {formatDate(resident.oldestDue)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-red-600 tabular">
+                          {formatMoney(resident.outstanding)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableWrap>
+
+            {/* Mobile cards */}
+            <ul className="space-y-2 md:hidden">
+              {defaulters.map((resident) => {
+                const theme = themeFor(resident.property.type)
+                return (
+                  <li
+                    key={resident.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate font-medium text-slate-900">{resident.fullName}</p>
+                      <span className="shrink-0 font-semibold text-red-600 tabular">
                         {formatMoney(resident.outstanding)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </TableWrap>
+                      </span>
+                    </div>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                      <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
+                      <span className="truncate">
+                        {resident.property.name}
+                        {resident.room ? ` · ${resident.room.number}` : ''}
+                      </span>
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Oldest due {formatDate(resident.oldestDue)}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
         )}
       </section>
 

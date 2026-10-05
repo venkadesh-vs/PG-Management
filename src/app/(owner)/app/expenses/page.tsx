@@ -193,7 +193,7 @@ export default async function ExpensesPage({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total spent" value={spent} format="money" icon="receipt" tone="red" hint={`${total} entries`} />
         <StatCard label="Collected" value={income} format="money" icon="money" tone="emerald" hint="Same period" />
         <StatCard

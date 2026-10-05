@@ -79,7 +79,7 @@ export default async function LeadsPage({
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Leads' }]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="New" value={countFor('NEW')} icon="clipboard" tone={countFor('NEW') ? 'amber' : 'default'} hint="Not contacted yet" />
         <StatCard label="In the pipeline" value={inPipeline} icon="users" tone="blue" />
         <StatCard label="Converted" value={countFor('CONVERTED')} icon="check" tone="emerald" />

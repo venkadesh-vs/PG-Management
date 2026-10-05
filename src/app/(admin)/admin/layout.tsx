@@ -1,7 +1,12 @@
+import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireSuperAdmin } from '@/lib/auth'
 import { ADMIN_NAV } from '@/lib/navigation'
 import { AppShell } from '@/components/app/app-shell'
+import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
+
+export const metadata: Metadata = pwaMetadata('admin')
+export const viewport: Viewport = { themeColor: PWA_APPS.admin.color }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSuperAdmin()
@@ -25,6 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       badges={{ complaints: 0, notifications, tasks: 0, leads }}
       showPropertySwitcher={false}
       searchScope="platform"
+      installName={PWA_APPS.admin.shortName}
     >
       {children}
     </AppShell>

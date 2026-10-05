@@ -81,7 +81,7 @@ export default async function ActivityPage({
       />
 
       {byEvent.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {byEvent.map((entry) => (
             <div
               key={entry.event}

@@ -26,7 +26,7 @@ export default async function FeaturesPage() {
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Feature Controls' }]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Features" value={features.length} icon="shield" tone="violet" />
         <StatCard label="Enabled" value={enabled} icon="check" tone="emerald" />
         <StatCard label="Disabled" value={features.length - enabled} icon="warning" tone={features.length - enabled ? 'amber' : 'default'} />

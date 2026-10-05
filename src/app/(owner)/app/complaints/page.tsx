@@ -134,7 +134,7 @@ export default async function ComplaintsPage({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Open" value={open} icon="warning" tone={open > 0 ? 'red' : 'emerald'} hint="Not yet assigned" />
         <StatCard label="Being worked on" value={inProgress} icon="wrench" tone="amber" hint="Assigned or in progress" />
         <StatCard label="Resolved this month" value={resolvedThisMonth} icon="check" tone="emerald" />

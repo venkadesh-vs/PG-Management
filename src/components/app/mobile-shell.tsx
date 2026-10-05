@@ -12,6 +12,7 @@ import { LogoMark } from '@/components/marketing/logo'
 import { api } from '@/lib/client'
 import { useToast } from '@/components/ui/toast'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,7 @@ export function MobileShell({
   user,
   subtitle,
   unread,
+  installName,
   accent = 'blue',
   children,
 }: {
@@ -40,6 +42,7 @@ export function MobileShell({
   user: { name: string; email: string }
   subtitle?: string
   unread: number
+  installName?: string
   accent?: 'blue' | 'pink' | 'violet' | 'amber'
   children: React.ReactNode
 }) {
@@ -127,7 +130,10 @@ export function MobileShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-5 sm:pb-8">{children}</main>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-5 sm:pb-8">
+        {installName && <InstallPrompt appName={installName} className="mb-5" />}
+        {children}
+      </main>
 
       {/* Bottom tab bar — the primary navigation on a phone. */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-safe backdrop-blur-lg sm:static sm:border-t-0 sm:bg-transparent sm:pb-0">

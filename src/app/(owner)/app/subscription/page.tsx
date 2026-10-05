@@ -104,7 +104,7 @@ export default async function SubscriptionPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Monthly total"
           value={monthlyTotal}
@@ -212,64 +212,111 @@ export default async function SubscriptionPage() {
       {invoices.length === 0 ? (
         <EmptyState icon="receipt" title="No invoices yet" description="Your first invoice appears after the trial ends." />
       ) : (
-        <TableWrap>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>PG</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map((invoice) => {
-                const theme = themeFor(invoice.subscription.property.type)
-                const payment = invoice.payments[0]
-                return (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-mono text-sm font-medium text-slate-800">
+        <>
+          {/* Desktop table */}
+          <TableWrap className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>PG</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Due</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => {
+                  const theme = themeFor(invoice.subscription.property.type)
+                  const payment = invoice.payments[0]
+                  return (
+                    <TableRow key={invoice.id}>
+                      <TableCell className="font-mono text-sm font-medium text-slate-800">
+                        {invoice.number}
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5 text-sm text-slate-600">
+                          <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
+                          {invoice.subscription.property.name}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {formatDate(invoice.periodStart)}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {formatDate(invoice.dueDate)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular">
+                        {formatMoney(invoice.total)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusChip
+                            label={INVOICE_STATUS_STYLE[invoice.status].label}
+                            chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                          />
+                          {payment?.isDemo && (
+                            <Badge variant="warning" size="sm">
+                              Demo
+                            </Badge>
+                          )}
+                          {payment?.status === 'FAILED' && (
+                            <span className="text-[11px] text-red-600">{payment.failureReason}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableWrap>
+
+          {/* Mobile cards */}
+          <ul className="space-y-2 md:hidden">
+            {invoices.map((invoice) => {
+              const theme = themeFor(invoice.subscription.property.type)
+              const payment = invoice.payments[0]
+              return (
+                <li
+                  key={invoice.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-mono text-sm font-medium text-slate-800">
                       {invoice.number}
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
-                        {invoice.subscription.property.name}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600">
-                      {formatDate(invoice.periodStart)}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600">
-                      {formatDate(invoice.dueDate)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular">
-                      {formatMoney(invoice.total)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <StatusChip
-                          label={INVOICE_STATUS_STYLE[invoice.status].label}
-                          chip={INVOICE_STATUS_STYLE[invoice.status].chip}
-                        />
-                        {payment?.isDemo && (
-                          <Badge variant="warning" size="sm">
-                            Demo
-                          </Badge>
-                        )}
-                        {payment?.status === 'FAILED' && (
-                          <span className="text-[11px] text-red-600">{payment.failureReason}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </TableWrap>
+                    </p>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {payment?.isDemo && (
+                        <Badge variant="warning" size="sm">
+                          Demo
+                        </Badge>
+                      )}
+                      <StatusChip
+                        label={INVOICE_STATUS_STYLE[invoice.status].label}
+                        chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
+                    <span className="truncate">{invoice.subscription.property.name}</span>
+                  </p>
+                  {payment?.status === 'FAILED' && (
+                    <p className="mt-1 text-[11px] text-red-600">{payment.failureReason}</p>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="text-xs text-slate-500">
+                      {formatDate(invoice.periodStart)} · due {formatDate(invoice.dueDate)}
+                    </span>
+                    <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
 
       <Card>

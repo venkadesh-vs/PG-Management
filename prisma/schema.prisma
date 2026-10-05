@@ -447,6 +447,9 @@ model Organization {
   integrations      IntegrationCredential[]
   roles             OrgRole[]
   lookups           OrgLookup[]
+  residentLeads     ResidentLead[]
+  bookings          Booking[]
+  uploadedFiles     UploadedFile[]
 
   @@index([status])
 }
@@ -475,6 +478,12 @@ model OrgSetting {
   upiPayeeName  String?
   invoicePrefix String  @default("INV")
   receiptPrefix String  @default("RCP")
+
+  /// Complaint resolution targets in hours, by priority (PRD §43).
+  slaUrgentHours Int @default(2)
+  slaHighHours   Int @default(4)
+  slaMediumHours Int @default(12)
+  slaLowHours    Int @default(24)
 
   /// Modules the owner has switched off (see src/lib/modules.ts).
   disabledModules String[] @default([])
@@ -609,6 +618,8 @@ model Property {
   utilityCharges     UtilityCharge[]
   access             PropertyAccess[]
   occupancySnapshots OccupancySnapshot[]
+  residentLeads      ResidentLead[]
+  bookings           Booking[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -680,6 +691,7 @@ model Bed {
   resident   Resident? @relation("BedOccupant", fields: [residentId], references: [id], onDelete: SetNull)
 
   allocations BedAllocation[]
+  bookings    Booking[]
 
   @@unique([roomId, label])
   @@index([propertyId, status])
@@ -984,17 +996,19 @@ model SecurityDeposit {
   residentId     String       @unique
   resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
 
-  amount       Int
-  collected    Int           @default(0)
-  deductions   Int           @default(0)
-  refunded     Int           @default(0)
-  status       DepositStatus @default(PENDING)
-  collectedAt  DateTime?
-  refundedAt   DateTime?
-  refundMethod String?
-  reason       String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  amount          Int
+  collected       Int           @default(0)
+  deductions      Int           @default(0)
+  refunded        Int           @default(0)
+  status          DepositStatus @default(PENDING)
+  collectedAt     DateTime?
+  refundedAt      DateTime?
+  refundMethod    String?
+  refundReference String?
+  refundNote      String?
+  reason          String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model UtilityCharge {
@@ -1219,6 +1233,9 @@ model Complaint {
   closedAt           DateTime?
   resolutionNote     String?
   resolutionPhotoUrl String?
+  /// When it must be resolved by, from the org SLA for its priority.
+  slaDueAt           DateTime?
+  slaBreachedAt      DateTime?
   rating             Int?
 
   createdAt DateTime @default(now())
@@ -1621,6 +1638,139 @@ model PaymentMethod {
 }
 
 // ============================ GROWTH =======================================
+
+enum LeadSource {
+  WALK_IN
+  PHONE
+  WHATSAPP
+  WEBSITE
+  REFERRAL
+  PORTAL
+  OTHER
+}
+
+enum ResidentLeadStatus {
+  NEW
+  CONTACTED
+  VISIT_SCHEDULED
+  VISITED
+  INTERESTED
+  TOKEN_PAID
+  BOOKED
+  CHECKED_IN
+  LOST
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+  CHECKED_IN
+}
+
+/// Someone enquiring about a bed (PRD §30). Not to be confused with `Lead`,
+/// which is a PG owner enquiring about StayFlow itself.
+model ResidentLead {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String?
+  property       Property?          @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  name           String
+  phone          String
+  email          String?
+  gender         String?
+  source         LeadSource         @default(PHONE)
+  status         ResidentLeadStatus @default(NEW)
+  budget         Int?
+  roomTypePref   String?
+  moveInDate     DateTime?
+  visitAt        DateTime?
+  nextFollowUpAt DateTime?
+  lostReason     String?
+  notes          String?
+  assignedToId   String?
+  residentId     String?            @unique
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  activities ResidentLeadActivity[]
+  bookings   Booking[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, nextFollowUpAt])
+  @@index([phone])
+}
+
+model ResidentLeadActivity {
+  id        String       @id @default(cuid())
+  leadId    String
+  lead      ResidentLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  /// NOTE | CALL | STATUS | VISIT | WHATSAPP | BOOKING
+  kind      String
+  body      String
+  actorName String
+  createdAt DateTime     @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+/// A bed held for a future resident (PRD §32). The token is money received
+/// before check-in; on check-in it becomes the first payment.
+model Booking {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  leadId         String?
+  lead           ResidentLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  bedId          String?
+  bed            Bed?          @relation(fields: [bedId], references: [id], onDelete: SetNull)
+  code           String
+  name           String
+  phone          String
+  email          String?
+  checkInDate    DateTime
+  rent           Int
+  deposit        Int           @default(0)
+  tokenAmount    Int           @default(0)
+  tokenPaidAt    DateTime?
+  tokenMethod    String?
+  tokenReference String?
+  status         BookingStatus @default(PENDING)
+  expiresAt      DateTime?
+  cancelReason   String?
+  residentId     String?       @unique
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([bedId, status])
+}
+
+/// Every uploaded file (KYC, complaint photos, task proof). Downloads are
+/// authorised against this row, never by guessing a storage key.
+model UploadedFile {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String       @unique
+  contentType    String
+  size           Int
+  /// KYC | COMPLAINT | TASK_PROOF | OTHER
+  purpose        String
+  /// Resident whose record this belongs to, for resident-level access checks.
+  residentId     String?
+  uploadedById   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, purpose])
+}
 
 enum RoleApp {
   DASHBOARD

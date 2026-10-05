@@ -17,6 +17,7 @@ export type ModuleKey =
   | 'residents'
   | 'rent'
   | 'settings'
+  | 'leads'
   | 'expenses'
   | 'complaints'
   | 'food'
@@ -52,6 +53,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'rent', label: 'Rent & payments', description: 'Monthly invoices, receipts, dues and deposits.', icon: 'wallet', core: true, routes: ['/app/rent', '/app/payments'] },
   { key: 'settings', label: 'Settings & billing', description: 'Your account, team, roles and subscription.', icon: 'settings', core: true, routes: ['/app/settings', '/app/subscription', '/app/notifications'] },
 
+  { key: 'leads', label: 'Enquiries & bookings', description: 'Track people asking for a bed, visits, token payments and bookings.', icon: 'clipboard', core: false, routes: ['/app/leads', '/app/bookings'] },
   { key: 'expenses', label: 'Expenses', description: 'Record spending and see profit per PG.', icon: 'receipt', core: false, routes: ['/app/expenses'] },
   { key: 'complaints', label: 'Complaints & maintenance', description: 'Residents raise issues; staff fix them with tasks.', icon: 'wrench', core: false, routes: ['/app/complaints'] },
   { key: 'food', label: 'Food & meals', description: 'Menus, meal plans, opt-outs and meal counts.', icon: 'utensils', core: false, routes: ['/app/food'], flag: 'food_module' },

@@ -26,6 +26,8 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Properties', href: '/app/properties', icon: 'building', module: 'properties', permission: 'properties.view' },
       { label: 'Rooms & Beds', href: '/app/beds', icon: 'bed', module: 'properties', permission: 'properties.view' },
       { label: 'Residents', href: '/app/residents', icon: 'user', module: 'residents', permission: 'residents.view' },
+      { label: 'Enquiries', href: '/app/leads', icon: 'clipboard', module: 'leads', permission: 'leads.view' },
+      { label: 'Bookings', href: '/app/bookings', icon: 'calendar', module: 'leads', permission: 'leads.view' },
     ],
   },
   {

@@ -35,6 +35,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    module: 'leads',
+    label: 'Enquiries & bookings',
+    permissions: [
+      { key: 'leads.view', label: 'See enquiries and bookings' },
+      { key: 'leads.manage', label: 'Add enquiries, log calls and visits' },
+      { key: 'bookings.manage', label: 'Reserve beds, take tokens and cancel bookings' },
+    ],
+  },
+  {
     module: 'rent',
     label: 'Rent & payments',
     permissions: [
@@ -177,7 +186,7 @@ export const ROLE_TEMPLATES: {
     description: 'Looks after residents: check-ins, complaints, visitors and notices.',
     app: 'DASHBOARD',
     color: 'violet',
-    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view'],
+    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'leads.view', 'leads.manage', 'bookings.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view'],
   },
   {
     name: 'Cook',

@@ -113,6 +113,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    module: 'requests',
+    label: 'Resident requests',
+    permissions: [
+      { key: 'requests.view', label: 'See resident requests' },
+      { key: 'requests.manage', label: 'Approve or reject requests' },
+    ],
+  },
+  {
     module: 'announcements',
     label: 'Announcements',
     permissions: [{ key: 'announcements.send', label: 'Send announcements to residents' }],
@@ -186,7 +194,7 @@ export const ROLE_TEMPLATES: {
     description: 'Looks after residents: check-ins, complaints, visitors and notices.',
     app: 'DASHBOARD',
     color: 'violet',
-    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'leads.view', 'leads.manage', 'bookings.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view'],
+    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'requests.view', 'requests.manage', 'leads.view', 'leads.manage', 'bookings.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view'],
   },
   {
     name: 'Cook',

@@ -30,6 +30,7 @@ export type ModuleKey =
   | 'reports'
   | 'activity'
   | 'residentApp'
+  | 'requests'
   | 'staffApp'
 
 export type ModuleDef = {
@@ -66,6 +67,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'reports', label: 'Reports', description: 'Occupancy, collections, expenses and profit.', icon: 'chart', core: false, routes: ['/app/reports'], flag: 'advanced_reports' },
   { key: 'activity', label: 'Activity log', description: 'Every change, who made it and when.', icon: 'history', core: false, routes: ['/app/activity'] },
   { key: 'residentApp', label: 'Resident app', description: 'Residents pay rent, raise complaints and read notices on their phone.', icon: 'smartphone', core: false, routes: [], flag: 'tenant_app' },
+  { key: 'requests', label: 'Resident requests', description: 'Residents ask for leave, visitor approval, room changes and services from their app.', icon: 'list', core: false, requires: ['residentApp'], routes: ['/app/requests'] },
   { key: 'staffApp', label: 'Staff app', description: 'Staff see their tasks, kitchen board and attendance on their phone.', icon: 'smartphone', core: false, requires: ['staff'], routes: [], flag: 'worker_app' },
 ]
 

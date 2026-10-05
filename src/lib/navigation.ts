@@ -42,6 +42,7 @@ export const OWNER_NAV: NavSection[] = [
     title: 'Operations',
     items: [
       { label: 'Complaints', href: '/app/complaints', icon: 'wrench', badge: 'complaints', module: 'complaints', permission: 'complaints.view' },
+      { label: 'Requests', href: '/app/requests', icon: 'list', module: 'requests', permission: 'requests.view' },
       { label: 'Food', href: '/app/food', icon: 'utensils', module: 'food', permission: 'food.view' },
       { label: 'Grocery', href: '/app/grocery', icon: 'cart', module: 'grocery', permission: 'grocery.view' },
       { label: 'Staff', href: '/app/staff', icon: 'users', module: 'staff', permission: 'staff.view' },
@@ -109,6 +110,7 @@ export const TENANT_NAV: NavItem[] = [
 
 export const TENANT_MORE: NavItem[] = [
   { label: 'Announcements', href: '/tenant/announcements', icon: 'megaphone', module: 'announcements' },
+  { label: 'Requests', href: '/tenant/requests', icon: 'list', module: 'requests' },
   { label: 'Documents', href: '/tenant/documents', icon: 'file' },
   { label: 'Notifications', href: '/tenant/notifications', icon: 'bell', badge: 'notifications' },
 ]

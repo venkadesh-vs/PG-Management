@@ -450,6 +450,7 @@ model Organization {
   residentLeads     ResidentLead[]
   bookings          Booking[]
   uploadedFiles     UploadedFile[]
+  residentRequests  ResidentRequest[]
 
   @@index([status])
 }
@@ -620,6 +621,7 @@ model Property {
   occupancySnapshots OccupancySnapshot[]
   residentLeads      ResidentLead[]
   bookings           Booking[]
+  residentRequests   ResidentRequest[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -810,6 +812,7 @@ model Resident {
   utilityCharges      UtilityCharge[]
   checkout            Checkout?
   announcementTargets AnnouncementTarget[]
+  residentRequests    ResidentRequest[]
 
   @@unique([organizationId, code])
   @@index([propertyId, status])
@@ -1770,6 +1773,51 @@ model UploadedFile {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, purpose])
+}
+
+enum ResidentRequestKind {
+  LEAVE
+  VISITOR
+  ROOM_CHANGE
+  SERVICE
+  OTHER
+}
+
+enum ResidentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  DONE
+}
+
+/// Things a resident asks for from the app (PRD §50): leave (meals paused),
+/// a visitor pre-approval, a room/bed change, a service request.
+model ResidentRequest {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident              @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  kind           ResidentRequestKind
+  status         ResidentRequestStatus @default(PENDING)
+  title          String
+  details        String?
+  fromDate       DateTime?
+  toDate         DateTime?
+  visitorName    String?
+  visitorPhone   String?
+  visitorCount   Int?
+  decidedBy      String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([organizationId, status])
+  @@index([residentId, createdAt])
 }
 
 enum RoleApp {

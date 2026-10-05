@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 99%;
+    --foreground: 222 33% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 33% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 33% 12%;
+    --primary: 222 47% 15%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 32% 95%;
+    --secondary-foreground: 222 33% 18%;
+    --muted: 214 32% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 214 95% 93%;
+    --accent-foreground: 222 47% 20%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 25% 91%;
+    --input: 214 25% 89%;
+    --ring: 221 83% 53%;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numeric columns line up when they use tabular figures. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-blue-600/15 text-blue-950;
+  }
+}
+
+@layer components {
+  /* A single definition for the product's card surface. */
+  .surface {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-card;
+  }
+
+  .surface-muted {
+    @apply rounded-2xl border border-slate-200/70 bg-slate-50/60;
+  }
+
+  .hairline {
+    @apply border-slate-200/80;
+  }
+
+  /* Subtle dotted texture used behind hero and empty states. */
+  .dot-grid {
+    background-image: radial-gradient(circle at 1px 1px, rgb(15 23 42 / 0.07) 1px, transparent 0);
+    background-size: 20px 20px;
+  }
+
+  .mesh-blue {
+    background:
+      radial-gradient(60% 60% at 20% 10%, rgb(59 130 246 / 0.18) 0%, transparent 60%),
+      radial-gradient(50% 50% at 90% 20%, rgb(236 72 153 / 0.12) 0%, transparent 60%),
+      radial-gradient(60% 60% at 60% 100%, rgb(14 165 233 / 0.14) 0%, transparent 60%);
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-slate-100;
+  }
+
+  .skeleton::after {
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/70 to-transparent;
+    content: '';
+  }
+
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Safe-area aware bottom bar for the mobile tenant/worker apps. */
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Printed receipts and invoices drop the app chrome. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+}

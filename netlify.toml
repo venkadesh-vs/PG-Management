@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# StayFlow on Netlify.
+#
+# This app uses Server Components, route handlers and a live PostgreSQL
+# connection, so it needs the Next.js runtime — a static export will not work.
+# The official plugin provides that.
+#
+# Set DATABASE_URL, AUTH_SECRET, CRON_SECRET and NEXT_PUBLIC_SITE_URL in the
+# Netlify UI. Never commit .env.
+# ---------------------------------------------------------------------------
+
+[build]
+  command = "npm run db:deploy && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Security headers for every response. The app sets no third-party scripts by
+# default, so a strict policy is safe here.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# Signed-in surfaces must never be cached by a CDN.
+[[headers]]
+  for = "/app/*"
+  [headers.values]
+    Cache-Control = "private, no-store"
+
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    Cache-Control = "private, no-store"
+
+[[headers]]
+  for = "/tenant/*"
+  [headers.values]
+    Cache-Control = "private, no-store"
+
+[[headers]]
+  for = "/worker/*"
+  [headers.values]
+    Cache-Control = "private, no-store"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "private, no-store"

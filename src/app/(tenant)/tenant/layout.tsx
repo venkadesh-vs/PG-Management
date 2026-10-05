@@ -1,0 +1,39 @@
+import { prisma } from '@/lib/prisma'
+import { requireTenant } from '@/lib/auth'
+import { TENANT_MORE, TENANT_NAV } from '@/lib/navigation'
+import { MobileShell } from '@/components/app/mobile-shell'
+
+export default async function TenantLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireTenant()
+
+  const [resident, unread] = await Promise.all([
+    prisma.resident.findUnique({
+      where: { id: user.residentId },
+      select: {
+        property: { select: { name: true, type: true } },
+        room: { select: { number: true } },
+        bed: { select: { label: true } },
+      },
+    }),
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+  ])
+
+  const subtitle = resident
+    ? `${resident.property.name}${resident.room ? ` · Room ${resident.room.number}` : ''}${
+        resident.bed ? ` · Bed ${resident.bed.label}` : ''
+      }`
+    : undefined
+
+  return (
+    <MobileShell
+      nav={TENANT_NAV}
+      moreNav={TENANT_MORE}
+      user={{ name: user.name, email: user.email }}
+      subtitle={subtitle}
+      unread={unread}
+      accent={resident?.property.type === 'WOMENS' ? 'pink' : 'blue'}
+    >
+      {children}
+    </MobileShell>
+  )
+}

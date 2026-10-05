@@ -1,0 +1,1643 @@
+// ---------------------------------------------------------------------------
+// StayFlow — an automated operating system for PGs.
+//
+// Money convention: every monetary column is an Int holding WHOLE RUPEES.
+// PG rent, deposits, expenses and settlements are transacted in whole rupees
+// in the real world, so this keeps arithmetic exact and JSON-safe (no Decimal
+// serialisation across the server/client boundary).
+//
+// Multi-tenancy: every tenant-scoped row carries `organizationId`. Queries are
+// always scoped through `lib/tenancy.ts` — never trust a client-supplied id.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ ENUMS ========================================
+
+enum UserRole {
+  SUPER_ADMIN
+  OWNER
+  MANAGER
+  WORKER
+  TENANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum OrgStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PropertyType {
+  MENS
+  WOMENS
+  COLIVE
+}
+
+enum PropertyStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  QUAD
+  DORM
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
+  BLOCKED
+}
+
+enum ResidentStatus {
+  PENDING
+  ACTIVE
+  NOTICE
+  CHECKED_OUT
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum DocumentKind {
+  PHOTO
+  AADHAAR
+  PAN
+  DRIVING_LICENSE
+  PASSPORT
+  COLLEGE_ID
+  OFFICE_ID
+  AGREEMENT
+  SIGNATURE
+  OTHER
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  WAIVED
+  CANCELLED
+}
+
+enum InvoiceLineKind {
+  RENT
+  FOOD
+  ELECTRICITY
+  WATER
+  MAINTENANCE
+  LATE_FEE
+  DISCOUNT
+  DEPOSIT
+  ADJUSTMENT
+  OTHER
+}
+
+enum PaymentMethodKind {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+  GATEWAY
+  ADJUSTMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum LedgerEntryKind {
+  CHARGE
+  PAYMENT
+  DISCOUNT
+  ADJUSTMENT
+  DEPOSIT
+  REFUND
+  WAIVER
+}
+
+enum DepositStatus {
+  PENDING
+  COLLECTED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FORFEITED
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+enum MealAttendanceStatus {
+  EXPECTED
+  ATTENDED
+  SKIPPED
+  ON_LEAVE
+}
+
+enum ComplaintCategory {
+  PLUMBING
+  ELECTRICITY
+  AC
+  FAN
+  BATHROOM
+  CLEANING
+  INTERNET
+  FOOD
+  ROOM
+  FURNITURE
+  SECURITY
+  OTHER
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ComplaintStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum TaskKind {
+  COMPLAINT
+  MAINTENANCE
+  CLEANING
+  FOOD
+  GROCERY
+  OTHER
+}
+
+enum TaskStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum StaffRole {
+  MANAGER
+  COOK
+  KITCHEN_HELPER
+  CLEANER
+  SECURITY
+  ELECTRICIAN
+  PLUMBER
+  MAINTENANCE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+  WEEKLY_OFF
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+  DAMAGED
+  DISPOSED
+}
+
+enum StockUnit {
+  KG
+  GRAM
+  LITRE
+  ML
+  PIECE
+  PACKET
+  DOZEN
+  CYLINDER
+}
+
+enum AnnouncementAudience {
+  ALL_PROPERTIES
+  PROPERTY
+  FLOOR
+  SELECTED_RESIDENTS
+  STAFF
+}
+
+enum NotificationKind {
+  RENT
+  PAYMENT
+  COMPLAINT
+  MAINTENANCE
+  FOOD
+  GROCERY
+  SUBSCRIPTION
+  ANNOUNCEMENT
+  SYSTEM
+  LEAD
+}
+
+enum NotificationChannel {
+  IN_APP
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  DEMO_NOT_SENT
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PricingBasis {
+  STANDARD_RENT
+  PER_BED
+  FLAT
+}
+
+enum MandateStatus {
+  NOT_SETUP
+  PENDING
+  ACTIVE
+  PAUSED
+  REVOKED
+  FAILED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  DEMO_SCHEDULED
+  DEMO_COMPLETED
+  TRIAL
+  CONVERTED
+  LOST
+}
+
+enum EventType {
+  RESIDENT_CREATED
+  RESIDENT_CHECKED_IN
+  RESIDENT_UPDATED
+  BED_ALLOCATED
+  BED_RELEASED
+  ROOM_CHANGED
+  RENT_GENERATED
+  RENT_DUE
+  RENT_OVERDUE
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  REFUND_ISSUED
+  CHECKOUT_COMPLETED
+  COMPLAINT_CREATED
+  COMPLAINT_ASSIGNED
+  COMPLAINT_RESOLVED
+  COMPLAINT_CLOSED
+  TASK_CREATED
+  TASK_COMPLETED
+  EXPENSE_CREATED
+  STOCK_LOW
+  STOCK_PURCHASED
+  PROPERTY_CREATED
+  PROPERTY_UPDATED
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_PAYMENT_COMPLETED
+  SUBSCRIPTION_PAYMENT_FAILED
+  ANNOUNCEMENT_SENT
+  STAFF_CREATED
+  VISITOR_LOGGED
+  LEAD_CREATED
+  LEAD_UPDATED
+  AUTH_LOGIN
+  SETTINGS_UPDATED
+}
+
+// ============================ PLATFORM =====================================
+
+model Organization {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  ownerName     String
+  contactEmail  String
+  contactPhone  String
+  whatsappPhone String?
+  city          String?
+  state         String?
+  addressLine   String?
+  logoUrl       String?
+  status        OrgStatus @default(TRIAL)
+  trialEndsAt   DateTime?
+  notes         String?
+  // Feature flags resolved against the plan; org-level overrides live here.
+  featureOverrides Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  archivedAt    DateTime?
+
+  users             User[]
+  properties        Property[]
+  residents         Resident[]
+  invoices          RentInvoice[]
+  payments          RentPayment[]
+  ledgerEntries     ResidentLedger[]
+  deposits          SecurityDeposit[]
+  expenses          Expense[]
+  expenseCategories ExpenseCategory[]
+  complaints        Complaint[]
+  tasks             MaintenanceTask[]
+  staff             Staff[]
+  visitors          Visitor[]
+  assets            Asset[]
+  announcements     Announcement[]
+  notifications     Notification[]
+  messages          OutboundMessage[]
+  subscriptions     Subscription[]
+  activityLogs      ActivityLog[]
+  groceryItems      GroceryItem[]
+  groceryPurchases  GroceryPurchase[]
+  foodPlans         FoodPlan[]
+  meals             Meal[]
+  utilityCharges    UtilityCharge[]
+  settings          OrgSetting?
+
+  @@index([status])
+}
+
+model OrgSetting {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  currency        String  @default("INR")
+  timezone        String  @default("Asia/Kolkata")
+  rentDueDay      Int     @default(5) // day of month rent invoices fall due
+  rentGenerateDay Int     @default(1) // day of month invoices are generated
+
+  lateFeeEnabled   Boolean @default(true)
+  lateFeeGraceDays Int     @default(5)
+  lateFeeAmount    Int     @default(200) // flat fee, whole rupees
+  lateFeePerDay    Int     @default(0)
+
+  reminderDaysBefore Int     @default(3)
+  reminderOnDueDate  Boolean @default(true)
+  reminderAfterDays  Int     @default(3)
+  whatsappEnabled    Boolean @default(true)
+
+  upiId         String?
+  upiPayeeName  String?
+  invoicePrefix String  @default("INV")
+  receiptPrefix String  @default("RCP")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  name         String
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  avatarUrl    String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  archivedAt   DateTime?
+
+  // Scoped links — a TENANT user maps to a Resident, a WORKER to a Staff row.
+  resident Resident?
+  staff    Staff?
+
+  sessions       Session[]
+  notifications  Notification[]
+  activityLogs   ActivityLog[]
+  propertyAccess PropertyAccess[]
+
+  @@index([organizationId, role])
+  @@index([role, status])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Restricts a MANAGER/WORKER to specific properties. Absent rows = all access
+// for OWNER, no access for others.
+model PropertyAccess {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, propertyId])
+  @@index([propertyId])
+}
+
+// ============================ PROPERTY =====================================
+
+model Property {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name         String
+  code         String
+  type         PropertyType
+  status       PropertyStatus @default(ACTIVE)
+  addressLine  String
+  city         String
+  state        String
+  pincode      String
+  contactName  String?
+  contactPhone String?
+  photoUrl     String?
+  description  String?
+
+  // Rent / charge configuration — every resident default flows from here.
+  standardRent     Int     @default(8000)
+  standardDeposit  Int     @default(10000)
+  maintenanceFee   Int     @default(0)
+  foodCharge       Int     @default(0)
+  foodIncluded     Boolean @default(true)
+  electricityMode  String  @default("INCLUDED") // INCLUDED | SHARED | METERED
+  electricityRate  Int     @default(0) // rupees per unit
+  noticePeriodDays Int     @default(30)
+
+  amenities String[] @default([])
+  rules     String[] @default([])
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime?
+
+  floors             Floor[]
+  rooms              Room[]
+  beds               Bed[]
+  residents          Resident[]
+  invoices           RentInvoice[]
+  payments           RentPayment[]
+  expenses           Expense[]
+  complaints         Complaint[]
+  tasks              MaintenanceTask[]
+  staff              Staff[]
+  visitors           Visitor[]
+  assets             Asset[]
+  announcements      Announcement[]
+  subscription       Subscription?
+  foodPlans          FoodPlan[]
+  meals              Meal[]
+  groceryItems       GroceryItem[]
+  groceryPurchases   GroceryPurchase[]
+  utilityCharges     UtilityCharge[]
+  access             PropertyAccess[]
+  occupancySnapshots OccupancySnapshot[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model Floor {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name      String
+  level     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rooms Room[]
+  beds  Bed[]
+
+  @@unique([propertyId, level])
+  @@index([propertyId])
+}
+
+model Room {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  floorId    String
+  floor      Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  number          String
+  type            RoomType @default(DOUBLE)
+  capacity        Int      @default(2)
+  baseRent        Int? // overrides property.standardRent when set
+  hasAC           Boolean  @default(false)
+  hasBalcony      Boolean  @default(false)
+  hasAttachedBath Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  beds       Bed[]
+  residents  Resident[]
+  complaints Complaint[]
+  assets     Asset[]
+  tasks      MaintenanceTask[]
+
+  @@unique([propertyId, number])
+  @@index([floorId])
+}
+
+model Bed {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  floorId    String
+  floor      Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  label         String
+  status        BedStatus @default(AVAILABLE)
+  rent          Int? // per-bed override
+  notes         String?
+  blockedReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  residentId String?   @unique // current occupant
+  resident   Resident? @relation("BedOccupant", fields: [residentId], references: [id], onDelete: SetNull)
+
+  allocations BedAllocation[]
+
+  @@unique([roomId, label])
+  @@index([propertyId, status])
+}
+
+model BedAllocation {
+  id         String    @id @default(cuid())
+  bedId      String
+  bed        Bed       @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  residentId String
+  resident   Resident  @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  fromDate   DateTime
+  toDate     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([bedId])
+  @@index([residentId])
+}
+
+model OccupancySnapshot {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  date        DateTime @db.Date
+  totalBeds   Int
+  occupied    Int
+  vacant      Int
+  reserved    Int
+  maintenance Int
+  createdAt   DateTime @default(now())
+
+  @@unique([propertyId, date])
+  @@index([date])
+}
+
+// ============================ RESIDENT =====================================
+
+model Resident {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomId         String?
+  room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  code             String
+  fullName         String
+  photoUrl         String?
+  dateOfBirth      DateTime?
+  gender           String?
+  bloodGroup       String?
+  qualification    String?
+  phone            String
+  whatsappPhone    String?
+  email            String?
+  permanentAddress String?
+  city             String?
+  state            String?
+  pincode          String?
+
+  guardianName     String?
+  guardianRelation String?
+  guardianPhone    String?
+  guardianAddress  String?
+
+  occupationType String? // STUDENT | WORKING | OTHER
+  companyName    String?
+  companyAddress String?
+  designation    String?
+
+  idType        String?
+  idNumber      String?
+  kycStatus     KycStatus @default(NOT_SUBMITTED)
+  kycVerifiedAt DateTime?
+  kycNotes      String?
+
+  status      ResidentStatus @default(PENDING)
+  joiningDate DateTime
+  noticeDate  DateTime?
+  exitDate    DateTime?
+
+  rentAmount     Int
+  depositAmount  Int
+  maintenanceFee Int          @default(0)
+  foodOptIn      Boolean      @default(true)
+  foodCharge     Int          @default(0)
+  billingCycle   BillingCycle @default(MONTHLY)
+  rentDueDay     Int          @default(5)
+  discountAmount Int          @default(0)
+  discountNote   String?
+
+  signatureUrl String?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bed                 Bed?                 @relation("BedOccupant")
+  allocations         BedAllocation[]
+  documents           ResidentDocument[]
+  invoices            RentInvoice[]
+  payments            RentPayment[]
+  ledger              ResidentLedger[]
+  deposit             SecurityDeposit?
+  complaints          Complaint[]
+  foodSubscription    FoodSubscription?
+  mealAttendance      MealAttendance[]
+  visitors            Visitor[]
+  utilityCharges      UtilityCharge[]
+  checkout            Checkout?
+  announcementTargets AnnouncementTarget[]
+
+  @@unique([organizationId, code])
+  @@index([propertyId, status])
+  @@index([organizationId, status])
+  @@index([fullName])
+  @@index([phone])
+}
+
+model ResidentDocument {
+  id         String       @id @default(cuid())
+  residentId String
+  resident   Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  kind       DocumentKind
+  label      String
+  fileUrl    String
+  mimeType   String?
+  sizeBytes  Int?
+  verified   Boolean      @default(false)
+  uploadedAt DateTime     @default(now())
+
+  @@index([residentId])
+}
+
+model Checkout {
+  id         String   @id @default(cuid())
+  residentId String   @unique
+  resident   Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  requestedAt DateTime @default(now())
+  exitDate    DateTime
+  reason      String?
+
+  outstandingRent Int       @default(0)
+  proRataRent     Int       @default(0)
+  foodCharges     Int       @default(0)
+  utilityCharges  Int       @default(0)
+  otherCharges    Int       @default(0)
+  damageDeduction Int       @default(0)
+  depositHeld     Int       @default(0)
+  refundAmount    Int       @default(0)
+  payableAmount   Int       @default(0)
+  settledAt       DateTime?
+  settlementNote  String?
+  processedBy     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================ BILLING ======================================
+
+model RentInvoice {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  number      String        @unique
+  periodStart DateTime      @db.Date
+  periodEnd   DateTime      @db.Date
+  issueDate   DateTime      @db.Date
+  dueDate     DateTime      @db.Date
+  status      InvoiceStatus @default(PENDING)
+
+  subtotal   Int @default(0)
+  discount   Int @default(0)
+  lateFee    Int @default(0)
+  total      Int @default(0)
+  amountPaid Int @default(0)
+  balance    Int @default(0)
+
+  notes          String?
+  reminderCount  Int       @default(0)
+  lastReminderAt DateTime?
+  paidAt         DateTime?
+  autoGenerated  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines       InvoiceLine[]
+  allocations PaymentAllocation[]
+
+  @@unique([residentId, periodStart])
+  @@index([organizationId, status])
+  @@index([propertyId, dueDate])
+  @@index([status, dueDate])
+}
+
+model InvoiceLine {
+  id        String          @id @default(cuid())
+  invoiceId String
+  invoice   RentInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  kind      InvoiceLineKind
+  label     String
+  quantity  Int             @default(1)
+  unitPrice Int
+  amount    Int
+
+  @@index([invoiceId])
+}
+
+model RentPayment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  receiptNumber String            @unique
+  amount        Int
+  method        PaymentMethodKind
+  status        PaymentStatus     @default(SUCCESS)
+  paidAt        DateTime          @default(now())
+  reference     String?
+  notes         String?
+  recordedBy    String?
+
+  // Gateway fields — only populated when a real gateway is connected.
+  gatewayProvider  String?
+  gatewayOrderId   String?
+  gatewayPaymentId String?
+  gatewaySignature String?
+  isDemo           Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations PaymentAllocation[]
+
+  @@index([organizationId, paidAt])
+  @@index([propertyId, paidAt])
+  @@index([residentId])
+}
+
+model PaymentAllocation {
+  id        String      @id @default(cuid())
+  paymentId String
+  payment   RentPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId String
+  invoice   RentInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Int
+  createdAt DateTime    @default(now())
+
+  @@unique([paymentId, invoiceId])
+  @@index([invoiceId])
+}
+
+model ResidentLedger {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  entryDate DateTime        @default(now())
+  kind      LedgerEntryKind
+  label     String
+  debit     Int             @default(0) // increases what the resident owes
+  credit    Int             @default(0) // reduces what the resident owes
+  balance   Int             @default(0) // running balance after this entry
+  refType   String?
+  refId     String?
+  createdAt DateTime        @default(now())
+
+  @@index([residentId, entryDate])
+  @@index([organizationId])
+}
+
+model SecurityDeposit {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  residentId     String       @unique
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  amount       Int
+  collected    Int           @default(0)
+  deductions   Int           @default(0)
+  refunded     Int           @default(0)
+  status       DepositStatus @default(PENDING)
+  collectedAt  DateTime?
+  refundedAt   DateTime?
+  refundMethod String?
+  reason       String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model UtilityCharge {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String?
+  resident       Resident?    @relation(fields: [residentId], references: [id], onDelete: SetNull)
+
+  kind        String // ELECTRICITY | WATER | GAS
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  unitsUsed   Int      @default(0)
+  ratePerUnit Int      @default(0)
+  amount      Int
+  billed      Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([propertyId, periodStart])
+  @@index([residentId])
+}
+
+// ============================ FOOD & GROCERY ===============================
+
+model FoodPlan {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name              String
+  description       String?
+  monthlyCharge     Int
+  includesBreakfast Boolean  @default(true)
+  includesLunch     Boolean  @default(true)
+  includesDinner    Boolean  @default(true)
+  isDefault         Boolean  @default(false)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  subscriptions FoodSubscription[]
+
+  @@index([propertyId])
+}
+
+model FoodSubscription {
+  id         String   @id @default(cuid())
+  residentId String   @unique
+  resident   Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  foodPlanId String
+  foodPlan   FoodPlan @relation(fields: [foodPlanId], references: [id], onDelete: Cascade)
+
+  startDate DateTime
+  endDate   DateTime?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([foodPlanId])
+}
+
+model Meal {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  date          DateTime @db.Date
+  type          MealType
+  menu          String
+  expectedCount Int      @default(0)
+  actualCount   Int?
+  preparedBy    String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendance MealAttendance[]
+
+  @@unique([propertyId, date, type])
+  @@index([propertyId, date])
+}
+
+model MealAttendance {
+  id         String               @id @default(cuid())
+  mealId     String
+  meal       Meal                 @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  residentId String
+  resident   Resident             @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  status     MealAttendanceStatus @default(EXPECTED)
+  markedAt   DateTime?
+
+  @@unique([mealId, residentId])
+  @@index([residentId])
+}
+
+model GroceryItem {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name         String
+  category     String
+  unit         StockUnit
+  currentStock Int       @default(0) // stored in whole units
+  minimumStock Int       @default(0)
+  // Configurable consumption formula: grams/ml/pieces per resident per meal.
+  perResidentPerMeal Int @default(0)
+  lastPurchasePrice  Int @default(0)
+  vendor             String?
+  expiresOn          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  purchases GroceryPurchase[]
+
+  @@unique([propertyId, name])
+  @@index([propertyId])
+}
+
+model GroceryPurchase {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  groceryItemId  String
+  groceryItem    GroceryItem  @relation(fields: [groceryItemId], references: [id], onDelete: Cascade)
+
+  quantity     Int
+  unitPrice    Int
+  totalAmount  Int
+  vendor       String?
+  purchaseDate DateTime @db.Date
+  invoiceRef   String?
+  expenseId    String?
+  purchasedBy  String?
+  createdAt    DateTime @default(now())
+
+  @@index([propertyId, purchaseDate])
+  @@index([groceryItemId])
+}
+
+// ============================ EXPENSES =====================================
+
+model ExpenseCategory {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  icon           String?
+  color          String?
+  createdAt      DateTime     @default(now())
+
+  expenses Expense[]
+
+  @@unique([organizationId, slug])
+}
+
+model Expense {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  title       String
+  amount      Int
+  spentOn     DateTime          @db.Date
+  paidTo      String?
+  paymentMode PaymentMethodKind @default(CASH)
+  reference   String?
+  notes       String?
+  receiptUrl  String?
+  recordedBy  String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([organizationId, spentOn])
+  @@index([propertyId, spentOn])
+  @@index([categoryId])
+}
+
+// ============================ OPERATIONS ===================================
+
+model Complaint {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String?
+  resident       Resident?    @relation(fields: [residentId], references: [id], onDelete: SetNull)
+  roomId         String?
+  room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  code        String            @unique
+  category    ComplaintCategory
+  priority    ComplaintPriority @default(MEDIUM)
+  status      ComplaintStatus   @default(OPEN)
+  title       String
+  description String
+  photoUrls   String[]          @default([])
+
+  assignedStaffId    String?
+  assignedStaff      Staff?    @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  assignedAt         DateTime?
+  startedAt          DateTime?
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  resolutionNote     String?
+  resolutionPhotoUrl String?
+  rating             Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updates ComplaintUpdate[]
+  tasks   MaintenanceTask[]
+
+  @@index([organizationId, status])
+  @@index([propertyId, status])
+  @@index([assignedStaffId, status])
+}
+
+model ComplaintUpdate {
+  id          String           @id @default(cuid())
+  complaintId String
+  complaint   Complaint        @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  authorId    String?
+  authorName  String
+  authorRole  UserRole
+  message     String
+  statusFrom  ComplaintStatus?
+  statusTo    ComplaintStatus?
+  photoUrl    String?
+  createdAt   DateTime         @default(now())
+
+  @@index([complaintId])
+}
+
+model MaintenanceTask {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomId         String?
+  room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  complaintId    String?
+  complaint      Complaint?   @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  kind        TaskKind          @default(MAINTENANCE)
+  status      TaskStatus        @default(PENDING)
+  priority    ComplaintPriority @default(MEDIUM)
+  dueDate     DateTime?
+
+  assignedStaffId    String?
+  assignedStaff      Staff?    @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  acceptedAt         DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  completionNote     String?
+  completionPhotoUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([assignedStaffId, status])
+  @@index([propertyId, status])
+}
+
+model Staff {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String?
+  property       Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  code        String
+  name        String
+  role        StaffRole
+  phone       String
+  email       String?
+  photoUrl    String?
+  joiningDate DateTime
+  exitDate    DateTime?
+  salary      Int       @default(0)
+  active      Boolean   @default(true)
+  address     String?
+  idNumber    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  attendance StaffAttendance[]
+  complaints Complaint[]
+  tasks      MaintenanceTask[]
+
+  @@unique([organizationId, code])
+  @@index([propertyId, active])
+}
+
+model StaffAttendance {
+  id        String           @id @default(cuid())
+  staffId   String
+  staff     Staff            @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(PRESENT)
+  checkIn   DateTime?
+  checkOut  DateTime?
+  notes     String?
+  createdAt DateTime         @default(now())
+
+  @@unique([staffId, date])
+  @@index([date])
+}
+
+model Visitor {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  residentId     String?
+  resident       Resident?    @relation(fields: [residentId], references: [id], onDelete: SetNull)
+
+  name       String
+  phone      String?
+  purpose    String
+  relation   String?
+  entryAt    DateTime  @default(now())
+  exitAt     DateTime?
+  idProof    String?
+  notes      String?
+  recordedBy String?
+  createdAt  DateTime  @default(now())
+
+  @@index([propertyId, entryAt])
+}
+
+model Asset {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomId         String?
+  room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  name         String
+  category     String
+  quantity     Int            @default(1)
+  condition    AssetCondition @default(GOOD)
+  location     String?
+  purchaseDate DateTime?
+  purchaseCost Int            @default(0)
+  warrantyTill DateTime?
+  serialNumber String?
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([propertyId, category])
+}
+
+model Announcement {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String?
+  property       Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  floorId        String?
+
+  title         String
+  body          String
+  audience      AnnouncementAudience @default(ALL_PROPERTIES)
+  pinned        Boolean              @default(false)
+  sendWhatsapp  Boolean              @default(false)
+  publishedAt   DateTime             @default(now())
+  expiresAt     DateTime?
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime             @default(now())
+
+  targets AnnouncementTarget[]
+
+  @@index([organizationId, publishedAt])
+  @@index([propertyId])
+}
+
+model AnnouncementTarget {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  readAt         DateTime?
+
+  @@unique([announcementId, residentId])
+  @@index([residentId])
+}
+
+// ============================ COMMS ========================================
+
+model Notification {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind      NotificationKind
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([organizationId, createdAt])
+}
+
+// Every outbound WhatsApp/SMS/Email attempt, including DEMO ones. A DEMO row
+// is stored with status DEMO_NOT_SENT — it is never presented as delivered.
+model OutboundMessage {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  channel           NotificationChannel
+  provider          String
+  toName            String?
+  toAddress         String
+  template          String?
+  subject           String?
+  body              String
+  status            MessageStatus       @default(QUEUED)
+  isDemo            Boolean             @default(true)
+  providerMessageId String?
+  error             String?
+  refType           String?
+  refId             String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([channel, status])
+}
+
+// ============================ SAAS BILLING =================================
+
+model Plan {
+  id           String       @id @default(cuid())
+  name         String
+  slug         String       @unique
+  description  String?
+  pricingBasis PricingBasis @default(STANDARD_RENT)
+  // STANDARD_RENT: subscription = property.standardRent * multiplier%
+  // PER_BED:       subscription = bedCount * perBedPrice
+  // FLAT:          subscription = flatPrice
+  multiplier    Int          @default(100) // percentage, 100 = 1x standard rent
+  perBedPrice   Int          @default(0)
+  flatPrice     Int          @default(0)
+  minAmount     Int          @default(2000)
+  maxAmount     Int          @default(25000)
+  billingCycle  BillingCycle @default(MONTHLY)
+  trialDays     Int          @default(14)
+  graceDays     Int          @default(7)
+  maxProperties Int?
+  maxResidents  Int?
+  features      String[]     @default([])
+  active        Boolean      @default(true)
+  isDefault     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  enabled     Boolean  @default(true)
+  plans       String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// One subscription per PG property — pricing is charged per PG.
+model Subscription {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String       @unique
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status             SubscriptionStatus @default(TRIALING)
+  amount             Int // resolved monthly amount, whole rupees
+  billingCycle       BillingCycle       @default(MONTHLY)
+  startedAt          DateTime           @default(now())
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  nextBillingDate    DateTime
+  graceEndsAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+
+  autopayEnabled Boolean       @default(false)
+  mandateStatus  MandateStatus @default(NOT_SETUP)
+  mandateRef     String?
+  mandateSetupAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices       SubscriptionInvoice[]
+  payments       SubscriptionPayment[]
+  paymentMethods PaymentMethod[]
+
+  @@index([organizationId, status])
+  @@index([status, nextBillingDate])
+}
+
+model SubscriptionInvoice {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  number      String        @unique
+  periodStart DateTime      @db.Date
+  periodEnd   DateTime      @db.Date
+  issueDate   DateTime      @db.Date
+  dueDate     DateTime      @db.Date
+  amount      Int
+  tax         Int           @default(0)
+  total       Int
+  amountPaid  Int           @default(0)
+  status      InvoiceStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments SubscriptionPayment[]
+
+  @@index([subscriptionId, status])
+}
+
+model SubscriptionPayment {
+  id             String               @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription         @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoiceId      String?
+  invoice        SubscriptionInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  amount           Int
+  status           PaymentStatus     @default(SUCCESS)
+  method           PaymentMethodKind @default(GATEWAY)
+  paidAt           DateTime?
+  attemptedAt      DateTime          @default(now())
+  failureReason    String?
+  retryCount       Int               @default(0)
+  gatewayProvider  String?
+  gatewayPaymentId String?
+  isDemo           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+
+  @@index([subscriptionId, status])
+}
+
+model PaymentMethod {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  kind      String // UPI_AUTOPAY | CARD | NACH
+  label     String
+  maskedRef String?
+  isDefault Boolean       @default(false)
+  status    MandateStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+
+  @@index([subscriptionId])
+}
+
+// ============================ GROWTH =======================================
+
+model Lead {
+  id              String     @id @default(cuid())
+  name            String
+  phone           String
+  whatsapp        String?
+  email           String?
+  pgName          String?
+  pgCount         Int        @default(1)
+  pgTypes         String? // MENS | WOMENS | BOTH
+  bedCount        Int?
+  rentRange       String?
+  currentMethod   String?
+  city            String?
+  preferredDemoAt DateTime?
+  message         String?
+  source          String     @default("website")
+  status          LeadStatus @default(NEW)
+  lastContactedAt DateTime?
+  demoAt          DateTime?
+  convertedOrgId  String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  notes LeadNote[]
+
+  @@index([status, createdAt])
+  @@index([phone])
+}
+
+model LeadNote {
+  id         String      @id @default(cuid())
+  leadId     String
+  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId   String?
+  authorName String
+  body       String
+  statusTo   LeadStatus?
+  createdAt  DateTime    @default(now())
+
+  @@index([leadId])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  path      String?
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+}
+
+// ============================ AUDIT ========================================
+
+model ActivityLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String?
+  actorId        String?
+  actor          User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName      String?
+  actorRole      UserRole?
+
+  event      EventType
+  entityType String?
+  entityId   String?
+  summary    String
+  meta       Json?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([event, createdAt])
+  @@index([entityType, entityId])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,999 @@
+import 'server-only'
+
+import type { BillingCycle, Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { hashPassword } from '@/lib/password'
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { notifyOrgAdmins, notifyResident, recordActivity } from '../events'
+import { sendWhatsApp } from '../integrations/whatsapp'
+import {
+  addDays,
+  daysInMonth,
+  endOfMonth,
+  formatDate,
+  formatMoney,
+  startOfDay,
+  startOfMonth,
+} from '@/lib/utils'
+import { appendLedger, generateInvoice, nextReceiptNumber } from './billing'
+
+/**
+ * Resident lifecycle.
+ *
+ * Check-in and checkout are the product's two "enter once" moments. Each runs
+ * as a single transaction that updates the bed, the room/floor/PG occupancy
+ * projections, the rent schedule, the deposit ledger, the food subscription,
+ * the tenant login and the audit trail together — so nothing can be half-done.
+ */
+
+async function nextResidentCode(tx: Prisma.TransactionClient, organizationId: string) {
+  const count = await tx.resident.count({ where: { organizationId } })
+  return `RES-${String(count + 1).padStart(4, '0')}`
+}
+
+export type CheckInInput = {
+  organizationId: string
+  propertyId: string
+  bedId: string
+
+  fullName: string
+  phone: string
+  whatsappPhone?: string
+  email?: string
+  photoUrl?: string
+  dateOfBirth?: Date | null
+  gender?: string
+  bloodGroup?: string
+  qualification?: string
+  permanentAddress?: string
+  city?: string
+  state?: string
+  pincode?: string
+
+  guardianName?: string
+  guardianRelation?: string
+  guardianPhone?: string
+  guardianAddress?: string
+
+  occupationType?: string
+  companyName?: string
+  companyAddress?: string
+  designation?: string
+
+  idType?: string
+  idNumber?: string
+
+  joiningDate: Date
+  rentAmount: number
+  depositAmount: number
+  maintenanceFee?: number
+  foodOptIn?: boolean
+  foodCharge?: number
+  foodPlanId?: string | null
+  billingCycle?: BillingCycle
+  rentDueDay?: number
+  discountAmount?: number
+  discountNote?: string
+  notes?: string
+  signatureUrl?: string
+
+  /** Collect the deposit as part of check-in. */
+  depositCollected?: boolean
+  /** Create a tenant login and send the welcome message. */
+  createTenantAccount?: boolean
+  tenantPassword?: string
+
+  documents?: { kind: string; label: string; fileUrl: string }[]
+
+  actor: { id?: string; name: string }
+}
+
+export async function checkInResident(input: CheckInInput) {
+  if (input.rentAmount <= 0) throw new ValidationError('Rent must be greater than zero')
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const property = await tx.property.findFirst({
+        where: { id: input.propertyId, organizationId: input.organizationId, archivedAt: null },
+        include: { organization: { include: { settings: true } } },
+      })
+      if (!property) throw new NotFoundError('PG not found')
+
+      // Lock the bed row so two simultaneous check-ins cannot claim it.
+      const bed = await tx.bed.findFirst({
+        where: { id: input.bedId, propertyId: property.id },
+        include: { room: true, floor: true },
+      })
+      if (!bed) throw new NotFoundError('Bed not found in this PG')
+      if (bed.status === 'OCCUPIED' || bed.residentId) {
+        throw new ConflictError('This bed is already occupied')
+      }
+      if (bed.status === 'MAINTENANCE' || bed.status === 'BLOCKED') {
+        throw new ConflictError(`This bed is marked ${bed.status.toLowerCase()}`)
+      }
+
+      const code = await nextResidentCode(tx, input.organizationId)
+      const joiningDate = startOfDay(input.joiningDate)
+
+      const resident = await tx.resident.create({
+        data: {
+          organizationId: input.organizationId,
+          propertyId: property.id,
+          roomId: bed.roomId,
+          code,
+          fullName: input.fullName.trim(),
+          phone: input.phone.trim(),
+          whatsappPhone: input.whatsappPhone?.trim() || input.phone.trim(),
+          email: input.email?.trim() || null,
+          photoUrl: input.photoUrl,
+          dateOfBirth: input.dateOfBirth ?? null,
+          gender: input.gender ?? (property.type === 'MENS' ? 'MALE' : property.type === 'WOMENS' ? 'FEMALE' : null),
+          bloodGroup: input.bloodGroup,
+          qualification: input.qualification,
+          permanentAddress: input.permanentAddress,
+          city: input.city,
+          state: input.state,
+          pincode: input.pincode,
+          guardianName: input.guardianName,
+          guardianRelation: input.guardianRelation,
+          guardianPhone: input.guardianPhone,
+          guardianAddress: input.guardianAddress,
+          occupationType: input.occupationType,
+          companyName: input.companyName,
+          companyAddress: input.companyAddress,
+          designation: input.designation,
+          idType: input.idType,
+          idNumber: input.idNumber,
+          kycStatus: input.idNumber ? 'PENDING' : 'NOT_SUBMITTED',
+          status: 'ACTIVE',
+          joiningDate,
+          rentAmount: input.rentAmount,
+          depositAmount: input.depositAmount,
+          maintenanceFee: input.maintenanceFee ?? 0,
+          foodOptIn: input.foodOptIn ?? true,
+          foodCharge: input.foodCharge ?? 0,
+          billingCycle: input.billingCycle ?? 'MONTHLY',
+          rentDueDay: input.rentDueDay ?? property.organization.settings?.rentDueDay ?? 5,
+          discountAmount: input.discountAmount ?? 0,
+          discountNote: input.discountNote,
+          notes: input.notes,
+          signatureUrl: input.signatureUrl,
+          documents: input.documents?.length
+            ? {
+                create: input.documents.map((d) => ({
+                  kind: d.kind as never,
+                  label: d.label,
+                  fileUrl: d.fileUrl,
+                })),
+              }
+            : undefined,
+        },
+      })
+
+      // --- Bed becomes occupied; allocation history starts -----------------
+      await tx.bed.update({
+        where: { id: bed.id },
+        data: { status: 'OCCUPIED', residentId: resident.id },
+      })
+      await tx.bedAllocation.create({
+        data: { bedId: bed.id, residentId: resident.id, fromDate: joiningDate },
+      })
+
+      // --- Security deposit ledger ----------------------------------------
+      const deposit = await tx.securityDeposit.create({
+        data: {
+          organizationId: input.organizationId,
+          residentId: resident.id,
+          amount: input.depositAmount,
+          collected: input.depositCollected ? input.depositAmount : 0,
+          status: input.depositCollected ? 'COLLECTED' : 'PENDING',
+          collectedAt: input.depositCollected ? new Date() : null,
+        },
+      })
+
+      if (input.depositCollected && input.depositAmount > 0) {
+        const receiptNumber = await nextReceiptNumber(
+          tx,
+          input.organizationId,
+          property.organization.settings?.receiptPrefix ?? 'RCP',
+          new Date(),
+        )
+        await tx.rentPayment.create({
+          data: {
+            organizationId: input.organizationId,
+            propertyId: property.id,
+            residentId: resident.id,
+            receiptNumber,
+            amount: input.depositAmount,
+            method: 'CASH',
+            status: 'SUCCESS',
+            notes: 'Security deposit collected at check-in',
+            recordedBy: input.actor.name,
+          },
+        })
+        await appendLedger(tx, {
+          organizationId: input.organizationId,
+          residentId: resident.id,
+          kind: 'DEPOSIT',
+          label: `Security deposit received (${receiptNumber})`,
+          entryDate: joiningDate,
+          refType: 'SecurityDeposit',
+          refId: deposit.id,
+        })
+      }
+
+      // --- Food subscription ----------------------------------------------
+      if (input.foodOptIn !== false) {
+        const plan = input.foodPlanId
+          ? await tx.foodPlan.findFirst({
+              where: { id: input.foodPlanId, propertyId: property.id },
+            })
+          : await tx.foodPlan.findFirst({
+              where: { propertyId: property.id, active: true },
+              orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+            })
+        if (plan) {
+          await tx.foodSubscription.create({
+            data: {
+              residentId: resident.id,
+              foodPlanId: plan.id,
+              startDate: joiningDate,
+              active: true,
+            },
+          })
+        }
+      }
+
+      // --- Tenant login ----------------------------------------------------
+      let tenantEmail: string | null = null
+      let tenantPassword: string | null = null
+      if (input.createTenantAccount !== false) {
+        const base = input.email?.trim().toLowerCase() || `${code.toLowerCase()}@${property.organization.slug}.stayflow.app`
+        const exists = await tx.user.findUnique({ where: { email: base } })
+        tenantEmail = exists ? `${code.toLowerCase()}@${property.organization.slug}.stayflow.app` : base
+        tenantPassword = input.tenantPassword ?? `Stay@${resident.phone.slice(-4)}${code.slice(-3)}`
+
+        const user = await tx.user.create({
+          data: {
+            organizationId: input.organizationId,
+            email: tenantEmail,
+            phone: resident.phone,
+            name: resident.fullName,
+            passwordHash: await hashPassword(tenantPassword),
+            role: 'TENANT',
+            status: 'ACTIVE',
+            avatarUrl: input.photoUrl,
+          },
+        })
+        await tx.resident.update({ where: { id: resident.id }, data: { userId: user.id } })
+      }
+
+      // --- Audit + notifications -------------------------------------------
+      await recordActivity(
+        {
+          organizationId: input.organizationId,
+          propertyId: property.id,
+          actorId: input.actor.id,
+          actorName: input.actor.name,
+          event: 'RESIDENT_CHECKED_IN',
+          entityType: 'Resident',
+          entityId: resident.id,
+          summary: `${resident.fullName} checked into ${property.name} · Room ${bed.room.number} · Bed ${bed.label}`,
+          meta: {
+            residentCode: code,
+            room: bed.room.number,
+            bed: bed.label,
+            rent: input.rentAmount,
+            deposit: input.depositAmount,
+          },
+        },
+        tx,
+      )
+      await recordActivity(
+        {
+          organizationId: input.organizationId,
+          propertyId: property.id,
+          actorId: input.actor.id,
+          actorName: input.actor.name,
+          event: 'BED_ALLOCATED',
+          entityType: 'Bed',
+          entityId: bed.id,
+          summary: `Bed ${bed.label} in Room ${bed.room.number} allocated to ${resident.fullName}`,
+        },
+        tx,
+      )
+      await notifyOrgAdmins(
+        input.organizationId,
+        {
+          kind: 'SYSTEM',
+          title: 'New resident checked in',
+          body: `${resident.fullName} — ${property.name}, Room ${bed.room.number}, Bed ${bed.label}.`,
+          link: `/app/residents/${resident.id}`,
+        },
+        tx,
+      )
+
+      return { resident, bed, property, deposit, tenantEmail, tenantPassword }
+    },
+    { timeout: 20000 },
+  )
+
+  // --- Post-commit: first invoice + welcome message ------------------------
+  const first = await generateInvoice({
+    residentId: result.resident.id,
+    periodStart: startOfMonth(result.resident.joiningDate),
+    actor: input.actor,
+    autoGenerated: true,
+  }).catch(() => ({ invoice: null, created: false }))
+
+  await notifyResident(result.resident.id, {
+    organizationId: input.organizationId,
+    kind: 'SYSTEM',
+    title: `Welcome to ${result.property.name}`,
+    body: `Your room is ${result.bed.room.number}, bed ${result.bed.label}. Rent ${formatMoney(result.resident.rentAmount)} per month.`,
+    link: '/tenant',
+  })
+
+  await sendWhatsApp({
+    organizationId: input.organizationId,
+    toName: result.resident.fullName,
+    toPhone: result.resident.whatsappPhone || result.resident.phone,
+    template: 'welcome_resident',
+    body:
+      `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
+      `Welcome to ${result.property.name}!\n\n` +
+      `Room: ${result.bed.room.number} · Bed ${result.bed.label}\n` +
+      `Rent: ${formatMoney(result.resident.rentAmount)} / month\n` +
+      `Joining date: ${formatDate(result.resident.joiningDate)}\n\n` +
+      (result.tenantEmail
+        ? `Your resident app login:\nEmail: ${result.tenantEmail}\n\n`
+        : '') +
+      `You can pay rent, raise complaints and see the food menu from the app.`,
+    variables: [
+      result.resident.fullName,
+      result.property.name,
+      `${result.bed.room.number} / ${result.bed.label}`,
+    ],
+    refType: 'Resident',
+    refId: result.resident.id,
+  }).catch(() => undefined)
+
+  return { ...result, firstInvoice: first.invoice }
+}
+
+// --------------------------------------------------------------------------
+// Room / bed transfer
+// --------------------------------------------------------------------------
+
+export async function transferResident(params: {
+  residentId: string
+  toBedId: string
+  actor: { id?: string; name: string }
+  effectiveDate?: Date
+}) {
+  return prisma.$transaction(async (tx) => {
+    const resident = await tx.resident.findUnique({
+      where: { id: params.residentId },
+      include: { bed: { include: { room: true } }, property: true },
+    })
+    if (!resident) throw new NotFoundError('Resident not found')
+    if (resident.status === 'CHECKED_OUT') throw new ConflictError('Resident has checked out')
+
+    const target = await tx.bed.findFirst({
+      where: { id: params.toBedId, propertyId: resident.propertyId },
+      include: { room: true },
+    })
+    if (!target) throw new NotFoundError('Target bed not found in this PG')
+    if (target.residentId && target.residentId !== resident.id) {
+      throw new ConflictError('This bed is already occupied')
+    }
+    if (target.status === 'MAINTENANCE' || target.status === 'BLOCKED') {
+      throw new ConflictError(`This bed is marked ${target.status.toLowerCase()}`)
+    }
+
+    const date = startOfDay(params.effectiveDate ?? new Date())
+
+    if (resident.bed) {
+      await tx.bed.update({
+        where: { id: resident.bed.id },
+        data: { status: 'AVAILABLE', residentId: null },
+      })
+      await tx.bedAllocation.updateMany({
+        where: { bedId: resident.bed.id, residentId: resident.id, toDate: null },
+        data: { toDate: date },
+      })
+    }
+
+    await tx.bed.update({
+      where: { id: target.id },
+      data: { status: 'OCCUPIED', residentId: resident.id },
+    })
+    await tx.bedAllocation.create({
+      data: { bedId: target.id, residentId: resident.id, fromDate: date },
+    })
+    await tx.resident.update({ where: { id: resident.id }, data: { roomId: target.roomId } })
+
+    await recordActivity(
+      {
+        organizationId: resident.organizationId,
+        propertyId: resident.propertyId,
+        actorId: params.actor.id,
+        actorName: params.actor.name,
+        event: 'ROOM_CHANGED',
+        entityType: 'Resident',
+        entityId: resident.id,
+        summary: `${resident.fullName} moved from ${
+          resident.bed ? `Room ${resident.bed.room.number} / Bed ${resident.bed.label}` : 'unallocated'
+        } to Room ${target.room.number} / Bed ${target.label}`,
+      },
+      tx,
+    )
+    await notifyResident(
+      resident.id,
+      {
+        organizationId: resident.organizationId,
+        kind: 'SYSTEM',
+        title: 'Your room has changed',
+        body: `You are now in Room ${target.room.number}, Bed ${target.label}.`,
+        link: '/tenant',
+      },
+      tx,
+    )
+
+    return { resident, bed: target }
+  })
+}
+
+// --------------------------------------------------------------------------
+// Checkout
+// --------------------------------------------------------------------------
+
+export type CheckoutPreview = {
+  residentId: string
+  residentName: string
+  exitDate: Date
+  outstandingRent: number
+  proRataRent: number
+  foodCharges: number
+  utilityCharges: number
+  otherCharges: number
+  depositHeld: number
+  suggestedRefund: number
+  suggestedPayable: number
+  openInvoices: { id: string; number: string; balance: number }[]
+}
+
+/** Computes the final settlement without writing anything. */
+export async function previewCheckout(params: {
+  residentId: string
+  exitDate: Date
+  damageDeduction?: number
+  otherCharges?: number
+}): Promise<CheckoutPreview> {
+  const resident = await prisma.resident.findUnique({
+    where: { id: params.residentId },
+    include: {
+      deposit: true,
+      invoices: {
+        where: { status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] } },
+        orderBy: { dueDate: 'asc' },
+      },
+      utilityCharges: { where: { billed: false } },
+    },
+  })
+  if (!resident) throw new NotFoundError('Resident not found')
+
+  const exitDate = startOfDay(params.exitDate)
+  const outstandingRent = resident.invoices.reduce((s, i) => s + i.balance, 0)
+
+  // Pro-rate the month of exit only if it has not already been invoiced.
+  const exitMonthStart = startOfMonth(exitDate)
+  const alreadyInvoiced = await prisma.rentInvoice.findUnique({
+    where: { residentId_periodStart: { residentId: resident.id, periodStart: exitMonthStart } },
+    select: { id: true },
+  })
+  let proRataRent = 0
+  let foodCharges = 0
+  if (!alreadyInvoiced) {
+    const total = daysInMonth(exitMonthStart)
+    const days = exitDate.getDate()
+    proRataRent = Math.round((resident.rentAmount * days) / total)
+    if (resident.foodOptIn) foodCharges = Math.round((resident.foodCharge * days) / total)
+  }
+
+  const utilityCharges = resident.utilityCharges.reduce((s, u) => s + u.amount, 0)
+  const otherCharges = params.otherCharges ?? 0
+  const damage = params.damageDeduction ?? 0
+  const depositHeld = resident.deposit?.collected ?? 0
+
+  const dues = outstandingRent + proRataRent + foodCharges + utilityCharges + otherCharges + damage
+  const net = depositHeld - dues
+
+  return {
+    residentId: resident.id,
+    residentName: resident.fullName,
+    exitDate,
+    outstandingRent,
+    proRataRent,
+    foodCharges,
+    utilityCharges,
+    otherCharges,
+    depositHeld,
+    suggestedRefund: net > 0 ? net : 0,
+    suggestedPayable: net < 0 ? -net : 0,
+    openInvoices: resident.invoices.map((i) => ({
+      id: i.id,
+      number: i.number,
+      balance: i.balance,
+    })),
+  }
+}
+
+export async function completeCheckout(params: {
+  residentId: string
+  exitDate: Date
+  reason?: string
+  damageDeduction?: number
+  otherCharges?: number
+  settlementNote?: string
+  /** Refund paid out now (rest stays as a pending refund). */
+  refundPaid?: boolean
+  actor: { id?: string; name: string }
+}) {
+  const preview = await previewCheckout(params)
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const resident = await tx.resident.findUnique({
+        where: { id: params.residentId },
+        include: {
+          bed: { include: { room: true } },
+          property: { include: { organization: { include: { settings: true } } } },
+          deposit: true,
+        },
+      })
+      if (!resident) throw new NotFoundError('Resident not found')
+      if (resident.status === 'CHECKED_OUT') throw new ConflictError('Already checked out')
+
+      const exitDate = startOfDay(params.exitDate)
+
+      // --- Final pro-rata invoice ------------------------------------------
+      if (preview.proRataRent > 0 || preview.foodCharges > 0 || preview.otherCharges > 0) {
+        const periodStart = startOfMonth(exitDate)
+        const settings = resident.property.organization.settings
+        const stamp = `${periodStart.getFullYear()}${String(periodStart.getMonth() + 1).padStart(2, '0')}`
+        const number = `${settings?.invoicePrefix ?? 'INV'}-${stamp}-FIN-${resident.code}`
+        const subtotal = preview.proRataRent + preview.foodCharges + preview.otherCharges
+
+        const finalInvoice = await tx.rentInvoice.create({
+          data: {
+            organizationId: resident.organizationId,
+            propertyId: resident.propertyId,
+            residentId: resident.id,
+            number,
+            periodStart,
+            periodEnd: exitDate,
+            issueDate: exitDate,
+            dueDate: exitDate,
+            status: 'PENDING',
+            subtotal,
+            total: subtotal,
+            balance: subtotal,
+            autoGenerated: true,
+            notes: 'Final settlement invoice',
+            lines: {
+              create: [
+                ...(preview.proRataRent > 0
+                  ? [
+                      {
+                        kind: 'RENT' as const,
+                        label: `Rent till ${formatDate(exitDate)}`,
+                        quantity: 1,
+                        unitPrice: preview.proRataRent,
+                        amount: preview.proRataRent,
+                      },
+                    ]
+                  : []),
+                ...(preview.foodCharges > 0
+                  ? [
+                      {
+                        kind: 'FOOD' as const,
+                        label: `Food till ${formatDate(exitDate)}`,
+                        quantity: 1,
+                        unitPrice: preview.foodCharges,
+                        amount: preview.foodCharges,
+                      },
+                    ]
+                  : []),
+                ...(preview.otherCharges > 0
+                  ? [
+                      {
+                        kind: 'OTHER' as const,
+                        label: 'Other charges',
+                        quantity: 1,
+                        unitPrice: preview.otherCharges,
+                        amount: preview.otherCharges,
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          },
+        })
+        await appendLedger(tx, {
+          organizationId: resident.organizationId,
+          residentId: resident.id,
+          kind: 'CHARGE',
+          label: `Final settlement invoice ${finalInvoice.number}`,
+          debit: subtotal,
+          entryDate: exitDate,
+          refType: 'RentInvoice',
+          refId: finalInvoice.id,
+        })
+      }
+
+      // --- Utility charges become billed ------------------------------------
+      await tx.utilityCharge.updateMany({
+        where: { residentId: resident.id, billed: false },
+        data: { billed: true },
+      })
+
+      const damage = params.damageDeduction ?? 0
+      if (damage > 0) {
+        await appendLedger(tx, {
+          organizationId: resident.organizationId,
+          residentId: resident.id,
+          kind: 'ADJUSTMENT',
+          label: 'Damage / deduction at checkout',
+          debit: damage,
+          entryDate: exitDate,
+        })
+      }
+
+      // --- Deposit settlement ------------------------------------------------
+      const deductions = Math.min(preview.depositHeld, preview.depositHeld - preview.suggestedRefund)
+      if (resident.deposit) {
+        await tx.securityDeposit.update({
+          where: { id: resident.deposit.id },
+          data: {
+            deductions,
+            refunded: params.refundPaid ? preview.suggestedRefund : 0,
+            status:
+              preview.suggestedRefund === 0
+                ? 'FORFEITED'
+                : params.refundPaid
+                  ? 'REFUNDED'
+                  : 'PARTIALLY_REFUNDED',
+            refundedAt: params.refundPaid ? new Date() : null,
+            reason: params.settlementNote,
+          },
+        })
+        if (preview.depositHeld > 0) {
+          await appendLedger(tx, {
+            organizationId: resident.organizationId,
+            residentId: resident.id,
+            kind: 'DEPOSIT',
+            label: 'Security deposit adjusted against dues',
+            credit: preview.depositHeld - preview.suggestedRefund,
+            entryDate: exitDate,
+          })
+        }
+        if (params.refundPaid && preview.suggestedRefund > 0) {
+          await appendLedger(tx, {
+            organizationId: resident.organizationId,
+            residentId: resident.id,
+            kind: 'REFUND',
+            label: 'Security deposit refunded',
+            debit: 0,
+            credit: 0,
+            entryDate: exitDate,
+          })
+        }
+      }
+
+      // --- Clear the open invoices covered by the deposit --------------------
+      const covered = preview.depositHeld - preview.suggestedRefund
+      if (covered > 0) {
+        let remaining = covered
+        const open = await tx.rentInvoice.findMany({
+          where: {
+            residentId: resident.id,
+            status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] },
+            balance: { gt: 0 },
+          },
+          orderBy: { dueDate: 'asc' },
+        })
+        for (const invoice of open) {
+          if (remaining <= 0) break
+          const applied = Math.min(remaining, invoice.balance)
+          remaining -= applied
+          const amountPaid = invoice.amountPaid + applied
+          const balance = invoice.total - amountPaid
+          await tx.rentInvoice.update({
+            where: { id: invoice.id },
+            data: {
+              amountPaid,
+              balance: Math.max(0, balance),
+              status: balance <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+              paidAt: balance <= 0 ? exitDate : null,
+              notes: 'Settled from security deposit at checkout',
+            },
+          })
+        }
+      }
+
+      // --- Checkout record ---------------------------------------------------
+      const checkout = await tx.checkout.create({
+        data: {
+          residentId: resident.id,
+          exitDate,
+          reason: params.reason,
+          outstandingRent: preview.outstandingRent,
+          proRataRent: preview.proRataRent,
+          foodCharges: preview.foodCharges,
+          utilityCharges: preview.utilityCharges,
+          otherCharges: preview.otherCharges,
+          damageDeduction: damage,
+          depositHeld: preview.depositHeld,
+          refundAmount: preview.suggestedRefund,
+          payableAmount: preview.suggestedPayable,
+          settledAt: params.refundPaid || preview.suggestedRefund === 0 ? new Date() : null,
+          settlementNote: params.settlementNote,
+          processedBy: params.actor.name,
+        },
+      })
+
+      // --- Release the bed, stop food, close the account ---------------------
+      if (resident.bed) {
+        await tx.bed.update({
+          where: { id: resident.bed.id },
+          data: { status: 'AVAILABLE', residentId: null },
+        })
+        await tx.bedAllocation.updateMany({
+          where: { bedId: resident.bed.id, residentId: resident.id, toDate: null },
+          data: { toDate: exitDate },
+        })
+      }
+      await tx.foodSubscription.updateMany({
+        where: { residentId: resident.id },
+        data: { active: false, endDate: exitDate },
+      })
+      await tx.resident.update({
+        where: { id: resident.id },
+        data: { status: 'CHECKED_OUT', exitDate, roomId: null },
+      })
+      if (resident.userId) {
+        await tx.user.update({ where: { id: resident.userId }, data: { status: 'ARCHIVED' } })
+      }
+      await tx.mealAttendance.deleteMany({
+        where: { residentId: resident.id, meal: { date: { gt: exitDate } } },
+      })
+
+      await recordActivity(
+        {
+          organizationId: resident.organizationId,
+          propertyId: resident.propertyId,
+          actorId: params.actor.id,
+          actorName: params.actor.name,
+          event: 'CHECKOUT_COMPLETED',
+          entityType: 'Resident',
+          entityId: resident.id,
+          summary: `${resident.fullName} checked out of ${resident.property.name}${
+            preview.suggestedRefund > 0
+              ? ` — refund ${formatMoney(preview.suggestedRefund)}`
+              : preview.suggestedPayable > 0
+                ? ` — ${formatMoney(preview.suggestedPayable)} still payable`
+                : ' — settled'
+          }`,
+          meta: {
+            refund: preview.suggestedRefund,
+            payable: preview.suggestedPayable,
+            depositHeld: preview.depositHeld,
+          },
+        },
+        tx,
+      )
+      if (resident.bed) {
+        await recordActivity(
+          {
+            organizationId: resident.organizationId,
+            propertyId: resident.propertyId,
+            actorId: params.actor.id,
+            actorName: params.actor.name,
+            event: 'BED_RELEASED',
+            entityType: 'Bed',
+            entityId: resident.bed.id,
+            summary: `Bed ${resident.bed.label} in Room ${resident.bed.room.number} is now available`,
+          },
+          tx,
+        )
+      }
+      await notifyOrgAdmins(
+        resident.organizationId,
+        {
+          kind: 'SYSTEM',
+          title: 'Resident checked out',
+          body: `${resident.fullName} left ${resident.property.name}. ${
+            preview.suggestedRefund > 0
+              ? `Refund due: ${formatMoney(preview.suggestedRefund)}.`
+              : preview.suggestedPayable > 0
+                ? `${formatMoney(preview.suggestedPayable)} still payable.`
+                : 'Fully settled.'
+          }`,
+          link: `/app/residents/${resident.id}`,
+        },
+        tx,
+      )
+
+      return { resident, checkout, preview }
+    },
+    { timeout: 20000 },
+  )
+
+  await sendWhatsApp({
+    organizationId: result.resident.organizationId,
+    toName: result.resident.fullName,
+    toPhone: result.resident.whatsappPhone || result.resident.phone,
+    template: 'checkout_settlement',
+    body:
+      `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
+      `Your checkout from ${result.resident.property.name} on ${formatDate(result.checkout.exitDate)} is complete.\n\n` +
+      `Deposit held: ${formatMoney(result.checkout.depositHeld)}\n` +
+      `Dues adjusted: ${formatMoney(result.checkout.depositHeld - result.checkout.refundAmount)}\n` +
+      (result.checkout.refundAmount > 0
+        ? `Refund: ${formatMoney(result.checkout.refundAmount)}\n`
+        : '') +
+      (result.checkout.payableAmount > 0
+        ? `Balance payable: ${formatMoney(result.checkout.payableAmount)}\n`
+        : '') +
+      `\nThank you for staying with us.`,
+    variables: [result.resident.fullName, formatMoney(result.checkout.refundAmount)],
+    refType: 'Checkout',
+    refId: result.checkout.id,
+  }).catch(() => undefined)
+
+  return result
+}
+
+/** Marks a resident as serving notice; the bed stays occupied until exit. */
+export async function markNotice(params: {
+  residentId: string
+  noticeDate: Date
+  exitDate: Date
+  actor: { id?: string; name: string }
+}) {
+  const resident = await prisma.resident.update({
+    where: { id: params.residentId },
+    data: {
+      status: 'NOTICE',
+      noticeDate: startOfDay(params.noticeDate),
+      exitDate: startOfDay(params.exitDate),
+    },
+    include: { property: true },
+  })
+  await recordActivity({
+    organizationId: resident.organizationId,
+    propertyId: resident.propertyId,
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    event: 'RESIDENT_UPDATED',
+    entityType: 'Resident',
+    entityId: resident.id,
+    summary: `${resident.fullName} gave notice — expected exit ${formatDate(params.exitDate)}`,
+  })
+  return resident
+}
+
+/** Beds that free up within the next N days, for the ops panel. */
+export async function upcomingVacancies(propertyIds: string[], days = 30) {
+  return prisma.resident.findMany({
+    where: {
+      propertyId: { in: propertyIds },
+      status: 'NOTICE',
+      exitDate: { lte: addDays(new Date(), days) },
+    },
+    include: { bed: { include: { room: true } }, property: true },
+    orderBy: { exitDate: 'asc' },
+  })
+}
+
+/** Aggregate used across dashboards: occupancy for a set of properties. */
+export async function occupancyFor(propertyIds: string[]) {
+  const rows = await prisma.bed.groupBy({
+    by: ['status'],
+    where: { propertyId: { in: propertyIds } },
+    _count: { _all: true },
+  })
+  const get = (s: string) => rows.find((r) => r.status === s)?._count._all ?? 0
+  const occupied = get('OCCUPIED')
+  const available = get('AVAILABLE')
+  const reserved = get('RESERVED')
+  const maintenance = get('MAINTENANCE')
+  const blocked = get('BLOCKED')
+  const total = occupied + available + reserved + maintenance + blocked
+  return {
+    total,
+    occupied,
+    available,
+    reserved,
+    maintenance,
+    blocked,
+    rate: total ? Math.round((occupied / total) * 100) : 0,
+  }
+}
+
+/** Writes today's occupancy snapshot for every property (used by trends). */
+export async function snapshotOccupancy(propertyIds?: string[]) {
+  const properties = await prisma.property.findMany({
+    where: { archivedAt: null, ...(propertyIds ? { id: { in: propertyIds } } : {}) },
+    select: { id: true },
+  })
+  const date = startOfDay(new Date())
+  for (const property of properties) {
+    const stats = await occupancyFor([property.id])
+    await prisma.occupancySnapshot.upsert({
+      where: { propertyId_date: { propertyId: property.id, date } },
+      create: {
+        propertyId: property.id,
+        date,
+        totalBeds: stats.total,
+        occupied: stats.occupied,
+        vacant: stats.available,
+        reserved: stats.reserved,
+        maintenance: stats.maintenance,
+      },
+      update: {
+        totalBeds: stats.total,
+        occupied: stats.occupied,
+        vacant: stats.available,
+        reserved: stats.reserved,
+        maintenance: stats.maintenance,
+      },
+    })
+  }
+  return { snapshots: properties.length, date }
+}
+
+/** Residents whose deposit is still uncollected — an ops nudge. */
+export async function pendingDeposits(organizationId: string, propertyIds: string[]) {
+  return prisma.securityDeposit.findMany({
+    where: {
+      organizationId,
+      status: 'PENDING',
+      resident: { propertyId: { in: propertyIds }, status: { in: ['ACTIVE', 'NOTICE'] } },
+    },
+    include: { resident: { include: { property: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+}
+
+export async function endOfMonthUtilitySplit(params: {
+  propertyId: string
+  month: Date
+  totalAmount: number
+  kind: string
+  actor: { id?: string; name: string }
+}) {
+  const periodStart = startOfMonth(params.month)
+  const periodEnd = endOfMonth(params.month)
+  const residents = await prisma.resident.findMany({
+    where: { propertyId: params.propertyId, status: { in: ['ACTIVE', 'NOTICE'] } },
+    select: { id: true, organizationId: true },
+  })
+  if (!residents.length) throw new ValidationError('No active residents to split this bill across')
+
+  const share = Math.round(params.totalAmount / residents.length)
+  await prisma.utilityCharge.createMany({
+    data: residents.map((r) => ({
+      organizationId: r.organizationId,
+      propertyId: params.propertyId,
+      residentId: r.id,
+      kind: params.kind,
+      periodStart,
+      periodEnd,
+      amount: share,
+    })),
+  })
+  return { residents: residents.length, share }
+}

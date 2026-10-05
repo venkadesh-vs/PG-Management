@@ -50,6 +50,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       badges={{ complaints, notifications, tasks, leads: 0 }}
       installName={PWA_APPS.owner.shortName}
       restricted={isOrgRestricted(user)}
+      access={{ role: user.role, modules: user.modules, permissions: user.permissions }}
     >
       {children}
     </AppShell>

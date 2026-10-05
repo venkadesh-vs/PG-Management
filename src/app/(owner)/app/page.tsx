@@ -20,6 +20,7 @@ import { OWNER_NAV, filterNavSections } from '@/lib/navigation'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import {
+  attentionSummary,
   collectionBreakdown,
   complaintBreakdown,
   dashboardSummary,
@@ -27,6 +28,7 @@ import {
   occupancyTrend,
   propertyComparison,
   revenueTrend,
+  vacancyIntelligence,
 } from '@/server/services/analytics'
 import { todaysMealBoard } from '@/server/services/kitchen'
 import { lowStockItems } from '@/server/services/kitchen'
@@ -50,6 +52,8 @@ import { ActivityTimeline } from '@/components/app/activity-timeline'
 import { OccupancyRing } from '@/components/app/occupancy-ring'
 import { ICONS, type IconName } from '@/lib/icons'
 import { Onboarding } from './onboarding'
+import { AttentionPanel } from './attention-panel'
+import { VacancyCard } from './vacancy-card'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
@@ -81,6 +85,7 @@ export default async function OwnerDashboard({
     food: on('food') && has('food.view'),
     grocery: on('grocery') && has('grocery.view'),
     activity: on('activity') && has('activity.view'),
+    leads: on('leads') && has('leads.view'),
   }
   const skip = <T,>(cond: boolean, run: () => Promise<T>, empty: T) => (cond ? run() : Promise.resolve(empty))
 
@@ -96,6 +101,17 @@ export default async function OwnerDashboard({
   const monthStart = startOfMonth(new Date())
   const monthEnd = endOfMonth(new Date())
 
+  // "Needs attention" shows only what this person can see and act on.
+  const attentionFlags = {
+    rent: show.money,
+    complaints: show.complaints,
+    beds: show.beds,
+    grocery: show.grocery,
+    bookings: show.leads,
+    leads: show.leads,
+    residents: show.residents,
+  }
+
   const [
     summary,
     revenue,
@@ -109,6 +125,8 @@ export default async function OwnerDashboard({
     vacancies,
     activity,
     complaintList,
+    attention,
+    vacancy,
   ] = await Promise.all([
     dashboardSummary(scope),
     revenueTrend(propertyIds, 6),
@@ -143,6 +161,8 @@ export default async function OwnerDashboard({
       orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
       take: 5,
     }),
+    attentionSummary(scope, attentionFlags),
+    skip(show.money, () => vacancyIntelligence(scope), null),
   ])
 
   const noProperties = scope.allowedPropertyIds.length === 0
@@ -175,14 +195,113 @@ export default async function OwnerDashboard({
 
   const collectionRate = percent(collection.paid, collection.total)
 
+  const firstName = user.name.split(' ')[0]
+  const outstanding = summary.pendingRent + summary.overdueRent
+  // The current month is the last bucket of the 6-month trend.
+  const billedThisMonth = revenue.at(-1)?.billed ?? 0
+
   return (
     <div className="space-y-7">
+      {/* ------------------------------------------------ Greeting (§22) */}
+      <header className="space-y-1">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+          {greetingIST()}, {firstName} <span aria-hidden>👋</span>
+        </h1>
+        <p className="text-sm text-slate-500">Here&apos;s what needs your attention today.</p>
+      </header>
+
+      <AttentionPanel counts={attention} flags={attentionFlags} propertyId={scope.propertyId} />
+
       <Onboarding user={user} />
 
+      {/* ----------------------------------------------- KPI row (§22) */}
+      <MotionGrid
+        className={cn(
+          'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4',
+          show.money && show.expenses ? 'xl:grid-cols-6' : show.money ? 'xl:grid-cols-4' : 'xl:grid-cols-2',
+        )}
+      >
+        <MotionItem>
+          <StatCard
+            label="Occupancy"
+            value={summary.occupancy.rate}
+            format="percent"
+            icon="beds"
+            tone="violet"
+            hint={`${summary.occupancy.occupied} of ${summary.occupancy.total} beds`}
+            href="/app/beds"
+          />
+        </MotionItem>
+        {show.money && (
+          <>
+            <MotionItem>
+              <StatCard
+                label="Collection"
+                value={summary.monthCollection}
+                format="money"
+                icon="money"
+                tone="emerald"
+                hint={`This month · ${formatMoney(summary.todayCollection)} today`}
+                href="/app/payments"
+              />
+            </MotionItem>
+            <MotionItem>
+              <StatCard
+                label="Outstanding"
+                value={outstanding}
+                format="money"
+                icon="warning"
+                tone={summary.overdueRent > 0 ? 'red' : 'amber'}
+                hint={`${summary.overdueCount} overdue · ${summary.pendingCount} pending`}
+                href="/app/rent"
+              />
+            </MotionItem>
+            <MotionItem>
+              <StatCard
+                label="Revenue"
+                value={billedThisMonth}
+                format="money"
+                icon="chart"
+                tone="blue"
+                hint={`Billed this month · ${formatMoney(summary.expectedRevenue)} expected`}
+                href="/app/rent"
+              />
+            </MotionItem>
+          </>
+        )}
+        {show.expenses && (
+          <MotionItem>
+            <StatCard
+              label="Expenses"
+              value={summary.monthExpenses}
+              format="money"
+              icon="receipt"
+              tone="amber"
+              hint="This month"
+              href="/app/expenses"
+            />
+          </MotionItem>
+        )}
+        {show.expenses && show.money && (
+          <MotionItem>
+            <StatCard
+              label="Profit"
+              value={summary.netThisMonth}
+              format="money"
+              icon="cash"
+              tone={summary.netThisMonth >= 0 ? 'emerald' : 'red'}
+              hint="Collected minus expenses"
+            />
+          </MotionItem>
+        )}
+      </MotionGrid>
+
+      <section className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
       {/* --------------------------------------------------- Hero header */}
       <div
         className={cn(
           'relative overflow-hidden rounded-3xl bg-gradient-to-br p-6 text-white shadow-elevated sm:p-8',
+          vacancy ? 'lg:col-span-2' : 'lg:col-span-3',
           theme.gradient,
         )}
       >
@@ -196,15 +315,16 @@ export default async function OwnerDashboard({
               </span>
               <span className="text-xs text-white/60">
                 {new Date().toLocaleDateString('en-IN', {
+                  timeZone: 'Asia/Kolkata',
                   weekday: 'long',
                   day: 'numeric',
                   month: 'long',
                 })}
               </span>
             </div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               {activeProperty ? activeProperty.name : `${user.organizationName}`}
-            </h1>
+            </h2>
             <p className="max-w-lg text-sm leading-relaxed text-white/70">
               {summary.residents} residents across {summary.occupancy.total} beds.{' '}
               {show.money &&
@@ -266,8 +386,16 @@ export default async function OwnerDashboard({
         </div>
       </div>
 
-      {/* ----------------------------------------------------- Stat grid */}
+        {vacancy && <VacancyCard insight={vacancy} showPerProperty={!scope.propertyId} />}
+      </section>
+
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <MotionItem>
+          <StatCard label="Vacant beds" value={summary.occupancy.available} icon="door" tone="emerald" hint={`${summary.occupancy.reserved} reserved`} href="/app/beds" />
+        </MotionItem>
+        <MotionItem>
+          <StatCard label="Under maintenance" value={summary.occupancy.maintenance + summary.occupancy.blocked} icon="wrench" tone="amber" hint="Beds out of service" href="/app/beds" />
+        </MotionItem>
         <MotionItem>
           <StatCard
             label="Residents"
@@ -278,57 +406,6 @@ export default async function OwnerDashboard({
             href="/app/residents"
           />
         </MotionItem>
-        <MotionItem>
-          <StatCard
-            label="Occupancy"
-            value={summary.occupancy.rate}
-            format="percent"
-            icon="beds"
-            tone="violet"
-            hint={`${summary.occupancy.occupied} of ${summary.occupancy.total} beds filled`}
-            href="/app/beds"
-          />
-        </MotionItem>
-        {show.money && (
-        <MotionItem>
-          <StatCard
-            label="Collected this month"
-            value={summary.monthCollection}
-            format="money"
-            icon="money"
-            tone="emerald"
-            hint={`${summary.monthPayments} payments · ${formatMoney(summary.todayCollection)} today`}
-            href="/app/payments"
-          />
-        </MotionItem>
-        )}
-        {show.money && (
-        <MotionItem>
-          <StatCard
-            label="Pending rent"
-            value={summary.pendingRent + summary.overdueRent}
-            format="money"
-            icon="warning"
-            tone={summary.overdueRent > 0 ? 'red' : 'amber'}
-            hint={`${summary.overdueCount} overdue · ${summary.pendingCount} pending`}
-            href="/app/rent"
-          />
-        </MotionItem>
-        )}
-      </MotionGrid>
-
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <MotionItem>
-          <StatCard label="Vacant beds" value={summary.occupancy.available} icon="door" tone="emerald" hint={`${summary.occupancy.reserved} reserved`} href="/app/beds" />
-        </MotionItem>
-        <MotionItem>
-          <StatCard label="Under maintenance" value={summary.occupancy.maintenance + summary.occupancy.blocked} icon="wrench" tone="amber" hint="Beds out of service" href="/app/beds" />
-        </MotionItem>
-        {show.expenses && (
-          <MotionItem>
-            <StatCard label="Expenses this month" value={summary.monthExpenses} format="money" icon="receipt" tone="red" hint={show.money ? `Net ${formatMoney(summary.netThisMonth)}` : 'Recorded spending'} href="/app/expenses" />
-          </MotionItem>
-        )}
         {show.complaints && (
           <MotionItem>
             <StatCard label="Open complaints" value={summary.openComplaints} icon="wrench" tone={summary.urgentComplaints > 0 ? 'red' : 'default'} hint={`${summary.urgentComplaints} high priority`} href="/app/complaints" />
@@ -340,10 +417,10 @@ export default async function OwnerDashboard({
       <section className="space-y-4">
         <SectionHeader
           title="Today at your PG"
-          description="What needs attention right now."
+          description="Rent due, meals and the day's queue."
           icon="calendar"
         />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
           {/* Rent due today */}
           {show.money && (
           <Card>
@@ -477,7 +554,7 @@ export default async function OwnerDashboard({
 
       {/* ---------------------------------------------------- Charts row */}
       {show.money && (
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <div>
@@ -520,7 +597,7 @@ export default async function OwnerDashboard({
       </section>
       )}
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Occupancy trend</CardTitle>
@@ -567,7 +644,7 @@ export default async function OwnerDashboard({
       {show.money && comparison.length > 1 && !scope.propertyId && (
         <section className="space-y-4">
           <SectionHeader title="Your PGs side by side" description="Same month, same metrics." icon="building" />
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
             <Card className="lg:col-span-2">
               <CardContent className="pt-6">
                 <ComparisonChart
@@ -620,7 +697,7 @@ export default async function OwnerDashboard({
       )}
 
       {/* --------------------------------------- Complaints + activity */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         {show.complaints && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
@@ -732,6 +809,16 @@ export default async function OwnerDashboard({
       )}
     </div>
   )
+}
+
+/** Time-of-day greeting in India time, whatever the server's timezone. */
+function greetingIST() {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-IN', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Asia/Kolkata' }).format(new Date()),
+  )
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
 function HeroStat({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {

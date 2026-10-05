@@ -36,6 +36,10 @@ import { api } from '@/lib/client'
 import { GlobalSearch } from './global-search'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { RestrictedGate } from './restricted-gate'
+import { MobileBottomNav } from './mobile-bottom-nav'
+import { QuickAction, type ShellAccess } from './quick-action'
+
+export type { ShellAccess }
 
 export type ShellProperty = {
   id: string
@@ -74,6 +78,7 @@ export function AppShell({
   searchScope = 'org',
   installName,
   restricted = false,
+  access,
 }: {
   nav: NavSection[]
   user: ShellUser
@@ -85,10 +90,18 @@ export function AppShell({
   installName?: string
   /** Organization suspended for non-payment: only billing pages render. */
   restricted?: boolean
+  /**
+   * The person's modules/permissions. When set (owner/manager dashboard) the
+   * shell adds the phone bottom nav and the "+ Quick action" button; the
+   * admin console leaves it out and keeps the drawer-only layout.
+   */
+  access?: ShellAccess
 }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [searchOpen, setSearchOpen] = React.useState(false)
+
+  const bottomNav = Boolean(access) && !restricted
 
   // Close the mobile drawer whenever the route changes.
   React.useEffect(() => setMobileOpen(false), [pathname])
@@ -186,14 +199,34 @@ export function AppShell({
             </button>
 
             <NotificationBell count={badges.notifications} />
+            {bottomNav && access && <QuickAction access={access} variant="header" />}
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
+        <main
+          className={cn(
+            'mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8',
+            // Clear the bottom nav, the floating button and the iOS home indicator.
+            bottomNav && 'pb-[calc(env(safe-area-inset-bottom,0px)+9rem)] sm:pb-[calc(env(safe-area-inset-bottom,0px)+9rem)] lg:pb-8',
+          )}
+        >
           {installName && <InstallPrompt appName={installName} className="mb-6 lg:hidden" />}
           {restricted ? <RestrictedGate pathname={pathname}>{children}</RestrictedGate> : children}
         </main>
       </div>
+
+      {bottomNav && access && (
+        <>
+          <QuickAction access={access} variant="fab" />
+          <MobileBottomNav
+            nav={nav}
+            pathname={pathname}
+            badges={badges}
+            moreOpen={mobileOpen}
+            onMore={() => setMobileOpen(true)}
+          />
+        </>
+      )}
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} scope={searchScope} />
     </div>

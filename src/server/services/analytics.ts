@@ -483,3 +483,232 @@ export async function reportTotals(propertyIds: string[], from: Date, to: Date) 
     resolved,
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Needs attention (PRD §22, §112)                                     */
+/* ------------------------------------------------------------------ */
+
+export type AttentionFlags = {
+  rent: boolean
+  complaints: boolean
+  beds: boolean
+  grocery: boolean
+  bookings: boolean
+  leads: boolean
+  residents: boolean
+}
+
+export type AttentionCounts = Awaited<ReturnType<typeof attentionSummary>>
+
+/** A bed is "long vacant" once it has sat AVAILABLE for this many days. */
+export const LONG_VACANT_DAYS = 15
+
+const OPEN_COMPLAINT = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'] as const
+
+/**
+ * Everything on the dashboard's "Needs attention" panel, in one parallel
+ * round of queries. Each block runs only when the person can see that area
+ * (flags), so a cook never pays for a rent query and never sees its result.
+ */
+export async function attentionSummary(scope: PropertyScope, flags: AttentionFlags) {
+  const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
+  const now = new Date()
+  const today = startOfDay(now)
+  const todayEnd = endOfDay(now)
+  const weekEnd = endOfDay(addDays(today, 6))
+  const vacantCutoff = addDays(today, -LONG_VACANT_DAYS)
+  const skip = <T,>(on: boolean, run: () => Promise<T>, empty: T) =>
+    on && propertyIds.length ? run() : Promise.resolve(empty)
+
+  const [overdue, slaBreached, availableBeds, lowStock, expiringBookings, followUps, leaving] =
+    await Promise.all([
+      // Overdue = flagged OVERDUE by the cron, or unpaid past its due date
+      // (covers the hours between the due date and the next cron run).
+      skip(
+        flags.rent,
+        () =>
+          prisma.rentInvoice.groupBy({
+            by: ['residentId'],
+            where: {
+              propertyId: { in: propertyIds },
+              balance: { gt: 0 },
+              OR: [
+                { status: 'OVERDUE' },
+                { status: { in: ['PENDING', 'PARTIALLY_PAID'] }, dueDate: { lt: today } },
+              ],
+            },
+            _sum: { balance: true },
+          }),
+        [],
+      ),
+      skip(
+        flags.complaints,
+        () =>
+          prisma.complaint.count({
+            where: {
+              propertyId: { in: propertyIds },
+              status: { in: [...OPEN_COMPLAINT] },
+              OR: [{ slaBreachedAt: { not: null } }, { slaDueAt: { lt: now } }],
+            },
+          }),
+        0,
+      ),
+      // Vacant-since = the most recent BedAllocation.toDate (the last
+      // checkout/transfer out). A bed that has never been allocated falls
+      // back to bed.updatedAt as a proxy (it moves when the bed's status was
+      // last changed, e.g. created or set back to AVAILABLE).
+      skip(
+        flags.beds,
+        () =>
+          prisma.bed.findMany({
+            where: { propertyId: { in: propertyIds }, status: 'AVAILABLE' },
+            select: {
+              id: true,
+              updatedAt: true,
+              allocations: {
+                where: { toDate: { not: null } },
+                orderBy: { toDate: 'desc' },
+                take: 1,
+                select: { toDate: true },
+              },
+            },
+          }),
+        [],
+      ),
+      skip(
+        flags.grocery,
+        () =>
+          prisma.groceryItem.count({
+            where: {
+              propertyId: { in: propertyIds },
+              currentStock: { lt: prisma.groceryItem.fields.minimumStock },
+            },
+          }),
+        0,
+      ),
+      skip(
+        flags.bookings,
+        () =>
+          prisma.booking.count({
+            where: {
+              organizationId: scope.organizationId,
+              propertyId: { in: propertyIds },
+              status: { in: ['PENDING', 'CONFIRMED'] },
+              expiresAt: { gte: now, lte: endOfDay(addDays(today, 2)) },
+            },
+          }),
+        0,
+      ),
+      skip(
+        flags.leads,
+        () =>
+          prisma.residentLead.count({
+            where: {
+              organizationId: scope.organizationId,
+              status: { notIn: ['BOOKED', 'CHECKED_IN', 'LOST'] },
+              nextFollowUpAt: { lte: todayEnd },
+              // Enquiries not yet tied to a PG are visible org-wide.
+              ...(scope.propertyId
+                ? { propertyId: scope.propertyId }
+                : { OR: [{ propertyId: { in: propertyIds } }, { propertyId: null }] }),
+            },
+          }),
+        0,
+      ),
+      skip(
+        flags.residents,
+        () =>
+          prisma.resident.count({
+            where: {
+              propertyId: { in: propertyIds },
+              status: 'NOTICE',
+              exitDate: { gte: today, lte: weekEnd },
+            },
+          }),
+        0,
+      ),
+    ])
+
+  const longVacantBeds = availableBeds.filter((b) => {
+    const since = b.allocations[0]?.toDate ?? b.updatedAt
+    return since < vacantCutoff
+  }).length
+
+  return {
+    overdueResidents: overdue.length,
+    overdueAmount: overdue.reduce((s, r) => s + (r._sum.balance ?? 0), 0),
+    slaBreached,
+    longVacantBeds,
+    lowStock,
+    expiringBookings,
+    followUpsDue: followUps,
+    leavingThisWeek: leaving,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Vacancy intelligence (PRD §48)                                      */
+/* ------------------------------------------------------------------ */
+
+export type VacancyInsight = Awaited<ReturnType<typeof vacancyIntelligence>>
+
+/**
+ * What empty beds cost. Each PG's vacant beds are priced at the average rent
+ * its current residents actually pay; a PG with nobody in it yet falls back
+ * to its standard rent. Three grouped queries, no per-bed lookups.
+ */
+export async function vacancyIntelligence(scope: PropertyScope) {
+  const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
+  const [properties, vacant, rents] = await Promise.all([
+    prisma.property.findMany({
+      where: { organizationId: scope.organizationId, id: { in: propertyIds }, archivedAt: null },
+      select: { id: true, name: true, type: true, standardRent: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.bed.groupBy({
+      by: ['propertyId'],
+      where: { propertyId: { in: propertyIds }, status: 'AVAILABLE' },
+      _count: { _all: true },
+    }),
+    prisma.resident.groupBy({
+      by: ['propertyId'],
+      where: { propertyId: { in: propertyIds }, status: { in: ['ACTIVE', 'NOTICE'] } },
+      _avg: { rentAmount: true },
+      _sum: { rentAmount: true },
+      _count: { _all: true },
+    }),
+  ])
+
+  const vacantBy = new Map(vacant.map((v) => [v.propertyId, v._count._all]))
+  const rentBy = new Map(rents.map((r) => [r.propertyId, r]))
+
+  const byProperty = properties
+    .map((p) => {
+      const r = rentBy.get(p.id)
+      const avgRent = Math.round(r?._avg.rentAmount ?? p.standardRent)
+      const vacantBeds = vacantBy.get(p.id) ?? 0
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        vacantBeds,
+        averageRent: avgRent,
+        monthlyLoss: vacantBeds * avgRent,
+      }
+    })
+    .filter((p) => p.vacantBeds > 0)
+    .sort((a, b) => b.monthlyLoss - a.monthlyLoss)
+
+  const occupiedCount = rents.reduce((s, r) => s + r._count._all, 0)
+  const occupiedRent = rents.reduce((s, r) => s + (r._sum.rentAmount ?? 0), 0)
+  const fallback = properties.length
+    ? Math.round(properties.reduce((s, p) => s + p.standardRent, 0) / properties.length)
+    : 0
+
+  return {
+    vacantBeds: byProperty.reduce((s, p) => s + p.vacantBeds, 0),
+    averageRent: occupiedCount ? Math.round(occupiedRent / occupiedCount) : fallback,
+    monthlyLoss: byProperty.reduce((s, p) => s + p.monthlyLoss, 0),
+    byProperty,
+  }
+}

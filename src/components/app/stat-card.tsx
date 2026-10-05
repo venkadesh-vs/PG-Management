@@ -57,7 +57,7 @@ export function StatCard({
       whileHover={href ? { y: -2 } : undefined}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
       className={cn(
-        'group relative h-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-shadow sm:p-5',
+        'group relative h-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-shadow sm:p-5',
         href && 'cursor-pointer hover:shadow-elevated',
         className,
       )}
@@ -102,7 +102,7 @@ export function StatCard({
   )
 
   return href ? (
-    <Link href={href} className="block h-full">
+    <Link href={href} className="block h-full min-w-0">
       {body}
     </Link>
   ) : (

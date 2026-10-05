@@ -9,6 +9,8 @@ import type { OrgStatus, UserRole } from '@prisma/client'
 
 import { prisma } from './prisma'
 import { serverEnv } from './env'
+import { resolveAccess } from './access'
+import type { ModuleKey } from './modules'
 
 export const SESSION_COOKIE = 'stayflow_session'
 
@@ -30,6 +32,12 @@ export type SessionUser = {
   /** Generated password still in use — everything is blocked until it changes. */
   mustChangePassword: boolean
   sessionId: string
+  /** Modules switched on for this organization. */
+  modules: ModuleKey[]
+  /** Permission keys this person holds (see lib/permission-catalog). */
+  permissions: string[]
+  /** Name of their custom role, for display. */
+  roleName: string | null
 }
 
 // Password helpers live in lib/password.ts so services and CLI scripts can
@@ -129,7 +137,17 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     include: {
       user: {
         include: {
-          organization: { select: { id: true, name: true, slug: true, status: true } },
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              status: true,
+              featureOverrides: true,
+              settings: { select: { disabledModules: true } },
+            },
+          },
+          orgRole: { select: { name: true, permissions: true } },
           resident: { select: { id: true } },
           staff: { select: { id: true } },
           propertyAccess: { select: { propertyId: true } },
@@ -141,6 +159,21 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   if (!session || session.revokedAt || session.expiresAt < new Date()) return null
   const user = session.user
   if (!user || user.status === 'SUSPENDED' || user.status === 'ARCHIVED') return null
+
+  // Platform switches: a flag turned off globally, or overridden off for this org.
+  const overrides = (user.organization?.featureOverrides ?? {}) as Record<string, unknown>
+  const flagsOff = [
+    ...(await prisma.featureFlag.findMany({ where: { enabled: false }, select: { key: true } })).map((f) => f.key),
+    ...Object.entries(overrides)
+      .filter(([, v]) => v === false)
+      .map(([k]) => k),
+  ]
+  const access = resolveAccess({
+    role: user.role,
+    rolePermissions: user.orgRole?.permissions ?? null,
+    disabledModules: user.organization?.settings?.disabledModules ?? [],
+    flagsOff,
+  })
 
   return {
     id: user.id,
@@ -157,6 +190,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     propertyIds: user.propertyAccess.map((p) => p.propertyId),
     mustChangePassword: user.mustChangePassword,
     sessionId: session.id,
+    modules: access.modules,
+    permissions: access.permissions,
+    roleName: user.role === 'OWNER' ? 'Owner' : (user.orgRole?.name ?? null),
   }
 })
 
@@ -206,6 +242,18 @@ export async function requireOrgUser(): Promise<SessionUser & { organizationId: 
   return user as SessionUser & { organizationId: string }
 }
 
+/**
+ * Page guard for the owner dashboard: the module must be on and the person
+ * must hold the permission. Sends them to a friendly explanation otherwise,
+ * never a blank page or a 403.
+ */
+export async function requireAccess(opts: { module?: ModuleKey; permission?: string }) {
+  const user = await requireOrgUser()
+  if (opts.module && !user.modules.includes(opts.module)) redirect(`/app/feature-off?module=${opts.module}`)
+  if (opts.permission && !user.permissions.includes(opts.permission)) redirect('/app/no-access')
+  return user
+}
+
 export async function requireSuperAdmin(): Promise<SessionUser> {
   return requireRole('SUPER_ADMIN')
 }
@@ -214,6 +262,7 @@ export async function requireTenant(): Promise<SessionUser & { residentId: strin
   const user = await requireRole('TENANT')
   if (!user.residentId) redirect('/login')
   if (isOrgRestricted(user)) redirect('/service-paused')
+  if (!user.modules.includes('residentApp')) redirect('/app-unavailable')
   return user as SessionUser & { residentId: string }
 }
 
@@ -221,6 +270,7 @@ export async function requireWorker(): Promise<SessionUser & { staffId: string }
   const user = await requireRole('WORKER')
   if (!user.staffId) redirect('/login')
   if (isOrgRestricted(user)) redirect('/service-paused')
+  if (!user.modules.includes('staffApp')) redirect('/app-unavailable')
   return user as SessionUser & { staffId: string }
 }
 

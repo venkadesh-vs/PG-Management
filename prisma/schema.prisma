@@ -445,6 +445,8 @@ model Organization {
   utilityCharges    UtilityCharge[]
   settings          OrgSetting?
   integrations      IntegrationCredential[]
+  roles             OrgRole[]
+  lookups           OrgLookup[]
 
   @@index([status])
 }
@@ -474,6 +476,9 @@ model OrgSetting {
   invoicePrefix String  @default("INV")
   receiptPrefix String  @default("RCP")
 
+  /// Modules the owner has switched off (see src/lib/modules.ts).
+  disabledModules String[] @default([])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -488,6 +493,10 @@ model User {
   passwordHash       String
   name               String
   role               UserRole
+  /// Custom role for MANAGER (dashboard) and WORKER (staff app) users.
+  /// OWNER always has every permission and never needs one.
+  orgRoleId          String?
+  orgRole            OrgRole?   @relation(fields: [orgRoleId], references: [id], onDelete: SetNull)
   status             UserStatus @default(ACTIVE)
   avatarUrl          String?
   lastLoginAt        DateTime?
@@ -1194,7 +1203,8 @@ model Complaint {
   room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   code        String
-  category    ComplaintCategory
+  /// Lookup value (type COMPLAINT_CATEGORY): each business edits its own list.
+  category    String
   priority    ComplaintPriority @default(MEDIUM)
   status      ComplaintStatus   @default(OPEN)
   title       String
@@ -1285,7 +1295,8 @@ model Staff {
 
   code        String
   name        String
-  role        StaffRole
+  /// Lookup value (type STAFF_ROLE).
+  role        String
   phone       String
   email       String?
   photoUrl    String?
@@ -1610,6 +1621,51 @@ model PaymentMethod {
 }
 
 // ============================ GROWTH =======================================
+
+enum RoleApp {
+  DASHBOARD
+  STAFF_APP
+}
+
+/// A role the owner defines: a name and the permissions it grants.
+/// `app` decides where people with this role sign in.
+model OrgRole {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  app            RoleApp      @default(DASHBOARD)
+  /// Permission keys from src/lib/permission-catalog.ts.
+  permissions    String[]     @default([])
+  /// Created from a built-in template; editable, not deletable while in use.
+  isTemplate     Boolean      @default(false)
+  color          String       @default("blue")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users User[]
+
+  @@unique([organizationId, name])
+}
+
+/// Editable dropdown lists per organization (complaint categories, staff
+/// roles, ID types...). `value` is stored on records; `label` is shown.
+model OrgLookup {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type           String
+  value          String
+  label          String
+  sortOrder      Int          @default(0)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, type, value])
+  @@index([organizationId, type, active])
+}
 
 /// Single-use links: invitations, password resets, email verification.
 /// Only the SHA-256 of the token is stored.

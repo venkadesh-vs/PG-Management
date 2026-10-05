@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireTenant } from '@/lib/auth'
-import { TENANT_MORE, TENANT_NAV } from '@/lib/navigation'
+import { filterNavItems, TENANT_MORE, TENANT_NAV } from '@/lib/navigation'
 import { MobileShell } from '@/components/app/mobile-shell'
 import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
 
@@ -31,8 +31,8 @@ export default async function TenantLayout({ children }: { children: React.React
 
   return (
     <MobileShell
-      nav={TENANT_NAV}
-      moreNav={TENANT_MORE}
+      nav={filterNavItems(TENANT_NAV, user)}
+      moreNav={filterNavItems(TENANT_MORE, user)}
       user={{ name: user.name, email: user.email }}
       subtitle={subtitle}
       unread={unread}

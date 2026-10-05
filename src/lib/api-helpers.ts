@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './tenancy'
 import { getSessionUser, isOrgRestricted, type SessionUser } from './auth'
 import type { UserRole } from '@prisma/client'
+import type { ModuleKey } from './modules'
 
 /**
  * Route-handler plumbing: one place that turns domain errors into HTTP
@@ -98,6 +99,10 @@ export function route<T>(
     allowPendingPassword?: boolean
     /** Lets a suspended organization still call this (billing, sign-out). */
     allowRestricted?: boolean
+    /** Catalog permission required (lib/permission-catalog). Owners always pass. */
+    permission?: string
+    /** Module that must be switched on (lib/modules). */
+    module?: ModuleKey
   },
 ) {
   return async (request: Request) => {
@@ -117,6 +122,12 @@ export function route<T>(
           !options?.allowRestricted
         ) {
           return fail('Your StayFlow subscription is suspended. Pay the pending invoice to continue.', 402)
+        }
+        if (options?.module && user.role !== 'SUPER_ADMIN' && !user.modules.includes(options.module)) {
+          return fail('This feature is switched off for your PG. The owner can turn it on in Settings → Features.', 403)
+        }
+        if (options?.permission && user.role !== 'SUPER_ADMIN' && !user.permissions.includes(options.permission)) {
+          return fail('Your role does not allow this. Ask the PG owner for access.', 403)
         }
         if (options?.roles && !options.roles.includes(user.role)) {
           return fail('You do not have permission to do that', 403)

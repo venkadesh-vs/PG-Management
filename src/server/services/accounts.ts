@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { ensureOrgDefaults } from './org-defaults'
 import type { AuthTokenKind, Prisma, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateTempPassword, hashPassword } from '@/lib/password'
@@ -142,6 +143,8 @@ export async function bootstrapOrganization(input: BootstrapInput) {
       await tx.expenseCategory.createMany({
         data: DEFAULT_EXPENSE_CATEGORIES.map((c) => ({ ...c, organizationId: organization.id })),
       })
+      // Starting roles (Manager, Accountant, Warden, Cook, Housekeeping) and dropdown lists.
+      await ensureOrgDefaults(organization.id, tx)
       const owner = await tx.user.create({
         data: {
           organizationId: organization.id,

@@ -13,6 +13,7 @@
  * be re-run at any time.
  */
 
+import { ensureOrgDefaults } from '../src/server/services/org-defaults'
 import { PrismaClient, type Prisma } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import {
@@ -1837,6 +1838,12 @@ async function main() {
 
   console.log('─'.repeat(40))
   console.table(counts)
+
+  // Default roles and lookup lists for every demo organization.
+  for (const org of await prisma.organization.findMany({ select: { id: true } })) {
+    await ensureOrgDefaults(org.id)
+  }
+
   console.log(`\nDemo logins (password: ${PASSWORD})`)
   console.log('  Super Admin  admin@stayflow.app')
   console.log('  PG Owner     owner@stayflow.app')

@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { isOrgRestricted, requireOrgUser } from '@/lib/auth'
-import { OWNER_NAV } from '@/lib/navigation'
+import { filterNavSections, OWNER_NAV } from '@/lib/navigation'
+import { ensureOrgDefaults } from '@/server/services/org-defaults'
 import { AppShell } from '@/components/app/app-shell'
 import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
 
@@ -10,6 +11,8 @@ export const viewport: Viewport = { themeColor: PWA_APPS.owner.color }
 
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
   const user = await requireOrgUser()
+  // Organizations created before roles/lookups existed get them on first visit.
+  await ensureOrgDefaults(user.organizationId)
 
   const [properties, complaints, notifications, tasks] = await Promise.all([
     prisma.property.findMany({
@@ -35,7 +38,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
 
   return (
     <AppShell
-      nav={OWNER_NAV}
+      nav={filterNavSections(OWNER_NAV, user)}
       user={{
         name: user.name,
         email: user.email,

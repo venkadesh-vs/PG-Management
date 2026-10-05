@@ -6,6 +6,7 @@ import type { UserRole } from '@prisma/client'
 import { prisma } from './prisma'
 import type { SessionUser } from './auth'
 import { PERMISSIONS } from './permissions'
+import { MODULE_BY_KEY, type ModuleKey } from './modules'
 
 /**
  * Multi-tenant scoping. Never build a query from a client-supplied
@@ -212,31 +213,61 @@ export async function assertStaffForProperty(
 // extend it for server-side enforcement.
 // --------------------------------------------------------------------------
 
-export const SERVER_PERMISSIONS = {
-  ...PERMISSIONS,
-  'property:create': ['OWNER'],
-  'invoice:waive': ['OWNER'],
-  'staff:login': ['OWNER'],
-} as const satisfies Record<string, readonly UserRole[]>
+/**
+ * Older code names permissions as "area:verb"; the role editor uses the
+ * catalog keys in lib/permission-catalog. Both resolve to the catalog, so a
+ * custom role and a switched-off module apply everywhere.
+ */
+const LEGACY_PERMISSION: Record<string, string> = {
+  'property:write': 'properties.manage',
+  'property:delete': 'properties.create',
+  'property:create': 'properties.create',
+  'resident:write': 'residents.manage',
+  'resident:checkout': 'residents.checkout',
+  'payment:record': 'payments.record',
+  'payment:refund': 'invoices.waive',
+  'invoice:waive': 'invoices.waive',
+  'expense:write': 'expenses.manage',
+  'complaint:assign': 'complaints.assign',
+  'complaint:resolve': 'complaints.manage',
+  'staff:write': 'staff.manage',
+  'staff:login': 'team.manage',
+  'grocery:write': 'grocery.manage',
+  'food:write': 'food.manage',
+  'settings:write': 'settings.manage',
+  'subscription:manage': 'billing.manage',
+  'platform:manage': 'platform.manage',
+}
 
-export type ServerPermission = keyof typeof SERVER_PERMISSIONS
+/** @deprecated kept for old call sites; use catalog keys. */
+export const SERVER_PERMISSIONS = { ...PERMISSIONS, 'property:create': ['OWNER'], 'invoice:waive': ['OWNER'], 'staff:login': ['OWNER'] } as const
+export type ServerPermission = keyof typeof SERVER_PERMISSIONS | (string & {})
 
 export function hasPermission(
-  user: Pick<SessionUser, 'role'> | null,
+  user: Pick<SessionUser, 'role' | 'permissions'> | null,
   permission: ServerPermission,
 ): boolean {
   if (!user) return false
   if (user.role === 'SUPER_ADMIN') return true
-  return (SERVER_PERMISSIONS[permission] as readonly UserRole[]).includes(user.role)
+  const key = LEGACY_PERMISSION[permission] ?? permission
+  return user.permissions.includes(key)
 }
 
-/** Throws ForbiddenError unless the user's role holds the permission. */
+/** Throws ForbiddenError unless the user holds the permission. */
 export function requirePermission(
-  user: Pick<SessionUser, 'role'> | null,
+  user: Pick<SessionUser, 'role' | 'permissions'> | null,
   permission: ServerPermission,
 ) {
   if (!hasPermission(user, permission)) {
-    throw new ForbiddenError('You do not have permission to do that')
+    throw new ForbiddenError('Your role does not allow this. Ask the PG owner for access.')
+  }
+}
+
+/** Throws unless the module is switched on for the user's organization. */
+export function requireModule(user: Pick<SessionUser, 'role' | 'modules'>, module: ModuleKey) {
+  if (user.role === 'SUPER_ADMIN') return
+  if (!user.modules.includes(module)) {
+    throw new ForbiddenError(`${MODULE_BY_KEY[module].label} is switched off for your PG. The owner can turn it on in Settings → Features.`)
   }
 }
 

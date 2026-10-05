@@ -18,15 +18,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-slate-900 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.1)_inset,0_6px_16px_-8px_rgb(10_15_29/0.6)] hover:bg-slate-800 hover:-translate-y-px',
+          'bg-slate-900 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.1)_inset,0_6px_16px_-8px_rgb(13_12_11/0.6)] hover:bg-slate-800 hover:-translate-y-px',
         primary:
-          'shine bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-brand hover:from-blue-500 hover:to-blue-700 hover:-translate-y-px hover:shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset,0_10px_22px_-8px_rgb(37_73_239/0.6)]',
+          'shine bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-brand hover:from-blue-500 hover:to-blue-700 hover:-translate-y-px hover:shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset,0_10px_22px_-8px_rgb(82_72_224/0.6)]',
         pink:
           'shine bg-gradient-to-b from-pink-500 to-pink-600 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.25)_inset,0_6px_16px_-6px_rgb(219_39_119/0.5)] hover:to-pink-700 hover:-translate-y-px',
         destructive:
           'bg-gradient-to-b from-red-500 to-red-600 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.2)_inset,0_6px_16px_-8px_rgb(220_38_38/0.55)] hover:to-red-700 hover:-translate-y-px',
         outline:
-          'border border-slate-200 bg-white text-slate-700 shadow-[0_1px_2px_0_rgb(20_27_45/0.05)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900',
+          'border border-slate-200 bg-white text-slate-700 shadow-[0_1px_2px_0_rgb(27_25_24/0.05)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900',
         secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200/80',
         ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         link: 'text-blue-600 underline-offset-4 hover:underline',

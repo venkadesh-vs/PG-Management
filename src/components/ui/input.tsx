@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 /** Shared look for every text control: calm at rest, a soft brand glow on focus. */
 const CONTROL = [
-  'w-full rounded-xl border border-slate-200 bg-white text-[15px] text-slate-900 shadow-[0_1px_2px_0_rgb(20_27_45/0.04)] sm:text-sm',
+  'w-full rounded-xl border border-slate-200 bg-white text-[15px] text-slate-900 shadow-[0_1px_2px_0_rgb(27_25_24/0.04)] sm:text-sm',
   'transition-[border-color,box-shadow,background-color] duration-200',
   'placeholder:text-slate-400 hover:border-slate-300',
   'focus-visible:outline-none focus-visible:border-blue-500 focus-visible:ring-4 focus-visible:ring-blue-500/15',

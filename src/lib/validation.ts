@@ -202,10 +202,8 @@ export const complaintSchema = z.object({
   propertyId: z.string().min(1, 'Choose a PG'),
   residentId: optionalString,
   roomId: optionalString,
-  category: z.enum([
-    'PLUMBING', 'ELECTRICITY', 'AC', 'FAN', 'BATHROOM', 'CLEANING',
-    'INTERNET', 'FOOD', 'ROOM', 'FURNITURE', 'SECURITY', 'OTHER',
-  ]),
+  /** A COMPLAINT_CATEGORY lookup value; the server checks it is one of the org's. */
+  category: z.string().trim().min(1, 'Choose a category').max(60),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
   title: z.string().trim().min(4, 'Describe the issue in a few words').max(140),
   description: z.string().trim().min(10, 'Add a little more detail').max(2000),
@@ -257,10 +255,8 @@ export const expenseSchema = z.object({
 
 export const staffSchema = z.object({
   name: z.string().trim().min(2, 'Enter the name'),
-  role: z.enum([
-    'MANAGER', 'COOK', 'KITCHEN_HELPER', 'CLEANER', 'SECURITY',
-    'ELECTRICIAN', 'PLUMBER', 'MAINTENANCE', 'OTHER',
-  ]),
+  /** A STAFF_ROLE lookup value (job title); the server checks it is one of the org's. */
+  role: z.string().trim().min(1, 'Choose a job title').max(60),
   phone: phoneSchema,
   email: z.string().trim().email('Enter a valid email').optional().or(z.literal('')),
   propertyId: optionalString,
@@ -269,6 +265,8 @@ export const staffSchema = z.object({
   address: optionalString,
   idNumber: optionalString,
   createLogin: z.boolean().default(false),
+  /** Staff-app role for the login (OrgRole with app STAFF_APP). */
+  orgRoleId: optionalString,
 })
 
 export const attendanceSchema = z.object({
@@ -283,7 +281,8 @@ export const visitorSchema = z.object({
   residentId: optionalString,
   name: z.string().trim().min(2, 'Enter the visitor’s name'),
   phone: optionalPhone,
-  purpose: z.string().trim().min(2, 'What is the visit for?'),
+  /** A VISITOR_PURPOSE lookup value (free text accepted for older records). */
+  purpose: z.string().trim().min(1, 'What is the visit for?').max(80),
   relation: optionalString,
   idProof: optionalString,
   notes: optionalString,

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { ComplaintCategory, ComplaintPriority, ComplaintStatus, UserRole } from '@prisma/client'
+import type { ComplaintPriority, ComplaintStatus, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
   assertResidentInProperty,
@@ -30,7 +30,8 @@ export async function createComplaint(params: {
   propertyId: string
   residentId?: string | null
   roomId?: string | null
-  category: ComplaintCategory
+  /** Lookup value (COMPLAINT_CATEGORY). */
+  category: string
   priority?: ComplaintPriority
   title: string
   description: string

@@ -13,7 +13,10 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import { redirect } from 'next/navigation'
+
 import { requireOrgUser } from '@/lib/auth'
+import { OWNER_NAV, filterNavSections } from '@/lib/navigation'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import {
@@ -56,6 +59,31 @@ export default async function OwnerDashboard({
   searchParams: Promise<{ property?: string }>
 }) {
   const user = await requireOrgUser()
+  const has = (p: string) => user.permissions.includes(p)
+  const on = (m: string) => (user.modules as string[]).includes(m)
+
+  // No dashboard for this person: send them to the first page they can use.
+  if (!on('dashboard') || !has('dashboard.view')) {
+    const first = filterNavSections(OWNER_NAV, user)
+      .flatMap((s) => s.items)
+      .find((i) => i.href !== '/app' && i.href !== '/app/notifications')
+    redirect(first?.href ?? '/app/no-access')
+  }
+
+  const show = {
+    money: has('rent.view'),
+    recordPayment: has('payments.record'),
+    checkIn: has('residents.manage'),
+    residents: has('residents.view'),
+    beds: has('properties.view'),
+    expenses: on('expenses') && has('expenses.view'),
+    complaints: on('complaints') && has('complaints.view'),
+    food: on('food') && has('food.view'),
+    grocery: on('grocery') && has('grocery.view'),
+    activity: on('activity') && has('activity.view'),
+  }
+  const skip = <T,>(cond: boolean, run: () => Promise<T>, empty: T) => (cond ? run() : Promise.resolve(empty))
+
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -86,18 +114,23 @@ export default async function OwnerDashboard({
     revenueTrend(propertyIds, 6),
     occupancyTrend(propertyIds, 30),
     collectionBreakdown(propertyIds),
-    expenseBreakdown(propertyIds, monthStart, monthEnd),
+    skip(show.expenses, () => expenseBreakdown(propertyIds, monthStart, monthEnd), []),
     propertyComparison(scope.organizationId, scope.allowedPropertyIds),
-    complaintBreakdown(propertyIds),
-    todaysMealBoard(propertyIds),
-    lowStockItems(propertyIds),
+    skip(show.complaints, () => complaintBreakdown(propertyIds), []),
+    skip(show.food, () => todaysMealBoard(propertyIds), []),
+    skip(show.grocery, () => lowStockItems(propertyIds), []),
     upcomingVacancies(propertyIds, 30),
-    prisma.activityLog.findMany({
-      where: { organizationId: scope.organizationId },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    }),
-    prisma.complaint.findMany({
+    skip(
+      show.activity,
+      () =>
+        prisma.activityLog.findMany({
+          where: { organizationId: scope.organizationId },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+        }),
+      [],
+    ),
+    !show.complaints ? Promise.resolve([]) : prisma.complaint.findMany({
       where: {
         propertyId: { in: propertyIds },
         status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS'] },
@@ -174,9 +207,10 @@ export default async function OwnerDashboard({
             </h1>
             <p className="max-w-lg text-sm leading-relaxed text-white/70">
               {summary.residents} residents across {summary.occupancy.total} beds.{' '}
-              {summary.pendingRent > 0
-                ? `${formatMoney(summary.pendingRent)} still to collect this cycle.`
-                : 'Everything billed has been collected.'}
+              {show.money &&
+                (summary.pendingRent > 0
+                  ? `${formatMoney(summary.pendingRent)} still to collect this cycle.`
+                  : 'Everything billed has been collected.')}
             </p>
           </div>
 
@@ -187,36 +221,48 @@ export default async function OwnerDashboard({
               total={summary.occupancy.total}
             />
             <div className="hidden space-y-2 sm:block">
-              <HeroStat label="Collected this month" value={formatMoney(summary.monthCollection)} />
-              <HeroStat label="Expected monthly" value={formatMoney(summary.expectedRevenue)} />
-              <HeroStat
-                label="Open complaints"
-                value={`${summary.openComplaints}`}
-                tone={summary.openComplaints > 0 ? 'warn' : 'ok'}
-              />
+              {show.money && (
+                <>
+                  <HeroStat label="Collected this month" value={formatMoney(summary.monthCollection)} />
+                  <HeroStat label="Expected monthly" value={formatMoney(summary.expectedRevenue)} />
+                </>
+              )}
+              {show.complaints && (
+                <HeroStat
+                  label="Open complaints"
+                  value={`${summary.openComplaints}`}
+                  tone={summary.openComplaints > 0 ? 'warn' : 'ok'}
+                />
+              )}
             </div>
           </div>
         </div>
 
         <div className="relative mt-6 flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" asChild className="bg-white/95 text-slate-900 hover:bg-white">
-            <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
-              <UserPlus className="size-4" />
-              Check in resident
-            </Link>
-          </Button>
-          <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
-            <Link href="/app/rent">
-              <Wallet className="size-4" />
-              Record payment
-            </Link>
-          </Button>
-          <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
-            <Link href="/app/beds">
-              <Bed className="size-4" />
-              Bed map
-            </Link>
-          </Button>
+          {show.checkIn && (
+            <Button size="sm" variant="secondary" asChild className="bg-white/95 text-slate-900 hover:bg-white">
+              <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
+                <UserPlus className="size-4" />
+                Check in resident
+              </Link>
+            </Button>
+          )}
+          {show.recordPayment && (
+            <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
+              <Link href="/app/rent">
+                <Wallet className="size-4" />
+                Record payment
+              </Link>
+            </Button>
+          )}
+          {show.beds && (
+            <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
+              <Link href="/app/beds">
+                <Bed className="size-4" />
+                Bed map
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -243,6 +289,7 @@ export default async function OwnerDashboard({
             href="/app/beds"
           />
         </MotionItem>
+        {show.money && (
         <MotionItem>
           <StatCard
             label="Collected this month"
@@ -254,6 +301,8 @@ export default async function OwnerDashboard({
             href="/app/payments"
           />
         </MotionItem>
+        )}
+        {show.money && (
         <MotionItem>
           <StatCard
             label="Pending rent"
@@ -265,6 +314,7 @@ export default async function OwnerDashboard({
             href="/app/rent"
           />
         </MotionItem>
+        )}
       </MotionGrid>
 
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -274,12 +324,16 @@ export default async function OwnerDashboard({
         <MotionItem>
           <StatCard label="Under maintenance" value={summary.occupancy.maintenance + summary.occupancy.blocked} icon="wrench" tone="amber" hint="Beds out of service" href="/app/beds" />
         </MotionItem>
-        <MotionItem>
-          <StatCard label="Expenses this month" value={summary.monthExpenses} format="money" icon="receipt" tone="red" hint={`Net ${formatMoney(summary.netThisMonth)}`} href="/app/expenses" />
-        </MotionItem>
-        <MotionItem>
-          <StatCard label="Open complaints" value={summary.openComplaints} icon="wrench" tone={summary.urgentComplaints > 0 ? 'red' : 'default'} hint={`${summary.urgentComplaints} high priority`} href="/app/complaints" />
-        </MotionItem>
+        {show.expenses && (
+          <MotionItem>
+            <StatCard label="Expenses this month" value={summary.monthExpenses} format="money" icon="receipt" tone="red" hint={show.money ? `Net ${formatMoney(summary.netThisMonth)}` : 'Recorded spending'} href="/app/expenses" />
+          </MotionItem>
+        )}
+        {show.complaints && (
+          <MotionItem>
+            <StatCard label="Open complaints" value={summary.openComplaints} icon="wrench" tone={summary.urgentComplaints > 0 ? 'red' : 'default'} hint={`${summary.urgentComplaints} high priority`} href="/app/complaints" />
+          </MotionItem>
+        )}
       </MotionGrid>
 
       {/* ---------------------------------------------- Operations today */}
@@ -291,6 +345,7 @@ export default async function OwnerDashboard({
         />
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Rent due today */}
+          {show.money && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -337,8 +392,10 @@ export default async function OwnerDashboard({
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Food counts */}
+          {show.food && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -370,6 +427,7 @@ export default async function OwnerDashboard({
               </Link>
             </CardContent>
           </Card>
+          )}
 
           {/* Ops queue */}
           <Card>
@@ -380,20 +438,24 @@ export default async function OwnerDashboard({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
-              <OpsRow
-                icon="wrench"
-                label="Pending worker tasks"
-                value={summary.pendingTasks}
-                href="/app/complaints"
-                tone={summary.pendingTasks > 0 ? 'amber' : 'ok'}
-              />
-              <OpsRow
-                icon="cart"
-                label="Low stock items"
-                value={lowStock.length}
-                href="/app/grocery"
-                tone={lowStock.length > 0 ? 'red' : 'ok'}
-              />
+              {show.complaints && (
+                <OpsRow
+                  icon="wrench"
+                  label="Pending worker tasks"
+                  value={summary.pendingTasks}
+                  href="/app/complaints"
+                  tone={summary.pendingTasks > 0 ? 'amber' : 'ok'}
+                />
+              )}
+              {show.grocery && (
+                <OpsRow
+                  icon="cart"
+                  label="Low stock items"
+                  value={lowStock.length}
+                  href="/app/grocery"
+                  tone={lowStock.length > 0 ? 'red' : 'ok'}
+                />
+              )}
               <OpsRow
                 icon="door"
                 label="Upcoming vacancies (30d)"
@@ -414,6 +476,7 @@ export default async function OwnerDashboard({
       </section>
 
       {/* ---------------------------------------------------- Charts row */}
+      {show.money && (
       <section className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
@@ -455,6 +518,7 @@ export default async function OwnerDashboard({
           </CardContent>
         </Card>
       </section>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -467,6 +531,7 @@ export default async function OwnerDashboard({
           </CardContent>
         </Card>
 
+        {show.expenses && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Expenses by category</CardTitle>
@@ -476,7 +541,9 @@ export default async function OwnerDashboard({
             <CategoryBarChart data={expenses.slice(0, 6)} color={CHART_COLORS[5]} />
           </CardContent>
         </Card>
+        )}
 
+        {show.complaints && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Complaints</CardTitle>
@@ -493,10 +560,11 @@ export default async function OwnerDashboard({
             />
           </CardContent>
         </Card>
+        )}
       </section>
 
       {/* ------------------------------------------------ PG comparison */}
-      {comparison.length > 1 && !scope.propertyId && (
+      {show.money && comparison.length > 1 && !scope.propertyId && (
         <section className="space-y-4">
           <SectionHeader title="Your PGs side by side" description="Same month, same metrics." icon="building" />
           <div className="grid gap-4 lg:grid-cols-3">
@@ -553,6 +621,7 @@ export default async function OwnerDashboard({
 
       {/* --------------------------------------- Complaints + activity */}
       <section className="grid gap-4 lg:grid-cols-2">
+        {show.complaints && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Open complaints</CardTitle>
@@ -610,7 +679,9 @@ export default async function OwnerDashboard({
             )}
           </CardContent>
         </Card>
+        )}
 
+        {show.activity && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Recent activity</CardTitle>
@@ -624,6 +695,7 @@ export default async function OwnerDashboard({
             <ActivityTimeline items={activity} compact />
           </CardContent>
         </Card>
+        )}
       </section>
 
       {vacancies.length > 0 && (

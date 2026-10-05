@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { Phone } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -14,44 +14,36 @@ import { Avatar, AvatarFallback } from '@/components/ui/primitives'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, SearchInput } from '@/components/app/filters'
 import { ResendInviteButton } from '@/components/app/invite-link'
+import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { AddStaffButton } from './add-staff-button'
 import { AttendanceGrid } from './attendance-grid'
 
 export const metadata: Metadata = { title: 'Staff' }
-
-const ROLE_OPTIONS = [
-  ['MANAGER', 'Manager'],
-  ['COOK', 'Cook'],
-  ['KITCHEN_HELPER', 'Kitchen helper'],
-  ['CLEANER', 'Cleaner'],
-  ['SECURITY', 'Security'],
-  ['ELECTRICIAN', 'Electrician'],
-  ['PLUMBER', 'Plumber'],
-  ['MAINTENANCE', 'Maintenance'],
-  ['OTHER', 'Other'],
-] as const
 
 export default async function StaffPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'staff', permission: 'staff.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
 
+  const has = (p: string) => user.permissions.includes(p)
+  // Logins are for the staff app, so they need it switched on and team.manage.
+  const canCreateLogin = has('team.manage') && user.modules.includes('staffApp')
   const q = params.q?.trim() ?? ''
   const role = params.role
   const today = startOfDay(new Date())
 
-  const [staff, properties, presentToday, openTasks] = await Promise.all([
+  const [staff, properties, presentToday, openTasks, roleOptions, roleLabels, appRoles] = await Promise.all([
     prisma.staff.findMany({
       where: {
         organizationId: scope.organizationId,
         active: true,
         ...(scope.propertyId ? { OR: [{ propertyId: scope.propertyId }, { propertyId: null }] } : {}),
-        ...(role ? { role: role as never } : {}),
+        ...(role ? { role } : {}),
         ...(q
           ? {
               OR: [
@@ -96,7 +88,17 @@ export default async function StaffPage({
         status: { in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS'] },
       },
     }),
+    getLookup(scope.organizationId, 'STAFF_ROLE'),
+    getLookupLabels(scope.organizationId, 'STAFF_ROLE'),
+    canCreateLogin
+      ? prisma.orgRole.findMany({
+          where: { organizationId: scope.organizationId, app: 'STAFF_APP' },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : Promise.resolve([] as { id: string; name: string }[]),
   ])
+  const roleLabel = (value: string) => roleLabels[value] ?? value.replace('_', ' ').toLowerCase()
 
   const salaryTotal = staff.reduce((s, member) => s + member.salary, 0)
   const activeFilters = [q, role].filter(Boolean).length
@@ -109,6 +111,7 @@ export default async function StaffPage({
         icon="users"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Staff' }]}
         actions={
+          has('staff.manage') && (
           <AddStaffButton
             fields={[
               { kind: 'text', name: 'name', label: 'Full name', required: true, half: true },
@@ -118,8 +121,8 @@ export default async function StaffPage({
                 label: 'Role',
                 required: true,
                 half: true,
-                defaultValue: 'CLEANER',
-                options: ROLE_OPTIONS.map(([value, label]) => ({ value, label })),
+                defaultValue: roleOptions.some((o) => o.value === 'CLEANER') ? 'CLEANER' : roleOptions[0]?.value,
+                options: roleOptions,
               },
               { kind: 'tel', name: 'phone', label: 'Mobile number', required: true, half: true },
               { kind: 'email', name: 'email', label: 'Email', half: true, hint: 'Optional — the login link is also emailed' },
@@ -140,19 +143,32 @@ export default async function StaffPage({
               },
               { kind: 'number', name: 'salary', label: 'Monthly salary', half: true },
               { kind: 'text', name: 'idNumber', label: 'ID number', half: true },
-              // Only the owner may create logins (staff:login).
-              ...(user.role === 'OWNER'
+              // Logins need team.manage; the role decides what they see in the staff app.
+              ...(canCreateLogin
                 ? [
                     {
                       kind: 'switch' as const,
                       name: 'createLogin',
-                      label: 'Create a worker app login',
+                      label: 'Create a staff app login',
                       hint: 'We send them a link on WhatsApp to set their own password.',
                     },
+                    ...(appRoles.length
+                      ? [
+                          {
+                            kind: 'select' as const,
+                            name: 'orgRoleId',
+                            label: 'Staff app role',
+                            hint: 'Used only when a login is created — decides what they can see and do.',
+                            defaultValue: appRoles[0]?.id,
+                            options: appRoles.map((r) => ({ value: r.id, label: r.name })),
+                          },
+                        ]
+                      : []),
                   ]
                 : []),
             ]}
           />
+          )
         }
       />
 
@@ -175,7 +191,7 @@ export default async function StaffPage({
           <FilterSelect
             paramKey="role"
             placeholder="All roles"
-            options={ROLE_OPTIONS.map(([value, label]) => ({ value, label }))}
+            options={roleOptions}
           />
         </FilterBar>
       </Suspense>
@@ -206,8 +222,8 @@ export default async function StaffPage({
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <CardTitle className="truncate text-sm">{member.name}</CardTitle>
-                      <p className="text-xs capitalize text-slate-500">
-                        {member.role.replace('_', ' ').toLowerCase()} · {member.code}
+                      <p className="text-xs text-slate-500">
+                        {roleLabel(member.role)} · {member.code}
                       </p>
                       <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
                         <Phone className="size-3" />
@@ -251,7 +267,7 @@ export default async function StaffPage({
                     )}
                   </div>
 
-                  {user.role === 'OWNER' && (
+                  {canCreateLogin && (
                     <ResendInviteButton
                       action="RESEND_STAFF_INVITE"
                       payload={{ staffId: member.id }}
@@ -268,6 +284,7 @@ export default async function StaffPage({
                       </span>
                     </div>
                     <AttendanceGrid
+                      canMark={has('staff.manage')}
                       staffId={member.id}
                       staffName={member.name}
                       days={member.attendance.map((a) => ({

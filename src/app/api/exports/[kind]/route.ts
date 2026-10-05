@@ -2,7 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fail, route } from '@/lib/api-helpers'
-import { maskIdNumber, resolveScope, scopeWhere } from '@/lib/tenancy'
+import { maskIdNumber, requireModule, requirePermission, resolveScope, scopeWhere } from '@/lib/tenancy'
+import type { ModuleKey } from '@/lib/modules'
 import { endOfDay, startOfDay, toISODate } from '@/lib/utils'
 
 /**
@@ -17,6 +18,15 @@ type Row = (string | number | null | undefined)[]
 
 const KINDS = ['residents', 'invoices', 'payments', 'expenses', 'outstanding'] as const
 type Kind = (typeof KINDS)[number]
+
+/** The module each export reads from, and the view permission it needs. */
+const KIND_ACCESS: Record<Kind, { module: ModuleKey; permission: string }> = {
+  residents: { module: 'residents', permission: 'residents.view' },
+  invoices: { module: 'rent', permission: 'rent.view' },
+  payments: { module: 'rent', permission: 'rent.view' },
+  outstanding: { module: 'rent', permission: 'rent.view' },
+  expenses: { module: 'expenses', permission: 'expenses.view' },
+}
 
 function cell(value: string | number | null | undefined) {
   if (value === null || value === undefined) return ''
@@ -47,6 +57,8 @@ export const GET = route(
     const segments = url.pathname.split('/')
     const kind = segments[segments.length - 1].replace(/\.csv$/, '') as Kind
     if (!KINDS.includes(kind)) return fail('Unknown export', 404)
+    requireModule(user, KIND_ACCESS[kind].module)
+    requirePermission(user, KIND_ACCESS[kind].permission)
 
     const scope = await resolveScope(user, url.searchParams.get('property'))
     const where = scopeWhere(scope)
@@ -121,5 +133,5 @@ export const GET = route(
       },
     })
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'reports.export' },
 )

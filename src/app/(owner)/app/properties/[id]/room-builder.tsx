@@ -52,7 +52,10 @@ export function RoomBuilder({
   propertyType,
   standardRent,
   floors,
+  canManage = true,
 }: {
+  /** False hides every edit control (no properties.manage). */
+  canManage?: boolean
   propertyId: string
   propertyType: 'MENS' | 'WOMENS' | 'COLIVE'
   standardRent: number
@@ -70,6 +73,7 @@ export function RoomBuilder({
             Adding a room automatically creates its beds from the capacity.
           </p>
         </div>
+        {canManage && (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => setDialog('floor')}>
             <Layers className="size-3.5" />
@@ -88,6 +92,7 @@ export function RoomBuilder({
             </>
           )}
         </div>
+        )}
       </CardHeader>
 
       <CardContent>
@@ -97,10 +102,12 @@ export function RoomBuilder({
             title="No floors yet"
             description="Start with a floor — ground floor, first floor and so on — then add its rooms."
             action={
-              <Button variant="primary" size="sm" onClick={() => setDialog('floor')}>
-                <Layers className="size-3.5" />
-                Add the first floor
-              </Button>
+              canManage && (
+                <Button variant="primary" size="sm" onClick={() => setDialog('floor')}>
+                  <Layers className="size-3.5" />
+                  Add the first floor
+                </Button>
+              )
             }
           />
         ) : (

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { AlertTriangle } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -32,7 +32,7 @@ export default async function GroceryPage({
 }: {
   searchParams: Promise<{ property?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'grocery', permission: 'grocery.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -92,6 +92,7 @@ export default async function GroceryPage({
         icon="cart"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Grocery' }]}
         actions={
+          user.permissions.includes('grocery.manage') && (
           <>
             <QuickForm
               trigger="Add item"
@@ -154,6 +155,7 @@ export default async function GroceryPage({
               }))}
             />
           </>
+          )
         }
       />
 

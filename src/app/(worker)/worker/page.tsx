@@ -23,6 +23,13 @@ export const metadata: Metadata = { title: 'Home' }
 export default async function WorkerHome() {
   const user = await requireWorker()
   const today = startOfDay(new Date())
+  // A switched-off module grants no permission, so these cover both.
+  const can = {
+    tasks: user.permissions.includes('tasks.work'),
+    kitchen: user.permissions.includes('food.view'),
+    grocery: user.permissions.includes('grocery.view'),
+    attendance: user.permissions.includes('attendance.self'),
+  }
 
   const staff = await prisma.staff.findUnique({
     where: { id: user.staffId },
@@ -31,7 +38,7 @@ export default async function WorkerHome() {
   if (!staff) return null
 
   const [tasks, doneToday, lowStock, attendance] = await Promise.all([
-    prisma.maintenanceTask.findMany({
+    !can.tasks ? Promise.resolve([]) : prisma.maintenanceTask.findMany({
       where: {
         assignedStaffId: staff.id,
         status: { in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS'] },
@@ -44,17 +51,19 @@ export default async function WorkerHome() {
       orderBy: [{ priority: 'desc' }, { dueDate: 'asc' }],
       take: 5,
     }),
-    prisma.maintenanceTask.count({
-      where: { assignedStaffId: staff.id, status: 'COMPLETED', completedAt: { gte: today } },
-    }),
-    staff.propertyId
+    !can.tasks
+      ? Promise.resolve(0)
+      : prisma.maintenanceTask.count({
+          where: { assignedStaffId: staff.id, status: 'COMPLETED', completedAt: { gte: today } },
+        }),
+    can.grocery && staff.propertyId
       ? prisma.groceryItem.findMany({ where: { propertyId: staff.propertyId } })
       : Promise.resolve([]),
     prisma.staffAttendance.findFirst({ where: { staffId: staff.id, date: today } }),
   ])
 
-  const isKitchen = ['COOK', 'KITCHEN_HELPER'].includes(staff.role)
-  const meals = staff.propertyId
+  const isKitchen = can.kitchen
+  const meals = isKitchen && staff.propertyId
     ? await Promise.all(
         MEAL_TYPES.map(async (type) => ({
           type,
@@ -81,26 +90,33 @@ export default async function WorkerHome() {
           <h1 className="font-display text-2xl font-semibold tracking-tight">
             {staff.name.split(' ')[0]}
           </h1>
-          <p className="mt-1 text-sm text-white/75">
-            {tasks.length === 0
-              ? 'No open tasks right now.'
-              : `${tasks.length} task${tasks.length === 1 ? '' : 's'} waiting${
-                  overdue.length ? ` · ${overdue.length} overdue` : ''
-                }`}
-          </p>
+          {can.tasks && (
+            <p className="mt-1 text-sm text-white/75">
+              {tasks.length === 0
+                ? 'No open tasks right now.'
+                : `${tasks.length} task${tasks.length === 1 ? '' : 's'} waiting${
+                    overdue.length ? ` · ${overdue.length} overdue` : ''
+                  }`}
+            </p>
+          )}
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <Tile label="Open" value={String(tasks.length)} />
-            <Tile label="Done today" value={String(doneToday)} />
-            <Tile
-              label="Attendance"
-              value={attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'not marked'}
-            />
-          </div>
+          {(can.tasks || can.attendance) && (
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {can.tasks && <Tile label="Open" value={String(tasks.length)} />}
+              {can.tasks && <Tile label="Done today" value={String(doneToday)} />}
+              {can.attendance && (
+                <Tile
+                  label="Attendance"
+                  value={attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'not marked'}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* ---------------------------------------------------------- Tasks */}
+      {can.tasks && (
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900">
@@ -144,6 +160,7 @@ export default async function WorkerHome() {
           </ul>
         )}
       </div>
+      )}
 
       {/* --------------------------------------------------------- Kitchen */}
       {isKitchen && staff.property && (

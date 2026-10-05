@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, Clock, UserCog } from 'lucide-react'
 import { requireTenant } from '@/lib/auth'
+import { getLookupLabels } from '@/server/services/org-defaults'
 import { prisma } from '@/lib/prisma'
 import { ForbiddenError } from '@/lib/tenancy'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE } from '@/lib/theme'
@@ -22,6 +23,8 @@ export default async function TenantComplaintPage({
   params: Promise<{ id: string }>
 }) {
   const user = await requireTenant()
+  // Switched off for this PG: back to the home screen, nothing broken.
+  if (!user.modules.includes('complaints')) redirect('/tenant')
   const { id } = await params
 
   const complaint = await prisma.complaint.findUnique({
@@ -35,6 +38,10 @@ export default async function TenantComplaintPage({
   })
   if (!complaint) notFound()
   if (complaint.residentId !== user.residentId) throw new ForbiddenError()
+  const [categoryLabels, roleLabels] = await Promise.all([
+    getLookupLabels(complaint.organizationId, 'COMPLAINT_CATEGORY'),
+    getLookupLabels(complaint.organizationId, 'STAFF_ROLE'),
+  ])
 
   const status = COMPLAINT_STATUS_STYLE[complaint.status]
   const priority = PRIORITY_STYLE[complaint.priority]
@@ -65,7 +72,8 @@ export default async function TenantComplaintPage({
                 {complaint.title}
               </h1>
               <p className="text-xs text-slate-500">
-                {complaint.code} · raised {relativeTime(complaint.createdAt)}
+                {complaint.code} · {categoryLabels[complaint.category] ?? complaint.category} · raised{' '}
+                {relativeTime(complaint.createdAt)}
               </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
@@ -169,7 +177,7 @@ export default async function TenantComplaintPage({
                 {complaint.assignedStaff.name}
               </p>
               <p className="text-xs capitalize text-slate-500">
-                {complaint.assignedStaff.role.replace('_', ' ').toLowerCase()} · handling this
+                {roleLabels[complaint.assignedStaff.role] ?? complaint.assignedStaff.role.replace('_', ' ').toLowerCase()} · handling this
               </p>
             </div>
           </CardContent>

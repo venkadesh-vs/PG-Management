@@ -81,7 +81,13 @@ export function BedMap({
   property,
   themeKey,
   focusRoomId,
+  canManage = true,
+  canCheckIn = true,
 }: {
+  /** properties.manage — change a bed's status. */
+  canManage?: boolean
+  /** residents.manage — check someone into a free bed. */
+  canCheckIn?: boolean
   floors: FloorRow[]
   property: { id: string; name: string; type: 'MENS' | 'WOMENS' | 'COLIVE'; standardRent: number }
   themeKey: string
@@ -273,6 +279,8 @@ export function BedMap({
             bed={selected.bed}
             room={selected.room}
             property={property}
+            canManage={canManage}
+            canCheckIn={canCheckIn}
             onClose={() => setSelected(null)}
           />
         )}
@@ -313,8 +321,12 @@ function BedDetailDialog({
   bed,
   room,
   property,
+  canManage,
+  canCheckIn,
   onClose,
 }: {
+  canManage: boolean
+  canCheckIn: boolean
   bed: BedRow
   room: RoomRow
   property: { id: string; name: string; type: 'MENS' | 'WOMENS' | 'COLIVE' }
@@ -412,7 +424,7 @@ function BedDetailDialog({
           ) : (
             <>
               <Field label="Bed status">
-                <Select value={status} onChange={(e) => setStatus(e.target.value as BedStatus)}>
+                <Select value={status} disabled={!canManage} onChange={(e) => setStatus(e.target.value as BedStatus)}>
                   {STATUSES.filter((s) => s !== 'OCCUPIED').map((s) => (
                     <option key={s} value={s}>
                       {BED_STATUS_STYLE[s].label}
@@ -432,7 +444,7 @@ function BedDetailDialog({
                 </Field>
               )}
 
-              {bed.status === 'AVAILABLE' && (
+              {bed.status === 'AVAILABLE' && canCheckIn && (
                 <Button
                   variant={property.type === 'WOMENS' ? 'pink' : 'primary'}
                   className="w-full"
@@ -459,7 +471,7 @@ function BedDetailDialog({
           <Button variant="ghost" onClick={onClose}>
             Close
           </Button>
-          {!bed.resident && (
+          {!bed.resident && canManage && (
             <Button variant="default" loading={busy} onClick={save} disabled={status === bed.status}>
               Save status
             </Button>

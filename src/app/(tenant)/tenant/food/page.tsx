@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { CalendarDays, Utensils } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -20,6 +21,8 @@ const MEAL_TIME = {
 
 export default async function TenantFoodPage() {
   const user = await requireTenant()
+  // Switched off for this PG: back to the home screen, nothing broken.
+  if (!user.modules.includes('food')) redirect('/tenant')
   const today = startOfDay(new Date())
 
   const resident = await prisma.resident.findUnique({

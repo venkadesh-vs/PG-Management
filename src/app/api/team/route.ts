@@ -15,6 +15,7 @@ import {
   resendTeamInvite,
   sendResidentAccess,
   sendStaffAccess,
+  setMemberRole,
   setTeamMemberActive,
   type AccessLinkResult,
 } from '@/server/services/accounts'
@@ -27,7 +28,10 @@ const schema = z.discriminatedUnion('action', [
     phone: phoneSchema,
     /** Empty = every PG. */
     propertyIds: z.array(z.string().min(1)).default([]),
+    /** A DASHBOARD role of this org; default: the org's "Manager" role. */
+    orgRoleId: z.string().min(1).optional().nullable(),
   }),
+  z.object({ action: z.literal('SET_MEMBER_ROLE'), userId: z.string().min(1), orgRoleId: z.string().min(1) }),
   z.object({ action: z.literal('RESEND_TEAM_INVITE'), userId: z.string().min(1) }),
   z.object({
     action: z.literal('SET_MEMBER_STATUS'),
@@ -66,7 +70,7 @@ export const POST = route(
 
     switch (body.action) {
       case 'INVITE_MANAGER': {
-        requirePermission(user, 'settings:write')
+        requirePermission(user, 'team.manage')
         const result = await inviteManager({
           organizationId,
           actor,
@@ -74,6 +78,7 @@ export const POST = route(
           email: body.email,
           phone: body.phone,
           propertyIds: body.propertyIds ?? [],
+          orgRoleId: body.orgRoleId ?? null,
         })
         return {
           kind: result.kind,
@@ -84,14 +89,20 @@ export const POST = route(
         }
       }
 
+      case 'SET_MEMBER_ROLE': {
+        requirePermission(user, 'team.manage')
+        const result = await setMemberRole({ organizationId, actor, userId: body.userId, orgRoleId: body.orgRoleId })
+        return { success: true, message: `${result.name} is now ${result.roleName}` }
+      }
+
       case 'RESEND_TEAM_INVITE': {
-        requirePermission(user, 'settings:write')
+        requirePermission(user, 'team.manage')
         const result = await resendTeamInvite({ organizationId, userId: body.userId })
         return { ...result, message: describe(result, 'them') }
       }
 
       case 'SET_MEMBER_STATUS': {
-        requirePermission(user, 'settings:write')
+        requirePermission(user, 'team.manage')
         const result = await setTeamMemberActive({
           organizationId,
           actor,

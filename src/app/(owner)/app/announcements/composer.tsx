@@ -29,9 +29,12 @@ type Floor = { id: string; name: string; propertyId: string }
 export function AnnouncementComposer({
   properties,
   floors,
+  whatsappEnabled = true,
 }: {
   properties: Property[]
   floors: Floor[]
+  /** False when the WhatsApp module is switched off. */
+  whatsappEnabled?: boolean
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -185,6 +188,7 @@ export function AnnouncementComposer({
               <Switch checked={pinned} onCheckedChange={setPinned} />
             </label>
 
+            {whatsappEnabled && (
             <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 p-3">
               <span>
                 <span className="block text-sm font-medium text-slate-800">
@@ -196,6 +200,7 @@ export function AnnouncementComposer({
               </span>
               <Switch checked={sendWhatsapp} onCheckedChange={setSendWhatsapp} />
             </label>
+            )}
           </div>
 
           <DialogFooter>

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Utensils } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -13,6 +14,8 @@ export const metadata: Metadata = { title: 'Kitchen' }
 
 export default async function WorkerFoodPage() {
   const user = await requireWorker()
+  // Not part of this person's role (or the module is off): back to home.
+  if (!user.permissions.includes('food.view')) redirect('/worker')
   const today = startOfDay(new Date())
 
   const staff = await prisma.staff.findUnique({
@@ -84,6 +87,7 @@ export default async function WorkerFoodPage() {
             meal={meal}
             propertyName={property.name}
             propertyType={property.type}
+            canManage={user.permissions.includes('food.manage')}
           />
         ))}
       </div>

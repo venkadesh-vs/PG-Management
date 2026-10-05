@@ -50,8 +50,9 @@ export async function ensureOrgDefaults(organizationId: string, db: Db = prisma)
     const roles = await db.orgRole.findMany({ where: { organizationId }, select: { id: true, name: true } })
     const byName = new Map(roles.map((r) => [r.name, r.id]))
     for (const u of unassigned) {
-      const kitchen = ['COOK', 'KITCHEN_HELPER'].includes(u.staff?.role ?? '')
-      const roleId = u.role === 'MANAGER' ? byName.get('Manager') : byName.get(kitchen ? 'Cook' : 'Housekeeping')
+      // Keep what they could already do: before roles, staff logins could do
+      // tasks, kitchen and grocery work, which is exactly "General staff".
+      const roleId = u.role === 'MANAGER' ? byName.get('Manager') : (byName.get('General staff') ?? byName.get('Housekeeping'))
       if (roleId) await db.user.update({ where: { id: u.id }, data: { orgRoleId: roleId } })
     }
   }
@@ -75,4 +76,17 @@ export async function getLookupLabels(organizationId: string, type: string) {
   const map = new Map((LOOKUP_TYPES.find((t) => t.type === type)?.defaults ?? []).map(([v, l]) => [v, l]))
   for (const r of rows) map.set(r.value, r.label)
   return Object.fromEntries(map) as Record<string, string>
+}
+
+/**
+ * Rejects a value that is not on this organization's active list, so a
+ * crafted request can't store a category or title the owner never created.
+ */
+export async function assertLookupValue(organizationId: string, type: string, value: string) {
+  const options = await getLookup(organizationId, type)
+  if (!options.some((o) => o.value === value)) {
+    const { ValidationError } = await import('@/lib/tenancy')
+    const label = type.toLowerCase().replace(/_/g, ' ')
+    throw new ValidationError(`Choose a ${label} from the list.`)
+  }
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { startOfDay } from '@/lib/utils'
@@ -15,6 +16,8 @@ export default async function WorkerTasksPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireWorker()
+  // Not part of this person's role (or the module is off): back to home.
+  if (!user.permissions.includes('tasks.work')) redirect('/worker')
   const params = await searchParams
   const status = params.status
   const today = startOfDay(new Date())

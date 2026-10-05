@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -24,6 +24,11 @@ import { Field, Input, Select } from '@/components/ui/input'
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { Badge } from '@/components/ui/badge'
 import { TeamPanel, type TeamMember } from './team-panel'
+import type { ModuleKey } from '@/lib/modules'
+import { FeaturesPanel } from '@/components/settings/features-panel'
+import { RolesPanel } from '@/components/settings/roles-panel'
+import { LookupsPanel } from '@/components/settings/lookups-panel'
+import type { RoleRow, SettingsTab } from '@/components/settings/shared'
 
 type Values = z.infer<typeof settingsSchema>
 
@@ -38,6 +43,10 @@ export function SettingsForm({
   currentUserId,
   integrations,
   canEdit,
+  initialTab,
+  access,
+  features,
+  roles,
 }: {
   organization: {
     name: string
@@ -55,6 +64,11 @@ export function SettingsForm({
   currentUserId: string
   integrations: { whatsapp: string; payments: string }
   canEdit: boolean
+  initialTab?: SettingsTab
+  /** Which permission-gated tabs this person sees. */
+  access: { team: boolean; lookups: boolean }
+  features: { disabledModules: string[]; withheld: string[]; enabledModules: ModuleKey[] }
+  roles: RoleRow[]
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -80,7 +94,17 @@ export function SettingsForm({
   })
 
   const values = form.watch()
-  const [tab, setTab] = React.useState('billing')
+  const pathname = usePathname()
+  const [tab, setTabState] = React.useState<string>(initialTab ?? 'billing')
+  React.useEffect(() => {
+    if (initialTab) setTabState(initialTab)
+  }, [initialTab])
+  function setTab(next: string) {
+    setTabState(next)
+    // Deep-linkable: /app/settings?tab=roles
+    // (native history API — Next keeps useSearchParams in sync, no refetch).
+    window.history.replaceState(null, '', `${pathname}?tab=${next}`)
+  }
 
   async function onSubmit(data: Values) {
     try {
@@ -97,13 +121,18 @@ export function SettingsForm({
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
-      <TabsList>
-        <TabsTrigger value="billing">Rent & billing</TabsTrigger>
-        <TabsTrigger value="reminders">Reminders</TabsTrigger>
-        <TabsTrigger value="organization">Organization</TabsTrigger>
-        <TabsTrigger value="team">Team</TabsTrigger>
-        <TabsTrigger value="integrations">Integrations</TabsTrigger>
-      </TabsList>
+      <div className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-slim sm:mx-0 sm:px-0">
+        <TabsList className="w-max">
+          <TabsTrigger value="billing">Rent & billing</TabsTrigger>
+          <TabsTrigger value="reminders">Reminders</TabsTrigger>
+          <TabsTrigger value="organization">Organization</TabsTrigger>
+          {access.team && <TabsTrigger value="features">Features</TabsTrigger>}
+          {access.team && <TabsTrigger value="roles">Roles & permissions</TabsTrigger>}
+          {access.team && <TabsTrigger value="team">Team</TabsTrigger>}
+          {access.lookups && <TabsTrigger value="lookups">Dropdown lists</TabsTrigger>}
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+        </TabsList>
+      </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)}>
         {/* ------------------------------------------------ Rent & billing */}
@@ -355,15 +384,35 @@ export function SettingsForm({
         )}
       </form>
 
-      {/* --------------------------------------------------------- Team */}
-      <TabsContent value="team">
-        <TeamPanel
-          team={team}
-          properties={properties}
-          currentUserId={currentUserId}
-          canManage={canEdit}
-        />
-      </TabsContent>
+      {access.team && (
+        <>
+          <TabsContent value="features">
+            <FeaturesPanel
+              disabledModules={features.disabledModules}
+              withheld={features.withheld}
+              canManage={access.team}
+            />
+          </TabsContent>
+          <TabsContent value="roles">
+            <RolesPanel roles={roles} enabledModules={features.enabledModules} canManage={access.team} />
+          </TabsContent>
+          <TabsContent value="team">
+            <TeamPanel
+              team={team}
+              properties={properties}
+              currentUserId={currentUserId}
+              canManage={access.team}
+              roles={roles}
+            />
+          </TabsContent>
+        </>
+      )}
+
+      {access.lookups && (
+        <TabsContent value="lookups">
+          <LookupsPanel canManage={access.lookups} />
+        </TabsContent>
+      )}
 
       {/* ------------------------------------------------- Integrations */}
       <TabsContent value="integrations">

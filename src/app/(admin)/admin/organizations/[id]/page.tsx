@@ -28,6 +28,7 @@ import {
 import { OccupancyBar } from '@/components/app/occupancy-ring'
 import { ActivityTimeline } from '@/components/app/activity-timeline'
 import { OrgStatusControl } from './org-status-control'
+import { AdminFeatureOverrides } from '@/components/settings/admin-feature-overrides'
 import { ResendOwnerInviteButton } from '../create-client-dialog'
 
 export const metadata: Metadata = { title: 'Organization' }
@@ -63,6 +64,7 @@ export default async function AdminOrganizationPage({
         },
       },
       _count: { select: { residents: true, properties: true } },
+      settings: { select: { disabledModules: true } },
       subscriptions: {
         include: {
           property: { select: { name: true, type: true } },
@@ -74,6 +76,14 @@ export default async function AdminOrganizationPage({
   if (!org) notFound()
 
   const propertyIds = org.properties.map((p) => p.id)
+  const overrides = (org.featureOverrides ?? {}) as Record<string, unknown>
+  const withheldFlags = Object.entries(overrides)
+    .filter(([, v]) => v === false)
+    .map(([k]) => k)
+  const globallyOffFlags = (
+    await prisma.featureFlag.findMany({ where: { enabled: false }, select: { key: true } })
+  ).map((f) => f.key)
+
   const [occupancy, collections, activity] = await Promise.all([
     propertyIds.length
       ? occupancyFor(propertyIds)
@@ -361,6 +371,23 @@ export default async function AdminOrganizationPage({
           </ul>
         </>
       )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Features for this client</CardTitle>
+          <p className="text-xs text-slate-500">
+            Switch a plan feature off to withhold it from {org.name}. They’ll see it as “Not included in your plan”.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <AdminFeatureOverrides
+            organizationId={org.id}
+            withheld={withheldFlags}
+            globallyOff={globallyOffFlags}
+            ownerDisabled={org.settings?.disabledModules ?? []}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

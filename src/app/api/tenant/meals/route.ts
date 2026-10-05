@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { ForbiddenError, NotFoundError } from '@/lib/tenancy'
+import { ForbiddenError, NotFoundError, requireModule } from '@/lib/tenancy'
 import { mealOptSchema } from '@/lib/validation'
 import { setMealAttendance } from '@/server/services/kitchen'
 
@@ -10,6 +10,7 @@ import { setMealAttendance } from '@/server/services/kitchen'
  */
 export const POST = route(
   async ({ user, request }) => {
+    requireModule(user, 'residentApp')
     const body = await parseBody(request, mealOptSchema)
 
     const meal = await prisma.meal.findUnique({
@@ -34,5 +35,5 @@ export const POST = route(
 
     return ok({ message: 'Meal preference saved' })
   },
-  { roles: ['TENANT'] },
+  { roles: ['TENANT'], module: 'food' },
 )

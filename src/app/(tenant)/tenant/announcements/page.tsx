@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Megaphone, Pin } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { formatDate, relativeTime } from '@/lib/utils'
@@ -11,6 +12,8 @@ export const metadata: Metadata = { title: 'Announcements' }
 
 export default async function TenantAnnouncementsPage() {
   const user = await requireTenant()
+  // Switched off for this PG: back to the home screen, nothing broken.
+  if (!user.modules.includes('announcements')) redirect('/tenant')
 
   const resident = await prisma.resident.findUnique({
     where: { id: user.residentId },

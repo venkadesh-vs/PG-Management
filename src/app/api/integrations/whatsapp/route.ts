@@ -10,7 +10,8 @@ import { getWhatsAppConnection } from '@/server/integrations/whatsapp'
 /**
  * /api/integrations/whatsapp — an organization's own WhatsApp Business
  * number. Without one, messages go out from the StayFlow platform number
- * (or stay in demo). OWNER only: the access token sends as the business.
+ * (or stay in demo). Needs settings.manage: the access token sends as the
+ * business. Connecting needs the WhatsApp module on.
  *
  * GET    — current mode and connected number (never the token).
  * POST   — verify the credentials against Meta, then store them encrypted.
@@ -26,7 +27,7 @@ const connectSchema = z.object({
 
 export const GET = route(
   async ({ user }) => getWhatsAppConnection(user.organizationId!),
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage' },
 )
 
 export const POST = route(
@@ -94,7 +95,7 @@ export const POST = route(
 
     return getWhatsAppConnection(organizationId)
   },
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage', module: 'whatsapp' },
 )
 
 export const DELETE = route(
@@ -116,5 +117,6 @@ export const DELETE = route(
     }
     return getWhatsAppConnection(organizationId)
   },
-  { roles: ['OWNER'] },
+  // Disconnecting stays possible with WhatsApp switched off.
+  { permission: 'settings.manage' },
 )

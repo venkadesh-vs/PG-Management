@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight, Bed, Building2, MapPin, Plus } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -19,7 +19,9 @@ export default async function PropertiesPage({
 }: {
   searchParams: Promise<{ property?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'properties', permission: 'properties.view' })
+  const canCreate = user.permissions.includes('properties.create')
+  const canSeeMoney = user.permissions.includes('rent.view')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
 
@@ -43,12 +45,14 @@ export default async function PropertiesPage({
         icon="building"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Properties' }]}
         actions={
-          <Button variant="primary" asChild>
-            <Link href="/app/properties/new">
-              <Plus className="size-4" />
-              Add a PG
-            </Link>
-          </Button>
+          canCreate && (
+            <Button variant="primary" asChild>
+              <Link href="/app/properties/new">
+                <Plus className="size-4" />
+                Add a PG
+              </Link>
+            </Button>
+          )
         }
       />
 
@@ -58,12 +62,14 @@ export default async function PropertiesPage({
           title="No PG added yet"
           description="Add your first property to start tracking rooms, beds, residents and rent."
           action={
-            <Button variant="primary" asChild>
-              <Link href="/app/properties/new">
-                <Plus className="size-4" />
-                Add a PG
-              </Link>
-            </Button>
+            canCreate && (
+              <Button variant="primary" asChild>
+                <Link href="/app/properties/new">
+                  <Plus className="size-4" />
+                  Add a PG
+                </Link>
+              </Button>
+            )
           }
         />
       ) : (
@@ -130,7 +136,7 @@ export default async function PropertiesPage({
                     <div>
                       <p className="text-xs text-slate-500">Collected this month</p>
                       <p className="font-semibold text-emerald-600 tabular">
-                        {formatMoney(stats?.collection ?? 0)}
+                        {canSeeMoney ? formatMoney(stats?.collection ?? 0) : '—'}
                       </p>
                     </div>
                   </div>

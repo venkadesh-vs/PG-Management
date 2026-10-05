@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { paymentMode } from '@/server/integrations/payments'
 import { SUBSCRIPTION_STATUS_STYLE, INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
@@ -27,7 +27,7 @@ const PAYABLE = ['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
 export const metadata: Metadata = { title: 'Subscription' }
 
 export default async function SubscriptionPage() {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'settings', permission: 'billing.manage' })
 
   const [subscriptions, organization, invoices] = await Promise.all([
     prisma.subscription.findMany({

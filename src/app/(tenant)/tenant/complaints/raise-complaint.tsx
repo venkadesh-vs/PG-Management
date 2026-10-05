@@ -33,20 +33,21 @@ import {
 } from '@/components/ui/dialog'
 import { Field, Input, Textarea } from '@/components/ui/input'
 
-const CATEGORIES = [
-  { value: 'PLUMBING', label: 'Plumbing', icon: Droplets },
-  { value: 'ELECTRICITY', label: 'Electricity', icon: Zap },
-  { value: 'AC', label: 'AC', icon: AirVent },
-  { value: 'FAN', label: 'Fan', icon: Fan },
-  { value: 'BATHROOM', label: 'Bathroom', icon: Bath },
-  { value: 'CLEANING', label: 'Cleaning', icon: Sparkles },
-  { value: 'INTERNET', label: 'Internet', icon: Wifi },
-  { value: 'FOOD', label: 'Food', icon: Utensils },
-  { value: 'ROOM', label: 'Room', icon: DoorOpen },
-  { value: 'FURNITURE', label: 'Furniture', icon: Sofa },
-  { value: 'SECURITY', label: 'Security', icon: ShieldAlert },
-  { value: 'OTHER', label: 'Other', icon: Wrench },
-] as const
+/** Icons for the built-in categories; anything the owner adds gets a wrench. */
+const CATEGORY_ICON: Record<string, React.ElementType> = {
+  PLUMBING: Droplets,
+  ELECTRICITY: Zap,
+  AC: AirVent,
+  FAN: Fan,
+  BATHROOM: Bath,
+  CLEANING: Sparkles,
+  INTERNET: Wifi,
+  FOOD: Utensils,
+  ROOM: DoorOpen,
+  FURNITURE: Sofa,
+  SECURITY: ShieldAlert,
+  OTHER: Wrench,
+}
 
 const PRIORITIES = [
   { value: 'LOW', label: 'Can wait' },
@@ -58,11 +59,19 @@ const PRIORITIES = [
  * Resident-facing complaint form. Deliberately three taps: pick what is
  * wrong, say a little about it, send.
  */
-export function RaiseComplaintButton({ variant = 'primary' }: { variant?: 'primary' | 'outline' }) {
+export function RaiseComplaintButton({
+  variant = 'primary',
+  categories,
+}: {
+  variant?: 'primary' | 'outline'
+  /** The org's COMPLAINT_CATEGORY lookup list. */
+  categories: { value: string; label: string }[]
+}) {
+  const firstCategory = categories[0]?.value ?? ''
   const router = useRouter()
   const toast = useToast()
   const [open, setOpen] = React.useState(false)
-  const [category, setCategory] = React.useState<string>('PLUMBING')
+  const [category, setCategory] = React.useState<string>(firstCategory)
   const [priority, setPriority] = React.useState<string>('MEDIUM')
   const [title, setTitle] = React.useState('')
   const [description, setDescription] = React.useState('')
@@ -72,7 +81,7 @@ export function RaiseComplaintButton({ variant = 'primary' }: { variant?: 'prima
   function reset() {
     setTitle('')
     setDescription('')
-    setCategory('PLUMBING')
+    setCategory(firstCategory)
     setPriority('MEDIUM')
     setDone(null)
   }
@@ -168,8 +177,8 @@ export function RaiseComplaintButton({ variant = 'primary' }: { variant?: 'prima
                 <div>
                   <p className="mb-2 text-sm font-medium text-slate-700">Category</p>
                   <div className="grid grid-cols-4 gap-2">
-                    {CATEGORIES.map((item) => {
-                      const Icon = item.icon
+                    {categories.map((item) => {
+                      const Icon = CATEGORY_ICON[item.value] ?? Wrench
                       const active = category === item.value
                       return (
                         <button

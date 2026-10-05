@@ -21,6 +21,15 @@ import {
 import { endOfMonthUtilitySplit } from '@/server/services/residents'
 import { endOfMonth, formatMoney, startOfMonth } from '@/lib/utils'
 
+/** Catalog permission each action needs. */
+const ACTION_PERMISSION = {
+  GENERATE: 'rent.manage',
+  REMIND: 'payments.record',
+  REFRESH_OVERDUE: 'rent.manage',
+  UTILITY_SPLIT: 'rent.manage',
+  WAIVE: 'invoices.waive',
+} as const
+
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('GENERATE') }).merge(generateInvoiceSchema),
   z.object({ action: z.literal('REMIND'), invoiceId: z.string().optional() }),
@@ -40,6 +49,7 @@ const schema = z.discriminatedUnion('action', [
 export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, schema)
+    requirePermission(user, ACTION_PERMISSION[body.action])
     const orgId = user.organizationId!
     // A manager limited to some PGs; null = sees every PG in the org.
     const restricted = restrictedPropertyIds(user)
@@ -133,7 +143,6 @@ export const POST = route(
       }
 
       case 'WAIVE': {
-        requirePermission(user, 'invoice:waive')
         const invoice = await prisma.rentInvoice.findFirst({
           where: { id: body.invoiceId, organizationId: orgId },
         })
@@ -161,7 +170,7 @@ export const POST = route(
       }
     }
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { module: 'rent' },
 )
 
 /** generateMonthlyInvoices, limited to the PGs a restricted manager can see. */

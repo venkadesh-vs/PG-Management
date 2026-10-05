@@ -85,7 +85,7 @@ export const POST = route(
       { status: 201 },
     )
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'residents.manage' },
 )
 
 /** GET /api/residents?propertyId=&status= — used by pickers and forms. */
@@ -135,5 +135,5 @@ export const GET = route(
       })),
     }
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'residents.view' },
 )

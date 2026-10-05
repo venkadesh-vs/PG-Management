@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Bed } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor, BRAND_THEME } from '@/lib/theme'
@@ -17,7 +17,7 @@ export default async function BedsPage({
 }: {
   searchParams: Promise<{ property?: string; room?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'properties', permission: 'properties.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
 
@@ -144,6 +144,8 @@ export default async function BedsPage({
         }}
         themeKey={theme.key}
         focusRoomId={params.room}
+        canManage={user.permissions.includes('properties.manage')}
+        canCheckIn={user.permissions.includes('residents.manage')}
       />
     </div>
   )

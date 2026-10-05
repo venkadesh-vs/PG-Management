@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { AlertTriangle, ShoppingCart } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { UNIT_LABEL, purchasePlan } from '@/server/services/kitchen'
@@ -13,6 +14,8 @@ export const metadata: Metadata = { title: 'Grocery' }
 
 export default async function WorkerGroceryPage() {
   const user = await requireWorker()
+  // Not part of this person's role (or the module is off): back to home.
+  if (!user.permissions.includes('grocery.view')) redirect('/worker')
 
   const staff = await prisma.staff.findUnique({
     where: { id: user.staffId },
@@ -118,6 +121,7 @@ export default async function WorkerGroceryPage() {
                         </p>
                         <p className="text-[10px] uppercase tracking-wide text-slate-400">to buy</p>
                       </div>
+                      {user.permissions.includes('grocery.manage') && (
                       <WorkerPurchaseButton
                         propertyId={property.id}
                         item={{
@@ -128,6 +132,7 @@ export default async function WorkerGroceryPage() {
                           lastPrice: item.lastPurchasePrice,
                         }}
                       />
+                      )}
                     </CardContent>
                   </Card>
                 </li>

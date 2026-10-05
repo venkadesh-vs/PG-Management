@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { Bed, Building2, Phone, UserPlus } from 'lucide-react'
 
 import type { Prisma, ResidentStatus } from '@prisma/client'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { RESIDENT_STATUS_STYLE, themeFor } from '@/lib/theme'
@@ -48,7 +48,9 @@ export default async function ResidentsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'residents', permission: 'residents.view' })
+  const canCheckIn = user.permissions.includes('residents.manage')
+  const canExport = user.permissions.includes('reports.export')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -117,15 +119,19 @@ export default async function ResidentsPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Residents' }]}
         actions={
           <>
-          <Suspense fallback={null}>
-            <ExportButton kind="residents" />
-          </Suspense>
-          <Button variant="primary" asChild>
-            <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
-              <UserPlus className="size-4" />
-              Check in resident
-            </Link>
-          </Button>
+          {canExport && (
+            <Suspense fallback={null}>
+              <ExportButton kind="residents" />
+            </Suspense>
+          )}
+          {canCheckIn && (
+            <Button variant="primary" asChild>
+              <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
+                <UserPlus className="size-4" />
+                Check in resident
+              </Link>
+            </Button>
+          )}
           </>
         }
       />
@@ -155,7 +161,7 @@ export default async function ResidentsPage({
               : 'Check in your first resident — their bed, rent schedule, food plan and app account are created automatically.'
           }
           action={
-            !activeFilters && (
+            !activeFilters && canCheckIn && (
               <Button variant="primary" asChild>
                 <Link href="/app/residents/new">
                   <UserPlus className="size-4" />

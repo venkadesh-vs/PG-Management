@@ -9,8 +9,8 @@ import { renderDocument, rs } from '@/server/documents/pdf'
 /**
  * GET /api/documents/subscription-invoice/<id>.pdf
  *
- * StayFlow's tax invoice for a PG's SaaS subscription. The OWNER of that
- * organization or a SUPER_ADMIN only. The GST split is re-derived from the
+ * StayFlow's tax invoice for a PG's SaaS subscription. Anyone in that
+ * organization with billing.manage, or a SUPER_ADMIN. The GST split is re-derived from the
  * stored amount/tax with the same rule used when the invoice was raised
  * (CGST+SGST intra-state, IGST inter-state).
  */
@@ -45,7 +45,8 @@ export const GET = route(
     if (!invoice) return fail('Invoice not found', 404)
     const org = invoice.subscription.organization
     const allowed =
-      user.role === 'SUPER_ADMIN' || (user.role === 'OWNER' && user.organizationId === org.id)
+      user.role === 'SUPER_ADMIN' ||
+      (user.organizationId === org.id && user.permissions.includes('billing.manage'))
     if (!allowed) return fail('Invoice not found', 404)
 
     // Re-derive the split from what was actually charged.
@@ -130,5 +131,5 @@ export const GET = route(
       },
     })
   },
-  { roles: ['OWNER', 'SUPER_ADMIN'], allowRestricted: true },
+  { roles: ['OWNER', 'MANAGER', 'SUPER_ADMIN'], allowRestricted: true },
 )

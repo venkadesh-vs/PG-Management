@@ -980,6 +980,8 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
   for (const invoice of invoices) {
     const settings = invoice.organization.settings
     if (settings && !settings.whatsappEnabled) continue
+    // Reminders go out on WhatsApp; with the module off there is nothing to send.
+    if (settings?.disabledModules.includes('whatsapp')) continue
 
     const due = startOfDay(invoice.dueDate)
     const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000)

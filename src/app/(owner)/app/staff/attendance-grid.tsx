@@ -33,7 +33,10 @@ export function AttendanceGrid({
   staffId,
   staffName,
   days,
+  canMark = true,
 }: {
+  /** staff.manage — mark today's attendance. */
+  canMark?: boolean
   staffId: string
   staffName: string
   days: { date: string; status: string }[]
@@ -82,7 +85,7 @@ export function AttendanceGrid({
       <div className="flex flex-wrap gap-[3px]">
         {cells.map((cell) => {
           const style = cell.status ? STATUS_STYLE[cell.status] : null
-          const isToday = cell.key === today
+          const isToday = cell.key === today && canMark
           return (
             <button
               key={cell.key}

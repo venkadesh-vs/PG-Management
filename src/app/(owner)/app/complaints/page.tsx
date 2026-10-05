@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import type { ComplaintStatus, Prisma } from '@prisma/client'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
+import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE, themeFor } from '@/lib/theme'
@@ -27,17 +28,12 @@ const STATUS_OPTIONS = [
   { value: 'CLOSED', label: 'Closed' },
 ]
 
-const CATEGORY_OPTIONS = [
-  'PLUMBING', 'ELECTRICITY', 'AC', 'FAN', 'BATHROOM', 'CLEANING',
-  'INTERNET', 'FOOD', 'ROOM', 'FURNITURE', 'SECURITY', 'OTHER',
-].map((value) => ({ value, label: value.charAt(0) + value.slice(1).toLowerCase() }))
-
 export default async function ComplaintsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'complaints', permission: 'complaints.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -52,7 +48,7 @@ export default async function ComplaintsPage({
     organizationId: scope.organizationId,
     propertyId: { in: propertyIds },
     ...(status ? { status } : {}),
-    ...(category ? { category: category as never } : {}),
+    ...(category ? { category } : {}),
     ...(priority ? { priority: priority as never } : {}),
     ...(q
       ? {
@@ -65,7 +61,7 @@ export default async function ComplaintsPage({
       : {}),
   }
 
-  const [complaints, total, counts, resolvedThisMonth, staff, residents, properties] =
+  const [complaints, total, counts, resolvedThisMonth, staff, residents, properties, categoryOptions, categoryLabels] =
     await Promise.all([
       prisma.complaint.findMany({
         where,
@@ -111,6 +107,8 @@ export default async function ComplaintsPage({
         where: { id: { in: propertyIds } },
         select: { id: true, name: true, type: true },
       }),
+      getLookup(scope.organizationId, 'COMPLAINT_CATEGORY'),
+      getLookupLabels(scope.organizationId, 'COMPLAINT_CATEGORY'),
     ])
 
   const countFor = (s: string) => counts.find((c) => c.status === s)?._count._all ?? 0
@@ -126,11 +124,14 @@ export default async function ComplaintsPage({
         icon="wrench"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Complaints' }]}
         actions={
-          <NewComplaintButton
-            properties={properties}
-            residents={residents}
-            defaultPropertyId={scope.propertyId ?? properties[0]?.id}
-          />
+          user.permissions.includes('complaints.manage') && (
+            <NewComplaintButton
+              properties={properties}
+              residents={residents}
+              categories={categoryOptions}
+              defaultPropertyId={scope.propertyId ?? properties[0]?.id}
+            />
+          )
         }
       />
 
@@ -145,7 +146,7 @@ export default async function ComplaintsPage({
         <FilterBar activeCount={activeFilters}>
           <SearchInput placeholder="Search code, title or resident…" />
           <FilterSelect paramKey="status" placeholder="All statuses" options={STATUS_OPTIONS} />
-          <FilterSelect paramKey="category" placeholder="All categories" options={CATEGORY_OPTIONS} />
+          <FilterSelect paramKey="category" placeholder="All categories" options={categoryOptions} />
           <FilterSelect
             paramKey="priority"
             placeholder="Any priority"
@@ -189,8 +190,8 @@ export default async function ComplaintsPage({
                           : 'bg-slate-100 text-slate-500',
                       )}
                     >
-                      <span className="text-[10px] font-bold uppercase">
-                        {complaint.category.slice(0, 4)}
+                      <span className="text-[10px] font-bold uppercase" title={categoryLabels[complaint.category] ?? complaint.category}>
+                        {(categoryLabels[complaint.category] ?? complaint.category).slice(0, 4)}
                       </span>
                     </div>
 
@@ -205,6 +206,7 @@ export default async function ComplaintsPage({
                           <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
                           {complaint.property.name}
                         </span>
+                        {` · ${categoryLabels[complaint.category] ?? complaint.category}`}
                         {complaint.room ? ` · Room ${complaint.room.number}` : ''}
                         {complaint.resident ? ` · ${complaint.resident.fullName}` : ''}
                       </p>
@@ -236,7 +238,7 @@ export default async function ComplaintsPage({
         </>
       )}
 
-      {staff.length === 0 && (
+      {staff.length === 0 && user.modules.includes('staff') && user.permissions.includes('complaints.assign') && (
         <p className="text-xs text-slate-500">
           Add staff members to assign complaints to a worker.{' '}
           <Link href="/app/staff" className="font-semibold text-blue-600">

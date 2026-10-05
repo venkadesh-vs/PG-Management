@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import type { Prisma } from '@prisma/client'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor, CHART_COLORS } from '@/lib/theme'
@@ -43,7 +43,7 @@ export default async function ExpensesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'expenses', permission: 'expenses.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -127,9 +127,12 @@ export default async function ExpensesPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Expenses' }]}
         actions={
           <>
-          <Suspense fallback={null}>
-            <ExportButton kind="expenses" />
-          </Suspense>
+          {user.permissions.includes('reports.export') && (
+            <Suspense fallback={null}>
+              <ExportButton kind="expenses" />
+            </Suspense>
+          )}
+          {user.permissions.includes('expenses.manage') && (
           <QuickForm
             trigger="Add expense"
             title="Record an expense"
@@ -196,13 +199,17 @@ export default async function ExpensesPage({
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
+          )}
           </>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total spent" value={spent} format="money" icon="receipt" tone="red" hint={`${total} entries`} />
-        <StatCard label="Collected" value={income} format="money" icon="money" tone="emerald" hint="Same period" />
+        {user.permissions.includes('rent.view') && (
+          <StatCard label="Collected" value={income} format="money" icon="money" tone="emerald" hint="Same period" />
+        )}
+        {user.permissions.includes('rent.view') && (
         <StatCard
           label="Estimated profit"
           value={income - spent}
@@ -211,6 +218,7 @@ export default async function ExpensesPage({
           tone={income - spent >= 0 ? 'emerald' : 'red'}
           hint="Collections minus expenses"
         />
+        )}
         <StatCard
           label="Biggest category"
           value={breakdown[0]?.amount ?? 0}

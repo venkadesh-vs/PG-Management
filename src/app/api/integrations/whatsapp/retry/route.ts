@@ -26,5 +26,5 @@ export const POST = route(
     }
     return result
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'messages.view' },
 )

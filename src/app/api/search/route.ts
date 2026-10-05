@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { route, parseQuery } from '@/lib/api-helpers'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import type { SearchResult } from '@/components/app/global-search'
 
 const schema = z.object({
@@ -67,9 +67,14 @@ export const GET = route(
     // their own; archived PGs drop out).
     const { allowedPropertyIds } = await resolveScope(user)
     const propertyFilter = { in: allowedPropertyIds }
+    // Only search what the caller's role may see; a switched-off module
+    // grants no permissions, so its records drop out too.
+    const when = <T,>(permission: string, query: () => Promise<T[]>) =>
+      hasPermission(user, permission) ? query() : Promise.resolve([] as T[])
 
     const [residents, properties, rooms, payments, complaints, staff, expenses] = await Promise.all([
-      prisma.resident.findMany({
+      when('residents.view', () =>
+        prisma.resident.findMany({
         where: {
           organizationId: orgId,
           propertyId: propertyFilter,
@@ -83,8 +88,9 @@ export const GET = route(
         take: 6,
         include: { property: { select: { name: true } }, room: { select: { number: true } }, bed: true },
         orderBy: { status: 'asc' },
-      }),
-      prisma.property.findMany({
+      })),
+      when('properties.view', () =>
+        prisma.property.findMany({
         where: {
           organizationId: orgId,
           archivedAt: null,
@@ -97,8 +103,9 @@ export const GET = route(
         },
         take: 4,
         include: { _count: { select: { beds: true, residents: true } } },
-      }),
-      prisma.room.findMany({
+      })),
+      when('properties.view', () =>
+        prisma.room.findMany({
         where: {
           property: { organizationId: orgId, id: propertyFilter },
           number: { contains: term, mode: 'insensitive' },
@@ -108,8 +115,9 @@ export const GET = route(
           property: { select: { id: true, name: true } },
           _count: { select: { beds: true } },
         },
-      }),
-      prisma.rentPayment.findMany({
+      })),
+      when('rent.view', () =>
+        prisma.rentPayment.findMany({
         where: {
           organizationId: orgId,
           propertyId: propertyFilter,
@@ -121,8 +129,9 @@ export const GET = route(
         take: 4,
         include: { resident: { select: { fullName: true } } },
         orderBy: { paidAt: 'desc' },
-      }),
-      prisma.complaint.findMany({
+      })),
+      when('complaints.view', () =>
+        prisma.complaint.findMany({
         where: {
           organizationId: orgId,
           propertyId: propertyFilter,
@@ -134,8 +143,9 @@ export const GET = route(
         take: 4,
         include: { property: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
-      }),
-      prisma.staff.findMany({
+      })),
+      when('staff.view', () =>
+        prisma.staff.findMany({
         where: {
           organizationId: orgId,
           AND: [
@@ -151,8 +161,9 @@ export const GET = route(
         },
         take: 4,
         include: { property: { select: { name: true } } },
-      }),
-      prisma.expense.findMany({
+      })),
+      when('expenses.view', () =>
+        prisma.expense.findMany({
         where: {
           organizationId: orgId,
           propertyId: propertyFilter,
@@ -161,7 +172,7 @@ export const GET = route(
         take: 3,
         include: { category: { select: { name: true } } },
         orderBy: { spentOn: 'desc' },
-      }),
+      })),
     ])
 
     results.push(

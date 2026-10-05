@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fail, route } from '@/lib/api-helpers'
-import { assertResidentAccess } from '@/lib/tenancy'
+import { assertResidentAccess, requirePermission } from '@/lib/tenancy'
 import { formatDate, formatMonth } from '@/lib/utils'
 import { renderDocument, rs } from '@/server/documents/pdf'
 
@@ -18,7 +18,8 @@ export const GET = route(
     const parts = new URL(request.url).pathname.split('/')
     const id = parts[parts.length - 1].replace(/\.pdf$/, '')
     const kind = parts[parts.length - 2]
-    if (user.role === 'WORKER') return fail('Not available', 403)
+    // Residents download their own (checked below); staff need rent.view.
+    if (user.role !== 'TENANT') requirePermission(user, 'rent.view')
 
     if (kind === 'rent-invoice') {
       const invoice = await prisma.rentInvoice.findUnique({
@@ -125,7 +126,7 @@ export const GET = route(
 
     return fail('Unknown document', 404)
   },
-  { roles: ['OWNER', 'MANAGER', 'TENANT', 'SUPER_ADMIN'] },
+  { roles: ['OWNER', 'MANAGER', 'WORKER', 'TENANT', 'SUPER_ADMIN'] },
 )
 
 function pdfResponse(bytes: Uint8Array, filename: string) {

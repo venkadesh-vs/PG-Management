@@ -26,6 +26,11 @@ export const metadata: Metadata = { title: 'Home' }
 export default async function TenantHome() {
   const user = await requireTenant()
   const today = startOfDay(new Date())
+  const on = {
+    food: user.modules.includes('food'),
+    complaints: user.modules.includes('complaints'),
+    announcements: user.modules.includes('announcements'),
+  }
 
   const resident = await prisma.resident.findUnique({
     where: { id: user.residentId },
@@ -55,17 +60,21 @@ export default async function TenantHome() {
   const overdue = Boolean(nextInvoice && daysToDue !== null && daysToDue < 0)
 
   const [meals, announcement] = await Promise.all([
-    prisma.meal.findMany({
-      where: { propertyId: resident.propertyId, date: today },
-      orderBy: { type: 'asc' },
-    }),
-    prisma.announcement.findFirst({
-      where: {
-        organizationId: resident.organizationId,
-        OR: [{ propertyId: null }, { propertyId: resident.propertyId }],
-      },
-      orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }],
-    }),
+    on.food
+      ? prisma.meal.findMany({
+          where: { propertyId: resident.propertyId, date: today },
+          orderBy: { type: 'asc' },
+        })
+      : Promise.resolve([]),
+    on.announcements
+      ? prisma.announcement.findFirst({
+          where: {
+            organizationId: resident.organizationId,
+            OR: [{ propertyId: null }, { propertyId: resident.propertyId }],
+          },
+          orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }],
+        })
+      : Promise.resolve(null),
   ])
 
   return (
@@ -178,7 +187,7 @@ export default async function TenantHome() {
       </Card>
 
       {/* ----------------------------------------------------------- Food */}
-      {resident.foodOptIn && (
+      {on.food && resident.foodOptIn && (
         <Card>
           <CardContent className="p-5">
             <div className="mb-3 flex items-center justify-between">
@@ -215,6 +224,7 @@ export default async function TenantHome() {
       )}
 
       {/* ----------------------------------------------------- Complaints */}
+      {on.complaints && (
       <Card>
         <CardContent className="p-5">
           <div className="mb-3 flex items-center justify-between">
@@ -261,6 +271,7 @@ export default async function TenantHome() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* --------------------------------------------------- Announcement */}
       {announcement && (
@@ -291,14 +302,16 @@ export default async function TenantHome() {
             label="Security deposit"
             value={formatMoney(resident.deposit?.collected ?? 0)}
           />
-          <Info
-            label="Food plan"
-            value={
-              resident.foodSubscription?.active
-                ? resident.foodSubscription.foodPlan.name
-                : 'Not subscribed'
-            }
-          />
+          {on.food && (
+            <Info
+              label="Food plan"
+              value={
+                resident.foodSubscription?.active
+                  ? resident.foodSubscription.foodPlan.name
+                  : 'Not subscribed'
+              }
+            />
+          )}
         </CardContent>
       </Card>
     </div>

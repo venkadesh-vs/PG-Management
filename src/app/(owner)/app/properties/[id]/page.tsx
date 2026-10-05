@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Bed, CheckCircle2, MapPin, Phone, Sparkles, Utensils } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { assertPropertyAccess } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor, SUBSCRIPTION_STATUS_STYLE } from '@/lib/theme'
@@ -22,7 +22,7 @@ export default async function PropertyDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'properties', permission: 'properties.view' })
   const { id } = await params
   await assertPropertyAccess(user, id)
 
@@ -248,6 +248,7 @@ export default async function PropertyDetailPage({
       </Card>
 
       <RoomBuilder
+        canManage={user.permissions.includes('properties.manage')}
         propertyId={property.id}
         propertyType={property.type}
         standardRent={property.standardRent}

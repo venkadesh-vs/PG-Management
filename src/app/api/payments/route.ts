@@ -32,5 +32,5 @@ export const POST = route(
       { status: 201 },
     )
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'payments.record' },
 )

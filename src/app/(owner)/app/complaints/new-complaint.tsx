@@ -22,27 +22,15 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input'
 
 type Values = z.infer<typeof complaintSchema>
 
-const CATEGORIES = [
-  ['PLUMBING', 'Plumbing'],
-  ['ELECTRICITY', 'Electricity'],
-  ['AC', 'Air conditioning'],
-  ['FAN', 'Fan'],
-  ['BATHROOM', 'Bathroom'],
-  ['CLEANING', 'Cleaning'],
-  ['INTERNET', 'Internet'],
-  ['FOOD', 'Food'],
-  ['ROOM', 'Room'],
-  ['FURNITURE', 'Furniture'],
-  ['SECURITY', 'Security'],
-  ['OTHER', 'Other'],
-] as const
-
 /** Owners log a complaint on a resident's behalf (phone call, walk-in). */
 export function NewComplaintButton({
   properties,
   residents,
   defaultPropertyId,
+  categories,
 }: {
+  /** The org's COMPLAINT_CATEGORY lookup list. */
+  categories: { value: string; label: string }[]
   properties: { id: string; name: string; type: string }[]
   residents: { id: string; fullName: string; propertyId: string; roomId: string | null }[]
   defaultPropertyId?: string
@@ -56,7 +44,7 @@ export function NewComplaintButton({
     defaultValues: {
       propertyId: defaultPropertyId ?? properties[0]?.id ?? '',
       residentId: '',
-      category: 'PLUMBING',
+      category: categories[0]?.value ?? '',
       priority: 'MEDIUM',
       title: '',
       description: '',
@@ -129,7 +117,7 @@ export function NewComplaintButton({
                 </Field>
                 <Field label="Category" required>
                   <Select {...form.register('category')}>
-                    {CATEGORIES.map(([value, label]) => (
+                    {categories.map(({ value, label }) => (
                       <option key={value} value={value}>
                         {label}
                       </option>

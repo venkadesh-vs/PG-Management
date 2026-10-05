@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { ChefHat, Utensils } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -20,7 +20,7 @@ export default async function FoodPage({
 }: {
   searchParams: Promise<{ property?: string; date?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'food', permission: 'food.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -124,6 +124,7 @@ export default async function FoodPage({
       </div>
 
       <MealPlanner
+        canManage={user.permissions.includes('food.manage')}
         date={toISODate(date)}
         board={board.map((entry) => ({
           propertyId: entry.property.id,

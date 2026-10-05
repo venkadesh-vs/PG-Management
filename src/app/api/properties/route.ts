@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { ConflictError, requirePermission, resolveScope } from '@/lib/tenancy'
+import { ConflictError, resolveScope } from '@/lib/tenancy'
 import { propertySchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 import { assertPlanCapacity, createSubscriptionForProperty } from '@/server/services/subscriptions'
@@ -13,8 +13,6 @@ import { formatMoney } from '@/lib/utils'
  */
 export const POST = route(
   async ({ user, request }) => {
-    // Every PG carries its own billed subscription, so only the OWNER adds one.
-    requirePermission(user, 'property:create')
     const body = await parseBody(request, propertySchema)
     const organizationId = user.organizationId!
 
@@ -102,7 +100,8 @@ export const POST = route(
       { status: 201 },
     )
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  // Every PG carries its own billed subscription.
+  { permission: 'properties.create' },
 )
 
 export const GET = route(
@@ -123,5 +122,7 @@ export const GET = route(
     })
     return { properties }
   },
+  // Property list feeds the PG pickers on every dashboard page, so any
+  // dashboard account may read the PGs in its access set.
   { roles: ['OWNER', 'MANAGER'] },
 )

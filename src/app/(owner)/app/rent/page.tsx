@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import type { InvoiceStatus, Prisma } from '@prisma/client'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
@@ -42,7 +42,7 @@ export default async function RentPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'rent', permission: 'rent.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -129,10 +129,16 @@ export default async function RentPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Rent & Payments' }]}
         actions={
           <>
-            <Suspense fallback={null}>
-              <ExportButton kind="outstanding" label="Export dues" />
-            </Suspense>
-            <RentToolbar currentMonth={formatMonth(startOfMonth(new Date()))} />
+            {user.permissions.includes('reports.export') && (
+              <Suspense fallback={null}>
+                <ExportButton kind="outstanding" label="Export dues" />
+              </Suspense>
+            )}
+            <RentToolbar
+              currentMonth={formatMonth(startOfMonth(new Date()))}
+              canManage={user.permissions.includes('rent.manage')}
+              canRemind={user.permissions.includes('payments.record')}
+            />
           </>
         }
       />

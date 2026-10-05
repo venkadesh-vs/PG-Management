@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import type { EventType, Prisma } from '@prisma/client'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { EVENT_GROUPS, EVENT_LABEL } from '@/lib/events-meta'
@@ -21,7 +21,7 @@ export default async function ActivityPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'activity', permission: 'activity.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
 

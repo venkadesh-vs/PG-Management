@@ -39,7 +39,7 @@ export async function Onboarding({ user }: { user: SessionUser & { organizationI
   ])
 
   const emailVerified = Boolean(me?.emailVerifiedAt) || !isDeliverableEmail(me?.email)
-  const items: ChecklistItem[] = [
+  const allItems: ChecklistItem[] = [
     {
       key: 'email',
       title: 'Verify your email',
@@ -83,6 +83,9 @@ export async function Onboarding({ user }: { user: SessionUser & { organizationI
       href: '/app/settings/whatsapp',
     },
   ]
+
+  // A switched-off module has no setup step.
+  const items = allItems.filter((i) => i.key !== 'whatsapp' || user.modules.includes('whatsapp'))
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { assertLookupValue } from '@/server/services/org-defaults'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
@@ -10,6 +11,7 @@ import {
   assertRoomInProperty,
   ForbiddenError,
   NotFoundError,
+  requireModule,
   requirePermission,
   resolveScope,
   restrictedPropertyIds,
@@ -33,6 +35,7 @@ import { markMealServed, recordPurchase, upsertMeal } from '@/server/services/ki
 import { formatMoney, startOfDay } from '@/lib/utils'
 import { sendWhatsApp } from '@/server/integrations/whatsapp'
 import { createWorkerLogin, sendAccessLink } from '@/server/services/accounts'
+import type { ModuleKey } from '@/lib/modules'
 
 /**
  * Day-to-day operational writes, grouped behind one endpoint so every module
@@ -54,7 +57,35 @@ const schema = z.discriminatedUnion('entity', [
 
 const WORKER_ENTITIES = new Set(['ATTENDANCE', 'MEAL_SERVED', 'PURCHASE', 'GROCERY_ITEM'])
 
+type Entity = z.infer<typeof schema>['entity']
+
+/**
+ * The module each entity belongs to and the catalog permission it needs.
+ * ATTENDANCE is decided per caller below (self vs anyone).
+ */
+const ENTITY_ACCESS: Record<Entity, { module: ModuleKey; permission: string | null }> = {
+  EXPENSE: { module: 'expenses', permission: 'expenses.manage' },
+  STAFF: { module: 'staff', permission: 'staff.manage' },
+  ATTENDANCE: { module: 'staff', permission: null },
+  VISITOR: { module: 'visitors', permission: 'visitors.manage' },
+  VISITOR_EXIT: { module: 'visitors', permission: 'visitors.manage' },
+  ASSET: { module: 'inventory', permission: 'inventory.manage' },
+  ANNOUNCEMENT: { module: 'announcements', permission: 'announcements.send' },
+  MEAL: { module: 'food', permission: 'food.manage' },
+  MEAL_SERVED: { module: 'food', permission: 'food.manage' },
+  GROCERY_ITEM: { module: 'grocery', permission: 'grocery.manage' },
+  PURCHASE: { module: 'grocery', permission: 'grocery.manage' },
+}
+
 export const POST = route(async ({ user, request }) => {
+  // Check the feature and permission before validating the form, so someone
+  // whose module is off hears that, not "Category is required".
+  const peek = (await request.clone().json().catch(() => null)) as { entity?: string } | null
+  const early = peek?.entity ? ENTITY_ACCESS[peek.entity as keyof typeof ENTITY_ACCESS] : undefined
+  if (early) {
+    requireModule(user, early.module)
+    if (early.permission && user.role !== 'WORKER') requirePermission(user, early.permission)
+  }
   const body = await parseBody(request, schema)
   const organizationId = user.organizationId!
   const actor = { id: user.id, name: user.name }
@@ -63,16 +94,19 @@ export const POST = route(async ({ user, request }) => {
   // else on this endpoint belongs to an owner or manager.
   // assertPropertyAccess limits a worker to the PG they are assigned to.
   if (user.role === 'WORKER') {
+    requireModule(user, 'staffApp')
     if (!WORKER_ENTITIES.has(body.entity)) throw new ForbiddenError()
     if ('propertyId' in body && body.propertyId) await assertPropertyAccess(user, body.propertyId)
   } else if (user.role !== 'OWNER' && user.role !== 'MANAGER') {
     throw new ForbiddenError()
   }
+  const access = ENTITY_ACCESS[body.entity]
+  requireModule(user, access.module)
+  if (access.permission) requirePermission(user, access.permission)
 
   switch (body.entity) {
     // ------------------------------------------------------------ money --
     case 'EXPENSE': {
-      requirePermission(user, 'expense:write')
       await assertPropertyAccess(user, body.propertyId)
       const category = await prisma.expenseCategory.findFirst({
         where: { id: body.categoryId, organizationId },
@@ -114,14 +148,33 @@ export const POST = route(async ({ user, request }) => {
 
     // ------------------------------------------------------------ staff --
     case 'STAFF': {
-      requirePermission(user, 'staff:write')
       if (body.propertyId) await assertPropertyAccess(user, body.propertyId)
       else if (restrictedPropertyIds(user)) {
         throw new ForbiddenError('Choose one of your PGs for this staff member')
       }
+      await assertLookupValue(organizationId, 'STAFF_ROLE', body.role)
       const wantsLogin = Boolean(body.createLogin)
-      // A login is a credential into the org: owner only.
-      if (wantsLogin) requirePermission(user, 'staff:login')
+      // A login is a credential into the org: it needs team.manage.
+      if (wantsLogin) requirePermission(user, 'team.manage')
+      // The login's staff-app role: the one chosen, else the org's
+      // Housekeeping role (null falls back to the built-in worker template).
+      let orgRoleId: string | null = null
+      if (wantsLogin) {
+        if (body.orgRoleId) {
+          const role = await prisma.orgRole.findFirst({
+            where: { id: body.orgRoleId, organizationId, app: 'STAFF_APP' },
+            select: { id: true },
+          })
+          if (!role) throw new ValidationError('Choose a staff-app role for this login')
+          orgRoleId = role.id
+        } else {
+          const role = await prisma.orgRole.findFirst({
+            where: { organizationId, name: 'Housekeeping', app: 'STAFF_APP' },
+            select: { id: true },
+          })
+          orgRoleId = role?.id ?? null
+        }
+      }
       const count = await prisma.staff.count({ where: { organizationId } })
       const code = `STF-${String(count + 1).padStart(3, '0')}`
 
@@ -141,6 +194,7 @@ export const POST = route(async ({ user, request }) => {
           phone: body.phone,
           email: body.email || null,
         })
+        if (orgRoleId) await prisma.user.update({ where: { id: userId }, data: { orgRoleId } })
       }
 
       const staff = await prisma.staff.create({
@@ -181,7 +235,7 @@ export const POST = route(async ({ user, request }) => {
           staff: withMaskedId(staff, user.role),
           login,
           message: login
-            ? `${staff.name} added â€” login link ${login.sentVia.length ? 'sent' : 'ready to share'}`
+            ? `${staff.name} added — login link ${login.sentVia.length ? 'sent' : 'ready to share'}`
             : `${staff.name} added`,
         },
         { status: 201 },
@@ -189,8 +243,9 @@ export const POST = route(async ({ user, request }) => {
     }
 
     case 'ATTENDANCE': {
-      // A worker marks their own attendance with the sentinel "self"; an
-      // owner or manager marks anyone's.
+      // A worker marks their own attendance with the sentinel "self"
+      // (attendance.self); staff.manage marks anyone's.
+      requirePermission(user, user.role === 'WORKER' ? 'attendance.self' : 'staff.manage')
       const staffId =
         body.staffId === 'self' && user.role === 'WORKER' ? (user.staffId ?? '') : body.staffId
       if (user.role === 'WORKER' && staffId !== user.staffId) {
@@ -226,6 +281,7 @@ export const POST = route(async ({ user, request }) => {
     // --------------------------------------------------------- visitors --
     case 'VISITOR': {
       await assertPropertyAccess(user, body.propertyId)
+      await assertLookupValue(organizationId, 'VISITOR_PURPOSE', body.purpose)
       if (body.residentId) {
         await assertResidentInProperty(body.residentId, organizationId, body.propertyId)
       }
@@ -365,6 +421,8 @@ export const POST = route(async ({ user, request }) => {
         }
       }
 
+      // The WhatsApp copy is ignored while the WhatsApp module is off.
+      const sendWhatsapp = body.sendWhatsapp && user.modules.includes('whatsapp')
       const announcement = await prisma.announcement.create({
         data: {
           organizationId,
@@ -374,7 +432,7 @@ export const POST = route(async ({ user, request }) => {
           body: body.body,
           audience: body.audience,
           pinned: body.pinned,
-          sendWhatsapp: body.sendWhatsapp,
+          sendWhatsapp: sendWhatsapp,
           createdById: user.id,
           createdByName: user.name,
         },
@@ -411,7 +469,7 @@ export const POST = route(async ({ user, request }) => {
         }
       }
 
-      if (body.sendWhatsapp) {
+      if (sendWhatsapp) {
         for (const resident of residents) {
           await sendWhatsApp({
             organizationId,

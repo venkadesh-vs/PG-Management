@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { assertLookupValue } from './org-defaults'
 import type { ComplaintPriority, ComplaintStatus, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
@@ -38,6 +39,7 @@ export async function createComplaint(params: {
   photoUrls?: string[]
   actor: { id?: string; name: string; role: UserRole }
 }) {
+  await assertLookupValue(params.organizationId, 'COMPLAINT_CATEGORY', params.category)
   // Ids may come from the client: they must belong to this org and PG.
   if (params.residentId) {
     await assertResidentInProperty(params.residentId, params.organizationId, params.propertyId)

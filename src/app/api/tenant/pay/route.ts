@@ -232,5 +232,6 @@ export const POST = route(
       message: `${formatMoney(result.payment.amount)} recorded — receipt ${result.payment.receiptNumber}`,
     })
   },
-  { roles: ['TENANT'] },
+  // Rent is core; the resident app is the switchable part.
+  { roles: ['TENANT'], module: 'residentApp' },
 )

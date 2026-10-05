@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertResidentAccess } from '@/lib/tenancy'
+import { assertResidentAccess, requirePermission } from '@/lib/tenancy'
 import { checkoutSchema, noticeSchema, transferSchema } from '@/lib/validation'
 import {
   completeCheckout,
@@ -24,6 +24,7 @@ export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, schema)
     await assertResidentAccess(user, body.residentId)
+    requirePermission(user, body.action === 'CHECKOUT' || body.action === 'CHECKOUT_PREVIEW' ? 'residents.checkout' : 'residents.manage')
     const actor = { id: user.id, name: user.name }
 
     switch (body.action) {
@@ -78,5 +79,5 @@ export const POST = route(
       }
     }
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { module: 'residents' },
 )

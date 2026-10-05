@@ -45,7 +45,8 @@ export type WhatsAppRequest = {
   refId?: string
 }
 
-export type WhatsAppOutcome = 'sent' | 'demo' | 'failed' | 'opted_out' | 'invalid'
+/** 'disabled' — the organization switched the WhatsApp module off; nothing was stored or sent. */
+export type WhatsAppOutcome = 'sent' | 'demo' | 'failed' | 'opted_out' | 'invalid' | 'disabled'
 
 export type WhatsAppResult = {
   id: string
@@ -230,10 +231,37 @@ function checkRequest(template: string, phone: string, raw: unknown[] | undefine
 }
 
 // --------------------------------------------------------------------------
+// Module switch
+// --------------------------------------------------------------------------
+
+/** Login links still go out with WhatsApp switched off: people must be able to sign in. */
+const LOGIN_CRITICAL_TEMPLATES = new Set<string>(['account_invite', 'password_reset'])
+
+export const WHATSAPP_DISABLED_ERROR = 'WhatsApp is switched off for this PG'
+
+/** True when the organization has the WhatsApp module switched off (Settings → Features). */
+export async function isWhatsAppDisabled(organizationId: string | null): Promise<boolean> {
+  if (!organizationId) return false
+  const settings = await prisma.orgSetting.findUnique({
+    where: { organizationId },
+    select: { disabledModules: true },
+  })
+  return settings?.disabledModules.includes('whatsapp') ?? false
+}
+
+function disabledResult(): WhatsAppResult {
+  return { id: '', status: 'FAILED', delivered: false, demo: false, outcome: 'disabled', error: WHATSAPP_DISABLED_ERROR }
+}
+
+// --------------------------------------------------------------------------
 // Send
 // --------------------------------------------------------------------------
 
 export async function sendWhatsApp(req: WhatsAppRequest): Promise<WhatsAppResult> {
+  // Module off: no Meta call and no outbox row (login links excepted).
+  if (!LOGIN_CRITICAL_TEMPLATES.has(req.template) && (await isWhatsAppDisabled(req.organizationId))) {
+    return disabledResult()
+  }
   const phone = normalisePhone(req.toPhone)
   const channel = await resolveWhatsAppChannel(req.organizationId)
   const live = channel.mode !== 'demo'
@@ -401,6 +429,10 @@ export async function retryWhatsAppMessage(message: OutboundMessage): Promise<Wh
     return { ...base, status: 'FAILED', demo: false, outcome: 'invalid', error: 'This message has no stored variables to resend' }
   }
 
+  if (!LOGIN_CRITICAL_TEMPLATES.has(message.template) && (await isWhatsAppDisabled(message.organizationId))) {
+    return { ...disabledResult(), id: message.id }
+  }
+
   const channel = await resolveWhatsAppChannel(message.organizationId)
   if (channel.mode === 'demo') {
     return { ...base, status: 'FAILED', demo: true, outcome: 'demo', error: 'WhatsApp is not connected, so nothing can be sent' }
@@ -438,8 +470,16 @@ export async function retryFailedWhatsApp(options?: {
   batchSize?: number
 }): Promise<{ retried: number; sent: number; failed: number }> {
   const now = options?.now ?? new Date()
+  // Organizations with WhatsApp switched off keep their failed rows as they are.
+  const off = (
+    await prisma.orgSetting.findMany({
+      where: { disabledModules: { has: 'whatsapp' } },
+      select: { organizationId: true },
+    })
+  ).map((s) => s.organizationId)
   const candidates = await prisma.outboundMessage.findMany({
     where: {
+      ...(off.length ? { OR: [{ organizationId: null }, { organizationId: { notIn: off } }] } : {}),
       channel: 'WHATSAPP',
       status: 'FAILED',
       isDemo: false,
@@ -471,6 +511,7 @@ export async function retryFailedWhatsApp(options?: {
       }),
     )
     if (result.outcome === 'demo') break
+    if (result.outcome === 'disabled') continue
     report.retried++
     if (result.outcome === 'sent') report.sent++
     else report.failed++

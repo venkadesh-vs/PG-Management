@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { BadgeCheck, Clock, FileText, IdCard } from 'lucide-react'
 import { requireTenant } from '@/lib/auth'
+import { getLookupLabels } from '@/server/services/org-defaults'
 import { prisma } from '@/lib/prisma'
 import { formatDate, maskId } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,6 +21,7 @@ export default async function TenantDocumentsPage() {
     },
   })
   if (!resident) return null
+  const idTypeLabels = await getLookupLabels(resident.organizationId, 'ID_TYPE')
 
   return (
     <div className="space-y-5">
@@ -79,7 +81,7 @@ export default async function TenantDocumentsPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-800">
-                {resident.idType?.replace('_', ' ') ?? 'ID proof'}
+                {resident.idType ? (idTypeLabels[resident.idType] ?? resident.idType.replace('_', ' ')) : 'ID proof'}
               </p>
               <p className="font-mono text-xs text-slate-500">{maskId(resident.idNumber)}</p>
             </div>

@@ -121,5 +121,5 @@ export const POST = route(
       throw error
     }
   },
-  { roles: ['OWNER'], allowRestricted: true },
+  { permission: 'billing.manage', allowRestricted: true },
 )

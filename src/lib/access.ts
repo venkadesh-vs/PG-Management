@@ -20,7 +20,7 @@ export function resolveAccess(input: {
   let granted: string[]
   if (input.role === 'OWNER' || input.role === 'SUPER_ADMIN') granted = ALL_PERMISSIONS
   else if (input.role === 'MANAGER') granted = input.rolePermissions ?? template('Manager')
-  else if (input.role === 'WORKER') granted = input.rolePermissions ?? [...template('Cook'), ...template('Housekeeping')]
+  else if (input.role === 'WORKER') granted = input.rolePermissions ?? template('General staff')
   else granted = []
 
   // A switched-off module grants nothing, whatever the role says.

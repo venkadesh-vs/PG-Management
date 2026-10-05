@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { MessageCircle, ShieldAlert } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { resolveWhatsAppChannel } from '@/server/integrations/whatsapp'
@@ -25,7 +25,7 @@ export default async function MessagesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'whatsapp', permission: 'messages.view' })
   const params = await searchParams
   await resolveScope(user, params.property)
 

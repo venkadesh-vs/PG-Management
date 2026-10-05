@@ -42,7 +42,16 @@ const MEAL_TIME = { BREAKFAST: '7:30 – 9:30 AM', LUNCH: '12:30 – 2:30 PM', D
  * The kitchen board. Expected counts are derived, so the only thing anyone
  * types is the menu and — at the end of service — how many actually ate.
  */
-export function MealPlanner({ date, board }: { date: string; board: BoardEntry[] }) {
+export function MealPlanner({
+  date,
+  board,
+  canManage = true,
+}: {
+  date: string
+  board: BoardEntry[]
+  /** food.manage — set menus and mark meals served. */
+  canManage?: boolean
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const toast = useToast()
@@ -134,15 +143,17 @@ export function MealPlanner({ date, board }: { date: string; board: BoardEntry[]
                     </div>
 
                     <div className="mt-2 flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditing({ entry, row, mode: 'menu' })}
-                      >
-                        <Pencil className="size-3" />
-                        {row.menu ? 'Edit menu' : 'Set menu'}
-                      </Button>
-                      {row.mealId && row.actual === null && (
+                      {canManage && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditing({ entry, row, mode: 'menu' })}
+                        >
+                          <Pencil className="size-3" />
+                          {row.menu ? 'Edit menu' : 'Set menu'}
+                        </Button>
+                      )}
+                      {canManage && row.mealId && row.actual === null && (
                         <Button
                           variant="ghost"
                           size="sm"

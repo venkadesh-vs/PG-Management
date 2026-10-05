@@ -26,7 +26,10 @@ export function MealServedCard({
   meal,
   propertyName,
   propertyType,
+  canManage = true,
 }: {
+  /** food.manage — record meals served. */
+  canManage?: boolean
   meal: {
     type: 'BREAKFAST' | 'LUNCH' | 'DINNER'
     expected: number
@@ -103,7 +106,7 @@ export function MealServedCard({
           </div>
         </div>
 
-        {!served && meal.mealId && (
+        {canManage && !served && meal.mealId && (
           <div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3">
             <div className="flex items-center gap-2">
               <Button

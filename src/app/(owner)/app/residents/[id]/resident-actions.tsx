@@ -66,10 +66,13 @@ export function ResidentActions({
   resident,
   openInvoices,
   availableBeds,
+  can = { recordPayment: true, manage: true, checkout: true },
 }: {
   resident: Resident
   openInvoices: Invoice[]
   availableBeds: { id: string; label: string }[]
+  /** payments.record / residents.manage / residents.checkout */
+  can?: { recordPayment: boolean; manage: boolean; checkout: boolean }
 }) {
   const [dialog, setDialog] = React.useState<'payment' | 'transfer' | 'notice' | 'checkout' | null>(
     null,
@@ -78,7 +81,7 @@ export function ResidentActions({
 
   return (
     <>
-      {active && (
+      {active && can.recordPayment && (
         <Button
           variant={resident.propertyType === 'WOMENS' ? 'pink' : 'primary'}
           onClick={() => setDialog('payment')}
@@ -88,6 +91,7 @@ export function ResidentActions({
         </Button>
       )}
 
+      {(can.manage || can.checkout) && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon" aria-label="More actions">
@@ -97,19 +101,25 @@ export function ResidentActions({
         <DropdownMenuContent align="end" className="w-52">
           {active ? (
             <>
-              <DropdownMenuItem onSelect={() => setDialog('transfer')}>
-                <ArrowRightLeft />
-                Move to another bed
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog('notice')}>
-                <CalendarClock />
-                Mark notice period
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem destructive onSelect={() => setDialog('checkout')}>
-                <DoorOpen />
-                Check out & settle
-              </DropdownMenuItem>
+              {can.manage && (
+                <>
+                  <DropdownMenuItem onSelect={() => setDialog('transfer')}>
+                    <ArrowRightLeft />
+                    Move to another bed
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDialog('notice')}>
+                    <CalendarClock />
+                    Mark notice period
+                  </DropdownMenuItem>
+                </>
+              )}
+              {can.manage && can.checkout && <DropdownMenuSeparator />}
+              {can.checkout && (
+                <DropdownMenuItem destructive onSelect={() => setDialog('checkout')}>
+                  <DoorOpen />
+                  Check out & settle
+                </DropdownMenuItem>
+              )}
             </>
           ) : (
             <DropdownMenuItem disabled>
@@ -119,6 +129,7 @@ export function ResidentActions({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
 
       <PaymentDialog
         open={dialog === 'payment'}

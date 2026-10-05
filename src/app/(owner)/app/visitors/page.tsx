@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
+import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -31,7 +32,7 @@ export default async function VisitorsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'visitors', permission: 'visitors.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -54,7 +55,8 @@ export default async function VisitorsPage({
       : {}),
   }
 
-  const [visitors, total, todayCount, insideNow, properties, residents] = await Promise.all([
+  const canManage = user.permissions.includes('visitors.manage')
+  const [visitors, total, todayCount, insideNow, properties, residents, purposes, purposeLabels] = await Promise.all([
     prisma.visitor.findMany({
       where,
       include: {
@@ -91,7 +93,10 @@ export default async function VisitorsPage({
       select: { id: true, fullName: true, room: { select: { number: true } } },
       orderBy: { fullName: 'asc' },
     }),
+    getLookup(scope.organizationId, 'VISITOR_PURPOSE'),
+    getLookupLabels(scope.organizationId, 'VISITOR_PURPOSE'),
   ])
+  const purposeLabel = (value: string) => purposeLabels[value] ?? value
 
   return (
     <div className="space-y-6">
@@ -101,6 +106,7 @@ export default async function VisitorsPage({
         icon="userPlus"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Visitors' }]}
         actions={
+          canManage && (
           <QuickForm
             trigger="Sign in a visitor"
             title="Sign in a visitor"
@@ -131,12 +137,21 @@ export default async function VisitorsPage({
               },
               { kind: 'text', name: 'name', label: 'Visitor name', required: true, half: true },
               { kind: 'tel', name: 'phone', label: 'Phone', half: true },
-              { kind: 'text', name: 'purpose', label: 'Purpose of visit', required: true, half: true, placeholder: 'Parents visiting' },
+              {
+                kind: 'select',
+                name: 'purpose',
+                label: 'Purpose of visit',
+                required: true,
+                half: true,
+                defaultValue: purposes[0]?.value,
+                options: purposes,
+              },
               { kind: 'text', name: 'relation', label: 'Relationship', half: true, placeholder: 'Father' },
               { kind: 'text', name: 'idProof', label: 'ID shown', half: true, placeholder: 'Aadhaar' },
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
+          )
         }
       />
 
@@ -203,7 +218,7 @@ export default async function VisitorsPage({
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
-                        {visitor.purpose}
+                        {purposeLabel(visitor.purpose)}
                         {visitor.relation && (
                           <p className="text-xs text-slate-400">{visitor.relation}</p>
                         )}
@@ -221,7 +236,7 @@ export default async function VisitorsPage({
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {!visitor.exitAt && (
+                        {!visitor.exitAt && canManage && (
                           <SignOutVisitorButton visitorId={visitor.id} name={visitor.name} />
                         )}
                       </TableCell>
@@ -242,12 +257,18 @@ export default async function VisitorsPage({
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">{visitor.name}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {visitor.purpose}
+                      {purposeLabel(visitor.purpose)}
                       {visitor.resident ? ` · ${visitor.resident.fullName}` : ''}
                     </p>
                   </div>
                   {!visitor.exitAt ? (
-                    <SignOutVisitorButton visitorId={visitor.id} name={visitor.name} />
+                    canManage ? (
+                      <SignOutVisitorButton visitorId={visitor.id} name={visitor.name} />
+                    ) : (
+                      <Badge variant="warning" size="sm">
+                        Inside
+                      </Badge>
+                    )
                   ) : (
                     <Badge variant="default" size="sm">
                       Left

@@ -33,9 +33,18 @@ import {
 export function ComplaintWorkflow({
   complaint,
   staff,
+  roleLabels = {},
+  canAssign = true,
+  canManage = true,
 }: {
   complaint: { id: string; code: string; status: ComplaintStatus; assignedStaffId: string | null }
   staff: { id: string; name: string; role: string }[]
+  /** STAFF_ROLE value → label. */
+  roleLabels?: Record<string, string>
+  /** complaints.assign */
+  canAssign?: boolean
+  /** complaints.manage — status changes. */
+  canManage?: boolean
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -120,20 +129,21 @@ export function ComplaintWorkflow({
         </motion.div>
       )}
 
-      {!done && (
+      {!done && canAssign && (
         <Button variant="outline" onClick={() => setAssignOpen(true)}>
           <UserCog className="size-4" />
           {complaint.assignedStaffId ? 'Reassign' : 'Assign worker'}
         </Button>
       )}
 
-      {complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED' && (
+      {canManage && complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED' && (
         <Button variant="success" loading={busy} onClick={() => setResolveOpen(true)}>
           <CheckCircle2 className="size-4" />
           Mark resolved
         </Button>
       )}
 
+      {canManage && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon" aria-label="Change status">
@@ -161,6 +171,7 @@ export function ComplaintWorkflow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
 
       {/* ----------------------------------------------------- Assign */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
@@ -177,7 +188,7 @@ export function ComplaintWorkflow({
               <option value="">Select a worker</option>
               {staff.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name} — {member.role.replace('_', ' ').toLowerCase()}
+                  {member.name} — {roleLabels[member.role] ?? member.role.replace('_', ' ').toLowerCase()}
                 </option>
               ))}
             </Select>

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, recordActivity } from '../events'
 import { formatMoney, startOfDay } from '@/lib/utils'
+import { isModuleOn } from './org-modules'
 
 /**
  * Food and grocery.
@@ -267,6 +268,8 @@ async function raiseLowStock(itemId: string) {
     include: { property: true },
   })
   if (!item) return
+  // No low-stock alerts while the grocery module is switched off.
+  if (!(await isModuleOn(item.organizationId, 'grocery'))) return
   await recordActivity({
     organizationId: item.organizationId,
     propertyId: item.propertyId,

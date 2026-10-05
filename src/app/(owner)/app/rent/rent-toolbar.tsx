@@ -19,7 +19,17 @@ import {
  * Manual triggers for the rent automations. They call exactly the same
  * services the nightly job runs, so results can never differ.
  */
-export function RentToolbar({ currentMonth }: { currentMonth: string }) {
+export function RentToolbar({
+  currentMonth,
+  canManage = true,
+  canRemind = true,
+}: {
+  currentMonth: string
+  /** rent.manage — generate invoices, refresh overdue. */
+  canManage?: boolean
+  /** payments.record — send reminders. */
+  canRemind?: boolean
+}) {
   const router = useRouter()
   const toast = useToast()
   const [busy, setBusy] = React.useState<string | null>(null)
@@ -44,23 +54,29 @@ export function RentToolbar({ currentMonth }: { currentMonth: string }) {
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        loading={busy === 'REFRESH_OVERDUE'}
-        onClick={() => run('REFRESH_OVERDUE', 'Overdue refreshed')}
-      >
-        <AlertTriangle className="size-4" />
-        Refresh overdue
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => setConfirm('remind')}>
-        <MessageCircle className="size-4" />
-        Send reminders
-      </Button>
-      <Button variant="primary" size="sm" onClick={() => setConfirm('generate')}>
-        <FileText className="size-4" />
-        Generate rent
-      </Button>
+      {canManage && (
+        <Button
+          variant="outline"
+          size="sm"
+          loading={busy === 'REFRESH_OVERDUE'}
+          onClick={() => run('REFRESH_OVERDUE', 'Overdue refreshed')}
+        >
+          <AlertTriangle className="size-4" />
+          Refresh overdue
+        </Button>
+      )}
+      {canRemind && (
+        <Button variant="outline" size="sm" onClick={() => setConfirm('remind')}>
+          <MessageCircle className="size-4" />
+          Send reminders
+        </Button>
+      )}
+      {canManage && (
+        <Button variant="primary" size="sm" onClick={() => setConfirm('generate')}>
+          <FileText className="size-4" />
+          Generate rent
+        </Button>
+      )}
 
       <Dialog open={confirm === 'generate'} onOpenChange={(o) => !o && setConfirm(null)}>
         <DialogContent size="sm">

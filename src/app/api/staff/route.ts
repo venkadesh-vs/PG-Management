@@ -1,10 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { route } from '@/lib/api-helpers'
-import { assertPropertyAccess, resolveScope } from '@/lib/tenancy'
+import { assertPropertyAccess, ForbiddenError, hasPermission, resolveScope } from '@/lib/tenancy'
 
 /** GET /api/staff — the org's active staff, for assignment pickers. */
 export const GET = route(
   async ({ user, request }) => {
+    if (!hasPermission(user, 'staff.view') && !hasPermission(user, 'complaints.assign')) {
+      throw new ForbiddenError('Your role does not allow this. Ask the PG owner for access.')
+    }
     const url = new URL(request.url)
     const propertyId = url.searchParams.get('propertyId')
     if (propertyId) await assertPropertyAccess(user, propertyId)
@@ -36,5 +39,5 @@ export const GET = route(
 
     return { staff }
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { roles: ['OWNER', 'MANAGER'], module: 'staff' },
 )

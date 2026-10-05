@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { addDays, cn, formatDate, formatMoney, formatPhone, initials, startOfDay } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
+import { getLookupLabels } from '@/server/services/org-defaults'
 import { MarkAttendanceButton } from './mark-attendance'
 
 export const metadata: Metadata = { title: 'Profile' }
@@ -39,6 +40,7 @@ export default async function WorkerProfilePage() {
     },
   })
   if (!staff) return null
+  const roleLabels = await getLookupLabels(staff.organizationId, 'STAFF_ROLE')
 
   const todayAttendance = staff.attendance.find(
     (a) => startOfDay(a.date).getTime() === today.getTime(),
@@ -61,17 +63,19 @@ export default async function WorkerProfilePage() {
             <h1 className="truncate font-display text-xl font-semibold tracking-tight">
               {staff.name}
             </h1>
-            <p className="text-sm capitalize text-white/75">
-              {staff.role.replace('_', ' ').toLowerCase()} · {staff.code}
+            <p className="text-sm text-white/75">
+              {user.roleName ?? roleLabels[staff.role] ?? staff.role} · {staff.code}
             </p>
           </div>
         </div>
       </div>
 
-      <MarkAttendanceButton
-        staffName={staff.name}
-        currentStatus={todayAttendance?.status ?? null}
-      />
+      {user.permissions.includes('attendance.self') && (
+        <MarkAttendanceButton
+          staffName={staff.name}
+          currentStatus={todayAttendance?.status ?? null}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Card>

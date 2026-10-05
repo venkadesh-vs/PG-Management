@@ -4,6 +4,9 @@ import { ok, parseBody, route } from '@/lib/api-helpers'
 import { NotFoundError } from '@/lib/tenancy'
 import { recordActivity } from '@/server/events'
 import { createClientSchema } from '@/lib/validation'
+import { OPTIONAL_MODULES } from '@/lib/modules'
+import { ValidationError } from '@/lib/tenancy'
+import type { Prisma } from '@prisma/client'
 import { bootstrapOrganization, sendAccessLink, sendOwnerAccess } from '@/server/services/accounts'
 
 const schema = z.discriminatedUnion('action', [
@@ -15,7 +18,15 @@ const schema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('CREATE') }).merge(createClientSchema),
   z.object({ action: z.literal('RESEND_OWNER_INVITE'), organizationId: z.string().min(1) }),
+  z.object({
+    action: z.literal('SET_FEATURE_OVERRIDES'),
+    organizationId: z.string().min(1),
+    /** Flag keys withheld from this client ({flag: false} is stored). Others follow the global flag. */
+    withheld: z.array(z.string().min(1)).max(50),
+  }),
 ])
+
+const MODULE_FLAGS = new Set(OPTIONAL_MODULES.flatMap((m) => (m.flag ? [m.flag] : [])))
 
 /** Platform-level account controls. Super Admin only. */
 export const POST = route(
@@ -53,6 +64,38 @@ export const POST = route(
             ? `${owner.name} already uses StayFlow — a password reset link was sent to them`
             : `Invite sent to ${owner.name}`,
       })
+    }
+
+    if (body.action === 'SET_FEATURE_OVERRIDES') {
+      const unknown = body.withheld.filter((f) => !MODULE_FLAGS.has(f))
+      if (unknown.length) throw new ValidationError(`Unknown feature: ${unknown.join(', ')}`)
+      const target = await prisma.organization.findUnique({
+        where: { id: body.organizationId },
+        select: { id: true, name: true, featureOverrides: true },
+      })
+      if (!target) throw new NotFoundError('Organization not found')
+      // Keep any non-module overrides untouched; rewrite only module flags.
+      const current = { ...((target.featureOverrides ?? {}) as Record<string, unknown>) }
+      for (const flag of MODULE_FLAGS) delete current[flag]
+      for (const flag of body.withheld) current[flag] = false
+      await prisma.organization.update({
+        where: { id: target.id },
+        data: { featureOverrides: current as Prisma.InputJsonValue },
+      })
+      const labels = OPTIONAL_MODULES.filter((m) => m.flag && body.withheld.includes(m.flag)).map((m) => m.label)
+      await recordActivity({
+        organizationId: target.id,
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: user.role,
+        event: 'SETTINGS_UPDATED',
+        entityType: 'Organization',
+        entityId: target.id,
+        summary: labels.length
+          ? `StayFlow withheld ${labels.join(', ')} for ${target.name}`
+          : `StayFlow restored every plan feature for ${target.name}`,
+      })
+      return ok({ featureOverrides: current, message: `Features updated for ${target.name}` })
     }
 
     const org = await prisma.organization.findUnique({

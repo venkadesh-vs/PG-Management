@@ -187,6 +187,13 @@ export const ROLE_TEMPLATES: {
     permissions: ['food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self'],
   },
   {
+    name: 'General staff',
+    description: 'All-round staff: tasks, kitchen, grocery and attendance, on the staff app.',
+    app: 'STAFF_APP',
+    color: 'slate',
+    permissions: ['tasks.work', 'food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self'],
+  },
+  {
     name: 'Housekeeping',
     description: 'Cleaning and maintenance tasks, on the staff app.',
     app: 'STAFF_APP',

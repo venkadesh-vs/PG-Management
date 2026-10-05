@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -39,7 +39,7 @@ export default async function InventoryPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'inventory', permission: 'inventory.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -108,6 +108,7 @@ export default async function InventoryPage({
         icon="boxes"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Inventory' }]}
         actions={
+          user.permissions.includes('inventory.manage') && (
           <QuickForm
             trigger="Add item"
             title="Add an inventory item"
@@ -158,6 +159,7 @@ export default async function InventoryPage({
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
+          )
         }
       />
 

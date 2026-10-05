@@ -5,8 +5,7 @@ import { recordActivity } from '@/server/events'
 
 /**
  * POST /api/settings — organization-wide automation settings. These drive
- * invoice generation, late fees and reminders, so only an OWNER may change
- * them.
+ * invoice generation, late fees and reminders, so they need settings.manage.
  */
 export const POST = route(
   async ({ user, request }) => {
@@ -49,5 +48,5 @@ export const POST = route(
 
     return ok({ settings, message: 'Settings saved' })
   },
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage' },
 )

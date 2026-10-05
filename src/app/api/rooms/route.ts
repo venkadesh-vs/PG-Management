@@ -5,6 +5,8 @@ import {
   assertFloorInProperty,
   assertPropertyAccess,
   ConflictError,
+  ForbiddenError,
+  hasPermission,
   NotFoundError,
 } from '@/lib/tenancy'
 import { bedUpdateSchema, floorSchema, roomSchema } from '@/lib/validation'
@@ -181,7 +183,7 @@ export const POST = route(
       { status: 201 },
     )
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { permission: 'properties.manage' },
 )
 
 /** GET /api/rooms?propertyId= — the bed picker data source. */
@@ -190,6 +192,10 @@ export const GET = route(
     const url = new URL(request.url)
     const propertyId = url.searchParams.get('propertyId')
     const onlyAvailable = url.searchParams.get('available') === '1'
+    // The bed picker also serves check-in and transfers.
+    if (!hasPermission(user, 'properties.view') && !hasPermission(user, 'residents.manage')) {
+      throw new ForbiddenError('Your role does not allow this. Ask the PG owner for access.')
+    }
     if (!propertyId) return { floors: [] }
     await assertPropertyAccess(user, propertyId)
 
@@ -217,5 +223,5 @@ export const GET = route(
       })),
     }
   },
-  { roles: ['OWNER', 'MANAGER'] },
+  { module: 'properties' },
 )

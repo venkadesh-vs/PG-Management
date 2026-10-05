@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Pin, Users } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
@@ -18,7 +18,7 @@ export default async function AnnouncementsPage({
 }: {
   searchParams: Promise<{ property?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'announcements', permission: 'announcements.send' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -63,7 +63,13 @@ export default async function AnnouncementsPage({
         subtitle={`One message reaches every resident in their app — and optionally on WhatsApp. ${residentCount} residents can be reached right now.`}
         icon="megaphone"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Announcements' }]}
-        actions={<AnnouncementComposer properties={properties} floors={floors} />}
+        actions={
+          <AnnouncementComposer
+            properties={properties}
+            floors={floors}
+            whatsappEnabled={user.modules.includes('whatsapp')}
+          />
+        }
       />
 
       {announcements.length === 0 ? (

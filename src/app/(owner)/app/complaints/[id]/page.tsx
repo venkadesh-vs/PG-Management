@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Building2, Clock, DoorOpen, Phone, Star, UserRound } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { inScope } from '@/lib/tenancy'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE, themeFor } from '@/lib/theme'
@@ -10,6 +10,7 @@ import { cn, formatDateTime, formatPhone, relativeTime } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
+import { getLookupLabels } from '@/server/services/org-defaults'
 import { ComplaintWorkflow } from './complaint-workflow'
 import { ComplaintThread } from './complaint-thread'
 
@@ -20,7 +21,7 @@ export default async function ComplaintDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'complaints', permission: 'complaints.view' })
   const { id } = await params
 
   const complaint = await prisma.complaint.findUnique({
@@ -40,15 +41,19 @@ export default async function ComplaintDetailPage({
   if (complaint.organizationId !== user.organizationId) notFound()
   if (!inScope(user, complaint.propertyId)) notFound()
 
-  const staff = await prisma.staff.findMany({
-    where: {
-      organizationId: user.organizationId,
-      active: true,
-      OR: [{ propertyId: complaint.propertyId }, { propertyId: null }],
-    },
-    select: { id: true, name: true, role: true },
-    orderBy: { name: 'asc' },
-  })
+  const [staff, categoryLabels, roleLabels] = await Promise.all([
+    prisma.staff.findMany({
+      where: {
+        organizationId: user.organizationId,
+        active: true,
+        OR: [{ propertyId: complaint.propertyId }, { propertyId: null }],
+      },
+      select: { id: true, name: true, role: true },
+      orderBy: { name: 'asc' },
+    }),
+    getLookupLabels(user.organizationId, 'COMPLAINT_CATEGORY'),
+    getLookupLabels(user.organizationId, 'STAFF_ROLE'),
+  ])
 
   const theme = themeFor(complaint.property.type)
   const statusStyle = COMPLAINT_STATUS_STYLE[complaint.status]
@@ -73,6 +78,9 @@ export default async function ComplaintDetailPage({
               assignedStaffId: complaint.assignedStaffId,
             }}
             staff={staff}
+            roleLabels={roleLabels}
+            canAssign={user.permissions.includes('complaints.assign')}
+            canManage={user.permissions.includes('complaints.manage')}
           />
         }
       />
@@ -84,8 +92,8 @@ export default async function ComplaintDetailPage({
             <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
               <div>
                 <CardTitle className="text-base">{complaint.title}</CardTitle>
-                <p className="mt-1 text-xs capitalize text-slate-500">
-                  {complaint.category.toLowerCase()} · {complaint.code}
+                <p className="mt-1 text-xs text-slate-500">
+                  {categoryLabels[complaint.category] ?? complaint.category} · {complaint.code}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
@@ -193,7 +201,7 @@ export default async function ComplaintDetailPage({
                     {complaint.assignedStaff.name}
                   </p>
                   <p className="text-xs capitalize text-slate-500">
-                    {complaint.assignedStaff.role.replace('_', ' ').toLowerCase()}
+                    {roleLabels[complaint.assignedStaff.role] ?? complaint.assignedStaff.role.replace('_', ' ').toLowerCase()}
                   </p>
                   <InfoRow icon={Phone} label={formatPhone(complaint.assignedStaff.phone)} />
                   {complaint.assignedAt && (

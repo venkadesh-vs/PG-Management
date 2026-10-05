@@ -43,7 +43,7 @@ export const GET = route(
       webhookUrl: webhookUrl(user.organizationId),
     })
   },
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage' },
 )
 
 export const POST = route(
@@ -117,7 +117,7 @@ export const POST = route(
       webhookUrl: webhookUrl(organizationId),
     })
   },
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage' },
 )
 
 export const DELETE = route(
@@ -139,5 +139,5 @@ export const DELETE = route(
     }
     return ok({ message: 'Razorpay disconnected. Residents will see your UPI details instead.' })
   },
-  { roles: ['OWNER'] },
+  { permission: 'settings.manage' },
 )

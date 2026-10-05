@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/app/page-header'
+import { getLookup } from '@/server/services/org-defaults'
 import { CheckInWizard } from './check-in-wizard'
 
 export const metadata: Metadata = { title: 'Check in resident' }
@@ -13,7 +14,7 @@ export default async function NewResidentPage({
 }: {
   searchParams: Promise<{ property?: string; bed?: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'residents', permission: 'residents.manage' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
 
@@ -38,10 +39,14 @@ export default async function NewResidentPage({
 
   if (!properties.length) redirect('/app/properties/new')
 
-  const settings = await prisma.orgSetting.findUnique({
-    where: { organizationId: scope.organizationId },
-    select: { rentDueDay: true },
-  })
+  const [settings, idTypes, relations] = await Promise.all([
+    prisma.orgSetting.findUnique({
+      where: { organizationId: scope.organizationId },
+      select: { rentDueDay: true },
+    }),
+    getLookup(scope.organizationId, 'ID_TYPE'),
+    getLookup(scope.organizationId, 'GUARDIAN_RELATION'),
+  ])
 
   return (
     <div className="space-y-6">
@@ -60,6 +65,9 @@ export default async function NewResidentPage({
         defaultPropertyId={scope.propertyId ?? properties[0].id}
         defaultBedId={params.bed}
         rentDueDay={settings?.rentDueDay ?? 5}
+        idTypes={idTypes}
+        relations={relations}
+        foodEnabled={user.modules.includes('food')}
       />
     </div>
   )

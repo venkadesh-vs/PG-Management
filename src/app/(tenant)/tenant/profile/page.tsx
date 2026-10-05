@@ -87,15 +87,17 @@ export default async function TenantProfilePage() {
           {resident.maintenanceFee > 0 && (
             <Row icon={Wallet} label="Maintenance" value={formatMoney(resident.maintenanceFee)} />
           )}
-          <Row
-            icon={Utensils}
-            label="Food plan"
-            value={
-              resident.foodSubscription?.active
-                ? `${resident.foodSubscription.foodPlan.name} · ${formatMoney(resident.foodCharge)}`
-                : 'Not subscribed'
-            }
-          />
+          {user.modules.includes('food') && (
+            <Row
+              icon={Utensils}
+              label="Food plan"
+              value={
+                resident.foodSubscription?.active
+                  ? `${resident.foodSubscription.foodPlan.name} · ${formatMoney(resident.foodCharge)}`
+                  : 'Not subscribed'
+              }
+            />
+          )}
           <Row
             icon={ShieldCheck}
             label="Security deposit"

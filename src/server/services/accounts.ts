@@ -519,6 +519,8 @@ export async function inviteManager(params: {
   email: string
   phone: string
   propertyIds: string[]
+  /** Dashboard role for them; defaults to the organization's "Manager" role. */
+  orgRoleId?: string | null
 }) {
   const email = normaliseEmail(params.email)
   const propertyIds = [...new Set(params.propertyIds)]
@@ -533,6 +535,16 @@ export async function inviteManager(params: {
       })
       if (owned !== propertyIds.length) throw new ValidationError('Choose PGs from your own account')
     }
+    await ensureOrgDefaults(params.organizationId, tx)
+    const orgRole = params.orgRoleId
+      ? await tx.orgRole.findFirst({ where: { id: params.orgRoleId, organizationId: params.organizationId } })
+      : await tx.orgRole.findFirst({
+          where: { organizationId: params.organizationId, app: 'DASHBOARD', name: 'Manager' },
+        })
+    if (params.orgRoleId && !orgRole) throw new ValidationError('Choose one of your roles')
+    if (orgRole && orgRole.app !== 'DASHBOARD') {
+      throw new ValidationError(`${orgRole.name} is a staff app role. Choose a dashboard role for a manager.`)
+    }
     const user = await tx.user.create({
       data: {
         organizationId: params.organizationId,
@@ -541,6 +553,7 @@ export async function inviteManager(params: {
         name: params.name.trim(),
         passwordHash,
         role: 'MANAGER',
+        orgRoleId: orgRole?.id ?? null,
         status: 'INVITED',
         mustChangePassword: true,
         propertyAccess: propertyIds.length
@@ -560,7 +573,7 @@ export async function inviteManager(params: {
         event: 'STAFF_CREATED',
         entityType: 'User',
         entityId: user.id,
-        summary: `${user.name} invited as manager ${scope}`,
+        summary: `${user.name} invited as ${orgRole?.name ?? 'manager'} ${scope}`,
       },
       tx,
     )
@@ -583,6 +596,56 @@ export async function resendTeamInvite(params: { organizationId: string; userId:
   const member = await teamMember(params.organizationId, params.userId)
   if (member.status === 'SUSPENDED') throw new ValidationError('Reactivate this person first')
   return sendAccessLink(member.id)
+}
+
+/**
+ * Gives a manager or staff-app login a custom role. The role's app must match
+ * the account: MANAGER ↔ DASHBOARD, WORKER ↔ STAFF_APP. Owners have no role.
+ */
+export async function setMemberRole(params: {
+  organizationId: string
+  actor: Actor
+  userId: string
+  orgRoleId: string
+}) {
+  const [member, role] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: params.userId, organizationId: params.organizationId, archivedAt: null },
+      select: { id: true, name: true, role: true, orgRole: { select: { name: true } } },
+    }),
+    prisma.orgRole.findFirst({ where: { id: params.orgRoleId, organizationId: params.organizationId } }),
+  ])
+  if (!member) throw new NotFoundError('Team member not found')
+  if (!role) throw new NotFoundError('That role no longer exists')
+  if (member.role === 'OWNER') throw new ValidationError('Owners always have full access — no role needed')
+  if (member.role !== 'MANAGER' && member.role !== 'WORKER') {
+    throw new ValidationError('Only managers and staff app logins can have a role')
+  }
+  const expected = member.role === 'MANAGER' ? 'DASHBOARD' : 'STAFF_APP'
+  if (role.app !== expected) {
+    throw new ValidationError(
+      member.role === 'MANAGER'
+        ? `${role.name} is a staff app role. Choose a dashboard role for ${member.name}.`
+        : `${role.name} is a dashboard role. Choose a staff app role for ${member.name}.`,
+    )
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: member.id }, data: { orgRoleId: role.id } })
+    await recordActivity(
+      {
+        organizationId: params.organizationId,
+        actorId: params.actor.id,
+        actorName: params.actor.name,
+        actorRole: params.actor.role,
+        event: 'SETTINGS_UPDATED',
+        entityType: 'User',
+        entityId: member.id,
+        summary: `${member.name} is now ${role.name}${member.orgRole ? ` (was ${member.orgRole.name})` : ''}`,
+      },
+      tx,
+    )
+  })
+  return { name: member.name, roleName: role.name }
 }
 
 /** Deactivate (SUSPENDED + signed out everywhere) or reactivate a team member. */

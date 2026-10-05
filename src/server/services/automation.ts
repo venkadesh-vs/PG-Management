@@ -13,6 +13,7 @@ import { snapshotOccupancy } from './residents'
 import { enforceGracePeriods, runSubscriptionBilling } from './subscriptions'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
 import { retryFailedWhatsApp } from '../integrations/whatsapp'
+import { orgsWithModuleOff } from './org-modules'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -160,7 +161,8 @@ async function runSteps(
     errors.push(`overdue: ${(error as Error).message}`)
   }
 
-  // 3. Rent reminders — before due, on due, and after due.
+  // 3. Rent reminders — before due, on due, and after due (on WhatsApp, so
+  //    organizations with that module off are skipped inside).
   try {
     const result = await sendRentReminders({ organizationId: options?.organizationId, now })
     report.reminders.sent = result.sent
@@ -201,12 +203,17 @@ async function runSteps(
     errors.push(`housekeeping: ${(error as Error).message}`)
   }
 
-  // 6. Refresh today's expected meal counts from live subscriptions.
+  // 6. Refresh today's expected meal counts from live subscriptions —
+  //    skipped for organizations with Food & meals switched off.
   try {
+    const foodOff = await orgsWithModuleOff('food', options?.organizationId)
     const meals = await prisma.meal.findMany({
       where: {
         date: startOfDay(now),
-        ...(options?.organizationId ? { organizationId: options.organizationId } : {}),
+        AND: [
+          options?.organizationId ? { organizationId: options.organizationId } : {},
+          foodOff.length ? { organizationId: { notIn: foodOff } } : {},
+        ],
       },
     })
     for (const meal of meals) {
@@ -222,6 +229,7 @@ async function runSteps(
   // 7. Retry WhatsApp messages that failed transiently (network, rate limit,
   //    expired token since fixed). Small batch; opt-outs and Meta's
   //    permanent rejections are never retried.
+  //    Organizations with WhatsApp switched off are skipped (in the sender).
   try {
     report.whatsappRetries = await retryFailedWhatsApp({ organizationId: options?.organizationId, now })
   } catch (error) {

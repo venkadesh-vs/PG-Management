@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE } from '@/lib/theme'
@@ -8,21 +9,29 @@ import { relativeTime } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
+import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { RaiseComplaintButton } from './raise-complaint'
 
 export const metadata: Metadata = { title: 'Complaints' }
 
 export default async function TenantComplaintsPage() {
   const user = await requireTenant()
+  // Switched off for this PG: back to the home screen, nothing broken.
+  if (!user.modules.includes('complaints')) redirect('/tenant')
 
-  const complaints = await prisma.complaint.findMany({
-    where: { residentId: user.residentId },
-    include: {
-      assignedStaff: { select: { name: true, role: true } },
-      _count: { select: { updates: true } },
-    },
-    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-  })
+  const orgId = user.organizationId ?? ''
+  const [complaints, categories, categoryLabels] = await Promise.all([
+    prisma.complaint.findMany({
+      where: { residentId: user.residentId },
+      include: {
+        assignedStaff: { select: { name: true, role: true } },
+        _count: { select: { updates: true } },
+      },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    }),
+    getLookup(orgId, 'COMPLAINT_CATEGORY'),
+    getLookupLabels(orgId, 'COMPLAINT_CATEGORY'),
+  ])
 
   const open = complaints.filter((c) =>
     ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'].includes(c.status),
@@ -41,7 +50,7 @@ export default async function TenantComplaintsPage() {
               : 'Report anything that needs fixing.'}
           </p>
         </div>
-        <RaiseComplaintButton />
+        <RaiseComplaintButton categories={categories} />
       </div>
 
       {complaints.length === 0 ? (
@@ -49,7 +58,7 @@ export default async function TenantComplaintsPage() {
           icon="wrench"
           title="Nothing reported yet"
           description="A leaking tap, a fan making noise, slow WiFi — raise it here and you can follow exactly what happens next."
-          action={<RaiseComplaintButton variant="outline" />}
+          action={<RaiseComplaintButton variant="outline" categories={categories} />}
         />
       ) : (
         <ul className="space-y-2">
@@ -69,7 +78,8 @@ export default async function TenantComplaintsPage() {
                           <StatusChip label={priority.label} chip={priority.chip} />
                         </div>
                         <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {complaint.code} · {relativeTime(complaint.createdAt)}
+                          {complaint.code} · {categoryLabels[complaint.category] ?? complaint.category} ·{' '}
+                          {relativeTime(complaint.createdAt)}
                           {complaint.assignedStaff
                             ? ` · ${complaint.assignedStaff.name} is on it`
                             : ''}

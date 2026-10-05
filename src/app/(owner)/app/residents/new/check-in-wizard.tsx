@@ -46,6 +46,8 @@ type PropertyOption = {
   foodPlans: { id: string; name: string; monthlyCharge: number; isDefault: boolean }[]
 }
 
+type LookupOption = { value: string; label: string }
+
 type BedOption = {
   id: string
   label: string
@@ -98,7 +100,16 @@ export function CheckInWizard({
   defaultPropertyId,
   defaultBedId,
   rentDueDay,
+  idTypes,
+  relations,
+  foodEnabled = true,
 }: {
+  /** The org's ID_TYPE lookup list. */
+  idTypes: LookupOption[]
+  /** The org's GUARDIAN_RELATION lookup list. */
+  relations: LookupOption[]
+  /** False when the Food module is switched off. */
+  foodEnabled?: boolean
   properties: PropertyOption[]
   defaultPropertyId: string
   defaultBedId?: string
@@ -126,14 +137,14 @@ export function CheckInWizard({
       bloodGroup: '',
       qualification: '',
       guardianName: '',
-      guardianRelation: 'Father',
+      guardianRelation: relations[0]?.value ?? '',
       guardianPhone: '',
       guardianAddress: '',
       permanentAddress: '',
       city: '',
       state: 'Tamil Nadu',
       pincode: '',
-      idType: 'AADHAAR',
+      idType: idTypes[0]?.value ?? '',
       idNumber: '',
       occupationType: 'WORKING',
       companyName: '',
@@ -145,7 +156,7 @@ export function CheckInWizard({
       rentAmount: defaultProperty.standardRent,
       depositAmount: defaultProperty.standardDeposit,
       maintenanceFee: defaultProperty.maintenanceFee,
-      foodOptIn: true,
+      foodOptIn: foodEnabled,
       foodCharge: defaultProperty.foodCharge,
       foodPlanId: defaultProperty.foodPlans.find((p) => p.isDefault)?.id ?? '',
       rentDueDay,
@@ -409,9 +420,9 @@ export function CheckInWizard({
                   </Field>
                   <Field label="Relationship">
                     <Select {...form.register('guardianRelation')}>
-                      {['Father', 'Mother', 'Brother', 'Sister', 'Uncle', 'Guardian'].map((r) => (
-                        <option key={r} value={r}>
-                          {r}
+                      {relations.map((r) => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
                         </option>
                       ))}
                     </Select>
@@ -444,13 +455,7 @@ export function CheckInWizard({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="ID type">
                       <Select {...form.register('idType')}>
-                        {[
-                          ['AADHAAR', 'Aadhaar'],
-                          ['PAN', 'PAN card'],
-                          ['DRIVING_LICENSE', 'Driving licence'],
-                          ['PASSPORT', 'Passport'],
-                          ['COLLEGE_ID', 'College ID'],
-                        ].map(([value, label]) => (
+                        {idTypes.map(({ value, label }) => (
                           <option key={value} value={value}>
                             {label}
                           </option>
@@ -639,6 +644,7 @@ export function CheckInWizard({
                     </Field>
                   </div>
 
+                  {foodEnabled && (
                   <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-start gap-3">
@@ -673,6 +679,7 @@ export function CheckInWizard({
                       </div>
                     )}
                   </div>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Discount (per month)" hint="Applied to every invoice">
@@ -713,8 +720,8 @@ export function CheckInWizard({
                         ['Mobile', values.phone],
                         ['WhatsApp', values.whatsappPhone || values.phone],
                         ['Email', values.email || '—'],
-                        ['Guardian', values.guardianName ? `${values.guardianName} (${values.guardianRelation})` : '—'],
-                        ['ID', values.idNumber ? `${values.idType} · ${values.idNumber}` : 'Not provided'],
+                        ['Guardian', values.guardianName ? `${values.guardianName} (${labelOf(relations, values.guardianRelation)})` : '—'],
+                        ['ID', values.idNumber ? `${labelOf(idTypes, values.idType)} · ${values.idNumber}` : 'Not provided'],
                       ]}
                     />
                     <ReviewBlock
@@ -1007,4 +1014,9 @@ function SuccessPanel({
       </Card>
     </motion.div>
   )
+}
+
+function labelOf(options: LookupOption[], value: string | undefined) {
+  if (!value) return '—'
+  return options.find((o) => o.value === value)?.label ?? value
 }

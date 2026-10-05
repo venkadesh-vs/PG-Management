@@ -13,7 +13,7 @@ import {
   Utensils,
   Wallet,
 } from 'lucide-react'
-import { requireOrgUser } from '@/lib/auth'
+import { requireAccess } from '@/lib/auth'
 import { assertResidentAccess } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import {
@@ -45,6 +45,7 @@ import {
   TableRow,
   TableWrap,
 } from '@/components/ui/table'
+import { getLookupLabels } from '@/server/services/org-defaults'
 import { ResidentActions } from './resident-actions'
 import { ResendInviteButton } from '@/components/app/invite-link'
 import { LedgerTable } from './ledger-table'
@@ -56,9 +57,10 @@ export default async function ResidentDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const user = await requireOrgUser()
+  const user = await requireAccess({ module: 'residents', permission: 'residents.view' })
   const { id } = await params
   await assertResidentAccess(user, id)
+  const has = (p: string) => user.permissions.includes(p)
 
   const resident = await prisma.resident.findUnique({
     where: { id },
@@ -92,11 +94,16 @@ export default async function ResidentDetailPage({
   )
 
   // Vacant beds in the same PG, for the transfer dialog.
-  const availableBeds = await prisma.bed.findMany({
-    where: { propertyId: resident.propertyId, status: 'AVAILABLE' },
-    include: { room: { select: { number: true } } },
-    orderBy: [{ room: { number: 'asc' } }, { label: 'asc' }],
-  })
+  const [availableBeds, idTypeLabels, relationLabels, categoryLabels] = await Promise.all([
+    prisma.bed.findMany({
+      where: { propertyId: resident.propertyId, status: 'AVAILABLE' },
+      include: { room: { select: { number: true } } },
+      orderBy: [{ room: { number: 'asc' } }, { label: 'asc' }],
+    }),
+    getLookupLabels(resident.organizationId, 'ID_TYPE'),
+    getLookupLabels(resident.organizationId, 'GUARDIAN_RELATION'),
+    getLookupLabels(resident.organizationId, 'COMPLAINT_CATEGORY'),
+  ])
 
   return (
     <div className="space-y-6">
@@ -129,6 +136,11 @@ export default async function ResidentDetailPage({
               id: b.id,
               label: `Room ${b.room.number} · Bed ${b.label}`,
             }))}
+            can={{
+              recordPayment: has('payments.record'),
+              manage: has('residents.manage'),
+              checkout: has('residents.checkout'),
+            }}
           />
         }
       />
@@ -203,7 +215,7 @@ export default async function ResidentDetailPage({
           <TabsTrigger value="rent">Rent & invoices</TabsTrigger>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="complaints">Complaints</TabsTrigger>
+          {user.modules.includes('complaints') && <TabsTrigger value="complaints">Complaints</TabsTrigger>}
         </TabsList>
 
         {/* ----------------------------------------------------- Overview */}
@@ -243,7 +255,7 @@ export default async function ResidentDetailPage({
                   label="Guardian"
                   value={
                     resident.guardianName
-                      ? `${resident.guardianName}${resident.guardianRelation ? ` (${resident.guardianRelation})` : ''}`
+                      ? `${resident.guardianName}${resident.guardianRelation ? ` (${relationLabels[resident.guardianRelation] ?? resident.guardianRelation})` : ''}`
                       : null
                   }
                 />
@@ -252,7 +264,7 @@ export default async function ResidentDetailPage({
                   label="ID proof"
                   value={
                     resident.idNumber
-                      ? `${resident.idType ?? 'ID'} · ${maskId(resident.idNumber)}`
+                      ? `${resident.idType ? (idTypeLabels[resident.idType] ?? resident.idType) : 'ID'} · ${has('residents.kyc') ? resident.idNumber : maskId(resident.idNumber)}`
                       : null
                   }
                 />
@@ -327,7 +339,7 @@ export default async function ResidentDetailPage({
                   {resident.user?.lastLoginAt && (
                     <Row label="Last signed in" value={formatDateTime(resident.user.lastLoginAt)} />
                   )}
-                  {resident.status !== 'CHECKED_OUT' && (
+                  {resident.status !== 'CHECKED_OUT' && has('residents.manage') && (
                     <ResendInviteButton
                       action="RESEND_RESIDENT_INVITE"
                       payload={{ residentId: resident.id }}
@@ -590,7 +602,7 @@ export default async function ResidentDetailPage({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">{complaint.title}</p>
                       <p className="text-xs text-slate-500">
-                        {complaint.code} · {complaint.category.toLowerCase()} ·{' '}
+                        {complaint.code} · {categoryLabels[complaint.category] ?? complaint.category} ·{' '}
                         {formatDate(complaint.createdAt)}
                       </p>
                     </div>

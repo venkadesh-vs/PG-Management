@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { fail, handleError, ok } from '@/lib/api-helpers'
-import { assertResidentAccess, withMaskedId } from '@/lib/tenancy'
+import { assertResidentAccess, requireModule, requirePermission, withMaskedId } from '@/lib/tenancy'
 import { residentUpdateSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 
@@ -14,7 +14,8 @@ export async function GET(_request: Request, { params }: Params) {
     if (!user) return fail('Please sign in', 401)
     // The full record carries ID numbers, documents and the money trail —
     // only the owner/manager, or the resident themselves, may read it.
-    if (!['OWNER', 'MANAGER', 'TENANT'].includes(user.role)) return fail('Not allowed', 403)
+    if (user.role === 'TENANT') requireModule(user, 'residentApp')
+    else requirePermission(user, 'residents.view')
     const { id } = await params
     await assertResidentAccess(user, id)
 
@@ -43,7 +44,8 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const user = await getSessionUser()
     if (!user) return fail('Please sign in', 401)
-    if (!['OWNER', 'MANAGER'].includes(user.role)) return fail('Not allowed', 403)
+    if (user.role === 'TENANT') return fail('Not allowed', 403)
+    requirePermission(user, 'residents.manage')
     const { id } = await params
     await assertResidentAccess(user, id)
 

@@ -8,13 +8,26 @@ import {
   requireModule,
   requirePermission,
 } from '@/lib/tenancy'
-import { complaintActionSchema, complaintSchema } from '@/lib/validation'
+import { z } from 'zod'
+import { complaintActionSchema as baseActionSchema, complaintSchema as baseComplaintSchema } from '@/lib/validation'
 import {
   addComplaintComment,
+  assertOwnUploads,
   assignComplaint,
+  changeComplaintPriority,
   createComplaint,
   updateComplaintStatus,
 } from '@/server/services/complaints'
+
+const complaintSchema = baseComplaintSchema.extend({
+  photoUrls: z.array(z.string()).max(5, 'Add up to 5 photos').default([]),
+})
+
+/** Adds PRIORITY (owner re-prioritises → SLA deadline is recalculated). */
+const complaintActionSchema = baseActionSchema.extend({
+  action: z.enum(['ASSIGN', 'STATUS', 'COMMENT', 'PRIORITY']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+})
 
 /**
  * POST /api/complaints — raise a complaint. Residents raise their own;
@@ -35,6 +48,7 @@ export const POST = route(
         select: { id: true, propertyId: true, roomId: true, organizationId: true },
       })
       if (!resident) throw new NotFoundError('Resident record not found')
+      await assertOwnUploads(resident.organizationId, body.photoUrls ?? [], user.id)
 
       const complaint = await createComplaint({
         organizationId: resident.organizationId,
@@ -110,7 +124,9 @@ export const PATCH = route(
       if (!user.staffId || complaint.assignedStaffId !== user.staffId) {
         throw new ForbiddenError('Not your task')
       }
-      if (body.action === 'ASSIGN') throw new ForbiddenError('Only an owner can reassign')
+      if (body.action === 'ASSIGN' || body.action === 'PRIORITY') {
+        throw new ForbiddenError('Only an owner or manager can change this')
+      }
     } else {
       requirePermission(user, body.action === 'ASSIGN' ? 'complaints.assign' : 'complaints.manage')
       if (complaint.organizationId !== user.organizationId) throw new ForbiddenError()
@@ -118,6 +134,17 @@ export const PATCH = route(
     }
 
     const actor = { id: user.id, name: user.name, role: user.role }
+    await assertOwnUploads(
+      complaint.organizationId,
+      [body.photoUrl],
+      user.role === 'TENANT' || user.role === 'WORKER' ? user.id : undefined,
+    )
+
+    if (body.action === 'PRIORITY') {
+      if (!body.priority) throw new NotFoundError('Choose a priority')
+      await changeComplaintPriority({ complaintId: complaint.id, priority: body.priority, actor })
+      return ok({ message: `${complaint.code} is now ${body.priority.toLowerCase()} priority — SLA updated` })
+    }
 
     if (body.action === 'ASSIGN') {
       if (!body.staffId) throw new NotFoundError('Choose a staff member')

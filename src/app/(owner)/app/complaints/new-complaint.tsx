@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus } from 'lucide-react'
 import { complaintSchema } from '@/lib/validation'
 import type { z } from 'zod'
-import { api, ApiError } from '@/lib/client'
+import { api } from '@/lib/client'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhotoUpload } from '@/components/app/photo-upload'
 
 type Values = z.infer<typeof complaintSchema>
 
@@ -38,6 +39,7 @@ export function NewComplaintButton({
   const router = useRouter()
   const toast = useToast()
   const [open, setOpen] = React.useState(false)
+  const [uploading, setUploading] = React.useState(false)
 
   const form = useForm<Values>({
     resolver: zodResolver(complaintSchema),
@@ -53,6 +55,8 @@ export function NewComplaintButton({
   })
 
   const propertyId = form.watch('propertyId')
+  const residentId = form.watch('residentId')
+  const photoUrls = form.watch('photoUrls') ?? []
   const scopedResidents = residents.filter((r) => r.propertyId === propertyId)
 
   async function onSubmit(values: Values) {
@@ -67,10 +71,7 @@ export function NewComplaintButton({
       setOpen(false)
       router.refresh()
     } catch (error) {
-      toast.error(
-        'Unable to create this complaint',
-        error instanceof ApiError ? error.message : 'Please try again.',
-      )
+      toast.fromError(error, 'create this complaint')
     }
   }
 
@@ -144,14 +145,29 @@ export function NewComplaintButton({
                   {...form.register('description')}
                 />
               </Field>
+              <Field label="Photos" hint="Optional — helps the worker bring the right tools">
+                <PhotoUpload
+                  value={photoUrls}
+                  onChange={(urls) => form.setValue('photoUrls', urls)}
+                  purpose="COMPLAINT"
+                  residentId={residentId || undefined}
+                  max={3}
+                  onBusyChange={setUploading}
+                />
+              </Field>
             </div>
 
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" loading={form.formState.isSubmitting}>
-                Create complaint
+              <Button
+                type="submit"
+                variant="primary"
+                loading={form.formState.isSubmitting}
+                disabled={uploading}
+              >
+                {uploading ? 'Uploading photos…' : 'Create complaint'}
               </Button>
             </DialogFooter>
           </form>

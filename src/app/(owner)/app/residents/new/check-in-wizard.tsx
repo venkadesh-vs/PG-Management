@@ -48,6 +48,23 @@ type PropertyOption = {
 
 type LookupOption = { value: string; label: string }
 
+/** Values carried over from a booking (/app/residents/new?booking=…). */
+export type CheckInPrefill = {
+  bookingId: string
+  code: string
+  fullName: string
+  phone: string
+  email: string
+  gender: string
+  propertyId: string
+  bedId: string
+  bedName: string | null
+  joiningDate: string
+  rentAmount: number
+  depositAmount: number
+  tokenAmount: number
+}
+
 type BedOption = {
   id: string
   label: string
@@ -74,6 +91,9 @@ type CheckInResult = {
   bed: { label: string; room: string }
   invoice: { number: string; total: number } | null
   tenantLogin: AccessLink | null
+  booking?: { code: string } | null
+  tokenPayment?: { receiptNumber: string; amount: number } | null
+  tokenPaymentError?: string | null
 }
 
 const STEPS = [
@@ -103,7 +123,10 @@ export function CheckInWizard({
   idTypes,
   relations,
   foodEnabled = true,
+  prefill,
 }: {
+  /** Checking in from a booking: identity, bed and money come pre-filled. */
+  prefill?: CheckInPrefill | null
   /** The org's ID_TYPE lookup list. */
   idTypes: LookupOption[]
   /** The org's GUARDIAN_RELATION lookup list. */
@@ -122,18 +145,19 @@ export function CheckInWizard({
   const [loadingBeds, setLoadingBeds] = React.useState(false)
   const [done, setDone] = React.useState<CheckInResult | null>(null)
 
-  const defaultProperty = properties.find((p) => p.id === defaultPropertyId) ?? properties[0]
+  const defaultProperty =
+    properties.find((p) => p.id === (prefill?.propertyId ?? defaultPropertyId)) ?? properties[0]
 
   const form = useForm<CheckInValues>({
     resolver: zodResolver(checkInSchema),
     mode: 'onBlur',
     defaultValues: {
-      fullName: '',
-      phone: '',
+      fullName: prefill?.fullName ?? '',
+      phone: prefill?.phone ?? '',
       whatsappPhone: '',
-      email: '',
+      email: prefill?.email ?? '',
       dateOfBirth: '',
-      gender: '',
+      gender: prefill?.gender ?? '',
       bloodGroup: '',
       qualification: '',
       guardianName: '',
@@ -151,10 +175,10 @@ export function CheckInWizard({
       companyAddress: '',
       designation: '',
       propertyId: defaultProperty.id,
-      bedId: defaultBedId ?? '',
-      joiningDate: toISODate(new Date()),
-      rentAmount: defaultProperty.standardRent,
-      depositAmount: defaultProperty.standardDeposit,
+      bedId: prefill?.bedId ?? defaultBedId ?? '',
+      joiningDate: prefill?.joiningDate ?? toISODate(new Date()),
+      rentAmount: prefill?.rentAmount ?? defaultProperty.standardRent,
+      depositAmount: prefill?.depositAmount ?? defaultProperty.standardDeposit,
       maintenanceFee: defaultProperty.maintenanceFee,
       foodOptIn: foodEnabled,
       foodCharge: defaultProperty.foodCharge,
@@ -166,6 +190,7 @@ export function CheckInWizard({
       createTenantAccount: true,
       whatsappConsent: true,
       notes: '',
+      bookingId: prefill?.bookingId ?? '',
     },
   })
 
@@ -237,8 +262,14 @@ export function CheckInWizard({
       setDone(result)
       toast.success(
         'Resident checked in successfully',
-        `${data.fullName} is now in Room ${result?.bed.room}, Bed ${result?.bed.label}.`,
+        `${data.fullName} is now in Room ${result?.bed.room}, Bed ${result?.bed.label}.` +
+          (result?.tokenPayment
+            ? ` Token ${formatMoney(result.tokenPayment.amount)} recorded as the first payment (${result.tokenPayment.receiptNumber}).`
+            : ''),
       )
+      if (result?.tokenPaymentError) {
+        toast.warning('Token not recorded', `Record the booking token from the resident’s page: ${result.tokenPaymentError}`)
+      }
       router.refresh()
     } catch (error) {
       const message = error instanceof ApiError ? error.message : 'Unable to check in right now'
@@ -321,6 +352,24 @@ export function CheckInWizard({
             </ol>
           </CardContent>
         </Card>
+
+        {prefill && (
+          <Card className="border-blue-200 bg-blue-50/60">
+            <CardContent className="space-y-1 p-4 text-sm text-blue-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                From booking {prefill.code}
+              </p>
+              <p>
+                {prefill.bedName ? `Bed ${prefill.bedName} is held for ${prefill.fullName.split(' ')[0]}.` : 'Details carried over from the booking.'}
+              </p>
+              {prefill.tokenAmount > 0 && (
+                <p className="text-xs text-blue-800/80">
+                  The {formatMoney(prefill.tokenAmount)} token is recorded as their first rent payment.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Live summary — the owner always sees what they are committing to. */}
         <Card className="hidden lg:block">

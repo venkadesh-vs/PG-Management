@@ -59,6 +59,12 @@ export default async function BedsPage({
           beds: {
             orderBy: { label: 'asc' },
             include: {
+              bookings: {
+                where: { status: { in: ['PENDING', 'CONFIRMED'] } },
+                orderBy: { checkInDate: 'asc' },
+                take: 1,
+                select: { id: true, code: true, name: true, phone: true, checkInDate: true, status: true },
+              },
               resident: {
                 select: {
                   id: true,
@@ -101,6 +107,16 @@ export default async function BedsPage({
         rent: bed.rent,
         notes: bed.notes,
         blockedReason: bed.blockedReason,
+        booking: bed.bookings[0]
+          ? {
+              id: bed.bookings[0].id,
+              code: bed.bookings[0].code,
+              name: bed.bookings[0].name,
+              phone: bed.bookings[0].phone,
+              checkInDate: bed.bookings[0].checkInDate.toISOString(),
+              status: bed.bookings[0].status,
+            }
+          : null,
         resident: bed.resident
           ? {
               id: bed.resident.id,
@@ -121,7 +137,7 @@ export default async function BedsPage({
     <div className="space-y-6">
       <PageHeader
         title="Rooms & Beds"
-        subtitle="Your live bed map. Click any bed to see who is in it, change its status, or check someone in."
+        subtitle="Your live bed map. Tap any bed to see who is in it, block it, send it for maintenance, or check someone in."
         icon="bed"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Rooms & Beds' }]}
         actions={

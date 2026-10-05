@@ -19,7 +19,7 @@ import {
   ShieldAlert,
   DoorOpen,
 } from 'lucide-react'
-import { api, ApiError } from '@/lib/client'
+import { api } from '@/lib/client'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Textarea } from '@/components/ui/input'
+import { PhotoUpload } from '@/components/app/photo-upload'
 
 /** Icons for the built-in categories; anything the owner adds gets a wrench. */
 const CATEGORY_ICON: Record<string, React.ElementType> = {
@@ -76,6 +77,8 @@ export function RaiseComplaintButton({
   const [title, setTitle] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [photos, setPhotos] = React.useState<string[]>([])
+  const [uploading, setUploading] = React.useState(false)
   const [done, setDone] = React.useState<string | null>(null)
 
   function reset() {
@@ -83,6 +86,7 @@ export function RaiseComplaintButton({
     setDescription('')
     setCategory(firstCategory)
     setPriority('MEDIUM')
+    setPhotos([])
     setDone(null)
   }
 
@@ -103,17 +107,14 @@ export function RaiseComplaintButton({
           priority,
           title: title.trim(),
           description: description.trim(),
-          photoUrls: [],
+          photoUrls: photos,
         },
       )
       setDone(result.complaint.code)
       toast.success('Complaint created successfully', 'Your PG owner has been notified.')
       router.refresh()
     } catch (error) {
-      toast.error(
-        'Unable to send this complaint',
-        error instanceof ApiError ? error.message : 'Please try again.',
-      )
+      toast.fromError(error, 'send this complaint')
     } finally {
       setBusy(false)
     }
@@ -226,6 +227,18 @@ export function RaiseComplaintButton({
                   />
                 </Field>
 
+                <Field label="Photos" hint="Optional">
+                  <PhotoUpload
+                    value={photos}
+                    onChange={setPhotos}
+                    purpose="COMPLAINT"
+                    max={3}
+                    label="Add photo"
+                    hint="A photo of the problem helps us fix it faster. Up to 3."
+                    onBusyChange={setUploading}
+                  />
+                </Field>
+
                 <div>
                   <p className="mb-2 text-sm font-medium text-slate-700">How urgent is it?</p>
                   <div className="grid grid-cols-3 gap-2">
@@ -252,8 +265,8 @@ export function RaiseComplaintButton({
                 <Button variant="ghost" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button variant="primary" loading={busy} onClick={submit}>
-                  Send complaint
+                <Button variant="primary" loading={busy} disabled={uploading} onClick={submit}>
+                  {uploading ? 'Uploading photos…' : 'Send complaint'}
                 </Button>
               </DialogFooter>
             </>

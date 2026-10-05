@@ -13,6 +13,10 @@ import { StatusChip } from '@/components/ui/badge'
 import { getLookupLabels } from '@/server/services/org-defaults'
 import { ComplaintWorkflow } from './complaint-workflow'
 import { ComplaintThread } from './complaint-thread'
+import { SlaChip } from '@/components/app/sla-chip'
+import { PhotoGallery } from '@/components/app/photo-upload'
+import { refreshSlaBreaches } from '@/server/services/complaints'
+import { formatSpan } from '@/lib/sla'
 
 export const metadata: Metadata = { title: 'Complaint' }
 
@@ -23,6 +27,7 @@ export default async function ComplaintDetailPage({
 }) {
   const user = await requireAccess({ module: 'complaints', permission: 'complaints.view' })
   const { id } = await params
+  if (user.organizationId) await refreshSlaBreaches(user.organizationId)
 
   const complaint = await prisma.complaint.findUnique({
     where: { id },
@@ -76,6 +81,8 @@ export default async function ComplaintDetailPage({
               code: complaint.code,
               status: complaint.status,
               assignedStaffId: complaint.assignedStaffId,
+              priority: complaint.priority,
+              residentId: complaint.residentId,
             }}
             staff={staff}
             roleLabels={roleLabels}
@@ -99,6 +106,13 @@ export default async function ComplaintDetailPage({
               <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                 <StatusChip label={statusStyle.label} chip={statusStyle.chip} />
                 <StatusChip label={priorityStyle.label} chip={priorityStyle.chip} />
+                <SlaChip
+                  status={complaint.status}
+                  slaDueAt={complaint.slaDueAt}
+                  createdAt={complaint.createdAt}
+                  resolvedAt={complaint.resolvedAt}
+                  size="lg"
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -106,12 +120,32 @@ export default async function ComplaintDetailPage({
                 {complaint.description}
               </p>
 
+              {complaint.photoUrls.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Photos from {complaint.resident ? complaint.resident.fullName.split(' ')[0] : 'the report'}
+                  </p>
+                  <PhotoGallery urls={complaint.photoUrls} />
+                </div>
+              )}
+
               {complaint.resolutionNote && (
                 <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                     Resolution
                   </p>
                   <p className="mt-1 text-sm text-emerald-900">{complaint.resolutionNote}</p>
+                  {complaint.resolutionPhotoUrl && (
+                    <PhotoGallery urls={[complaint.resolutionPhotoUrl]} className="mt-2" />
+                  )}
+                </div>
+              )}
+              {!complaint.resolutionNote && complaint.resolutionPhotoUrl && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Resolution photo
+                  </p>
+                  <PhotoGallery urls={[complaint.resolutionPhotoUrl]} />
                 </div>
               )}
 
@@ -147,6 +181,7 @@ export default async function ComplaintDetailPage({
                   message: u.message,
                   statusTo: u.statusTo,
                   createdAt: u.createdAt.toISOString(),
+                  photoUrl: u.photoUrl,
                 }))}
               />
             </CardContent>
@@ -222,6 +257,12 @@ export default async function ComplaintDetailPage({
             </CardHeader>
             <CardContent className="space-y-2 text-xs">
               <TimeRow label="Raised" value={formatDateTime(complaint.createdAt)} />
+              {complaint.slaDueAt && (
+                <TimeRow label="SLA due" value={formatDateTime(complaint.slaDueAt)} />
+              )}
+              {complaint.slaBreachedAt && (
+                <TimeRow label="SLA missed" value={formatDateTime(complaint.slaBreachedAt)} />
+              )}
               {complaint.assignedAt && (
                 <TimeRow label="Assigned" value={formatDateTime(complaint.assignedAt)} />
               )}
@@ -230,6 +271,12 @@ export default async function ComplaintDetailPage({
               )}
               {complaint.resolvedAt && (
                 <TimeRow label="Resolved" value={formatDateTime(complaint.resolvedAt)} />
+              )}
+              {complaint.resolvedAt && (
+                <TimeRow
+                  label="Resolution time"
+                  value={formatSpan(complaint.resolvedAt.getTime() - complaint.createdAt.getTime())}
+                />
               )}
               {complaint.closedAt && (
                 <TimeRow label="Closed" value={formatDateTime(complaint.closedAt)} />

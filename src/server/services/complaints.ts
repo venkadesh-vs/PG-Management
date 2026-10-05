@@ -10,9 +10,11 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  ValidationError,
 } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifyResident, notifyStaff, recordActivity } from '../events'
 import { sendWhatsApp } from '../integrations/whatsapp'
+import { formatSpan, slaDueFrom, type SlaHours } from '@/lib/sla'
 
 /**
  * Complaint workflow: tenant raises → owner notified → worker assigned →
@@ -20,6 +22,39 @@ import { sendWhatsApp } from '../integrations/whatsapp'
  * a ComplaintUpdate so the tenant sees a timeline instead of a status word,
  * and mirrors into a MaintenanceTask so the worker app has a single to-do list.
  */
+
+/** The org's SLA hours per priority (defaults when no settings row yet). */
+async function orgSlaHours(organizationId: string): Promise<Partial<SlaHours> | null> {
+  return prisma.orgSetting.findUnique({
+    where: { organizationId },
+    select: { slaUrgentHours: true, slaHighHours: true, slaMediumHours: true, slaLowHours: true },
+  })
+}
+
+const UPLOAD_URL = /^\/api\/uploads\/([a-zA-Z0-9_-]+)$/
+
+/**
+ * Photo links must be our own upload URLs for files of this organization —
+ * never arbitrary external links (tracking pixels, other tenants' files).
+ */
+export async function assertOwnUploads(
+  organizationId: string,
+  urls: (string | null | undefined)[],
+  /** Residents and workers may only attach files they uploaded themselves. */
+  uploadedById?: string,
+) {
+  const list = urls.filter((u): u is string => Boolean(u))
+  if (!list.length) return
+  const ids = list.map((u) => {
+    const match = UPLOAD_URL.exec(u)
+    if (!match) throw new ValidationError('Photos must be uploaded through StayFlow')
+    return match[1]
+  })
+  const found = await prisma.uploadedFile.count({
+    where: { id: { in: ids }, organizationId, ...(uploadedById ? { uploadedById } : {}) },
+  })
+  if (found !== new Set(ids).size) throw new ValidationError('One of the photos could not be found. Please upload it again.')
+}
 
 async function nextComplaintCode(organizationId: string) {
   const count = await prisma.complaint.count({ where: { organizationId } })
@@ -45,8 +80,12 @@ export async function createComplaint(params: {
     await assertResidentInProperty(params.residentId, params.organizationId, params.propertyId)
   }
   if (params.roomId) await assertRoomInProperty(params.roomId, params.propertyId)
+  await assertOwnUploads(params.organizationId, params.photoUrls ?? [])
 
   const code = await nextComplaintCode(params.organizationId)
+  const priority = params.priority ?? 'MEDIUM'
+  const createdAt = new Date()
+  const slaDueAt = slaDueFrom(createdAt, priority, await orgSlaHours(params.organizationId))
 
   const complaint = await prisma.$transaction(async (tx) => {
     const created = await tx.complaint.create({
@@ -57,8 +96,10 @@ export async function createComplaint(params: {
         roomId: params.roomId ?? null,
         code,
         category: params.category,
-        priority: params.priority ?? 'MEDIUM',
+        priority,
         status: 'OPEN',
+        createdAt,
+        slaDueAt,
         title: params.title,
         description: params.description,
         photoUrls: params.photoUrls ?? [],
@@ -239,10 +280,17 @@ export async function updateComplaintStatus(params: {
     if (!complaint) throw new NotFoundError('Complaint not found')
 
     const now = new Date()
+    const resolving = params.status === 'RESOLVED' && complaint.status !== 'RESOLVED'
+    // Resolution time is measured from when the complaint was raised (PRD §43).
+    const resolutionMs = resolving ? now.getTime() - complaint.createdAt.getTime() : null
+    const resolvedLate = Boolean(resolving && complaint.slaDueAt && now > complaint.slaDueAt)
     const updated = await tx.complaint.update({
       where: { id: complaint.id },
       data: {
         status: params.status,
+        // A late resolution still counts as a breach, even if the daily check never saw it.
+        slaBreachedAt:
+          resolvedLate && !complaint.slaBreachedAt ? complaint.slaDueAt : complaint.slaBreachedAt,
         startedAt: params.status === 'IN_PROGRESS' ? (complaint.startedAt ?? now) : complaint.startedAt,
         resolvedAt: params.status === 'RESOLVED' ? now : complaint.resolvedAt,
         closedAt: params.status === 'CLOSED' ? now : complaint.closedAt,
@@ -297,7 +345,13 @@ export async function updateComplaintStatus(params: {
         event,
         entityType: 'Complaint',
         entityId: complaint.id,
-        summary: `${complaint.code} · ${complaint.title} → ${params.status.replace('_', ' ').toLowerCase()}`,
+        summary:
+          `${complaint.code} · ${complaint.title} → ${params.status.replace('_', ' ').toLowerCase()}` +
+          (resolutionMs !== null ? ` in ${formatSpan(resolutionMs)}${resolvedLate ? ' (past SLA)' : ''}` : ''),
+        meta:
+          resolutionMs !== null
+            ? { resolutionMinutes: Math.round(resolutionMs / 60_000), withinSla: !resolvedLate }
+            : undefined,
       },
       tx,
     )
@@ -396,6 +450,146 @@ export async function addComplaintComment(params: {
 }
 
 // --------------------------------------------------------------------------
+// SLA (PRD §43)
+// --------------------------------------------------------------------------
+
+const OPEN_STATUSES: ComplaintStatus[] = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD']
+
+/**
+ * Changes priority and re-derives the SLA deadline from the raise time. If
+ * the new deadline is still ahead, a recorded breach is cleared so the
+ * owner is told again should it slip a second time.
+ */
+export async function changeComplaintPriority(params: {
+  complaintId: string
+  priority: ComplaintPriority
+  actor: { id?: string; name: string; role: UserRole }
+}) {
+  const complaint = await prisma.complaint.findUnique({ where: { id: params.complaintId } })
+  if (!complaint) throw new NotFoundError('Complaint not found')
+  if (complaint.priority === params.priority) return complaint
+
+  const slaDueAt = slaDueFrom(complaint.createdAt, params.priority, await orgSlaHours(complaint.organizationId))
+  const now = new Date()
+  const stillOpen = OPEN_STATUSES.includes(complaint.status)
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.complaint.update({
+      where: { id: complaint.id },
+      data: {
+        priority: params.priority,
+        slaDueAt,
+        slaBreachedAt: stillOpen && slaDueAt > now ? null : complaint.slaBreachedAt,
+        updates: {
+          create: {
+            authorId: params.actor.id,
+            authorName: params.actor.name,
+            authorRole: params.actor.role,
+            message: `Priority changed from ${complaint.priority.toLowerCase()} to ${params.priority.toLowerCase()}`,
+          },
+        },
+      },
+    })
+    await tx.maintenanceTask.updateMany({
+      where: { complaintId: complaint.id },
+      data: { priority: params.priority },
+    })
+    await recordActivity(
+      {
+        organizationId: complaint.organizationId,
+        propertyId: complaint.propertyId,
+        actorId: params.actor.id,
+        actorName: params.actor.name,
+        actorRole: params.actor.role,
+        event: 'COMPLAINT_ASSIGNED',
+        entityType: 'Complaint',
+        entityId: complaint.id,
+        summary: `${complaint.code} priority → ${params.priority.toLowerCase()}`,
+        meta: { priorityFrom: complaint.priority, priorityTo: params.priority },
+      },
+      tx,
+    )
+    return updated
+  })
+}
+
+/**
+ * Flags open complaints whose SLA deadline has passed and tells the org's
+ * owners/managers once per breach. Safe to call often: it runs on page load
+ * (owner list/detail, worker tasks) and from the daily automation. Each row
+ * is claimed with a conditional update, so concurrent calls never notify
+ * twice. Also back-fills a deadline on older complaints raised before SLAs.
+ */
+export async function markSlaBreaches(organizationId?: string) {
+  const now = new Date()
+  const orgFilter = organizationId ? { organizationId } : {}
+
+  // Older complaints raised before SLAs existed get a deadline first.
+  const missing = await prisma.complaint.findMany({
+    where: { ...orgFilter, slaDueAt: null, status: { in: OPEN_STATUSES } },
+    select: { id: true, organizationId: true, createdAt: true, priority: true },
+    take: 500,
+  })
+  if (missing.length) {
+    const hoursByOrg = new Map<string, Partial<SlaHours> | null>()
+    for (const c of missing) {
+      if (!hoursByOrg.has(c.organizationId)) hoursByOrg.set(c.organizationId, await orgSlaHours(c.organizationId))
+      await prisma.complaint.updateMany({
+        where: { id: c.id, slaDueAt: null },
+        data: { slaDueAt: slaDueFrom(c.createdAt, c.priority, hoursByOrg.get(c.organizationId)) },
+      })
+    }
+  }
+
+  const overdue = await prisma.complaint.findMany({
+    where: {
+      ...orgFilter,
+      slaBreachedAt: null,
+      slaDueAt: { lt: now },
+      status: { in: OPEN_STATUSES },
+    },
+    select: {
+      id: true,
+      organizationId: true,
+      code: true,
+      title: true,
+      priority: true,
+      slaDueAt: true,
+      room: { select: { number: true } },
+    },
+    take: 200,
+  })
+
+  let breached = 0
+  for (const c of overdue) {
+    const claimed = await prisma.complaint.updateMany({
+      where: { id: c.id, slaBreachedAt: null },
+      data: { slaBreachedAt: now },
+    })
+    if (claimed.count !== 1) continue
+    breached++
+    await notifyOrgAdmins(c.organizationId, {
+      kind: 'COMPLAINT',
+      title: `SLA missed: ${c.code}`,
+      body:
+        `${c.title}${c.room ? ` (Room ${c.room.number})` : ''} — ${c.priority.toLowerCase()} priority, ` +
+        `overdue by ${formatSpan(now.getTime() - (c.slaDueAt?.getTime() ?? now.getTime()))}.`,
+      link: `/app/complaints/${c.id}`,
+    }).catch((error) => console.error('[sla] notify failed', error))
+  }
+  return breached
+}
+
+/** On-read variant: never lets a breach check break a page. */
+export async function refreshSlaBreaches(organizationId: string) {
+  try {
+    await markSlaBreaches(organizationId)
+  } catch (error) {
+    console.error('[sla] breach check failed', error)
+  }
+}
+
+// --------------------------------------------------------------------------
 // Standalone worker tasks
 // --------------------------------------------------------------------------
 
@@ -473,6 +667,12 @@ export async function advanceTask(params: {
       throw new ForbiddenError('This task is not assigned to you')
     }
     if (params.action === 'CANCEL') throw new ForbiddenError('Ask your manager to cancel a task')
+  }
+  if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+    throw new ConflictError(`This task is already ${task.status === 'COMPLETED' ? 'completed' : 'cancelled'}`)
+  }
+  if (params.action === 'ACCEPT' && task.status !== 'PENDING') {
+    throw new ConflictError('This task has already been accepted')
   }
 
   const now = new Date()

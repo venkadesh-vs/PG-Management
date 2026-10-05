@@ -1,6 +1,14 @@
 import 'server-only'
 
-import type { BedStatus, BillingCycle, Prisma } from '@prisma/client'
+import type {
+  BedStatus,
+  BillingCycle,
+  DepositStatus,
+  InvoiceLineKind,
+  InvoiceStatus,
+  PaymentMethodKind,
+  Prisma,
+} from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateTempPassword, hashPassword } from '@/lib/password'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
@@ -14,6 +22,7 @@ import {
   endOfMonth,
   formatDate,
   formatMoney,
+  formatMonth,
   startOfDay,
   startOfMonth,
 } from '@/lib/utils'
@@ -21,9 +30,13 @@ import {
   appendLedger,
   generateInvoice,
   nextCounterNumber,
+  nextInvoiceNumber,
   nextReceiptNumber,
+  recordPayment,
+  rebuildLedger,
   retryOnUniqueConflict,
 } from './billing'
+import { computeSettlement, type SettlementDeduction } from '@/lib/settlement'
 
 /**
  * Resident lifecycle.
@@ -118,6 +131,9 @@ export type CheckInInput = {
 
   documents?: { kind: string; label: string; fileUrl: string }[]
 
+  /** Converting a booking: its RESERVED bed is accepted and its token becomes the first payment. */
+  bookingId?: string
+
   actor: { id?: string; name: string }
 }
 
@@ -145,6 +161,37 @@ export async function checkInResident(input: CheckInInput) {
     })
     return { invoice: null, created: false }
   })
+
+  // A booking token becomes the first rent payment, allocated to the first
+  // invoice (or held as advance if that invoice could not be raised).
+  let tokenPayment = null as { receiptNumber: string; amount: number } | null
+  let tokenPaymentError = null as string | null
+  const booking = result.booking
+  if (booking && booking.tokenAmount > 0 && booking.tokenPaidAt) {
+    const method = ['CASH', 'UPI', 'BANK_TRANSFER', 'CARD', 'CHEQUE'].includes(booking.tokenMethod ?? '')
+      ? (booking.tokenMethod as 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CARD' | 'CHEQUE')
+      : 'CASH'
+    try {
+      const paid = await recordPayment({
+        residentId: result.resident.id,
+        amount: booking.tokenAmount,
+        method,
+        paidAt: booking.tokenPaidAt,
+        reference: booking.tokenReference ?? undefined,
+        notes: `Booking token (${booking.code})`,
+        invoiceIds: first.invoice ? [first.invoice.id] : undefined,
+        actor: input.actor,
+      })
+      tokenPayment = { receiptNumber: paid.payment.receiptNumber, amount: paid.payment.amount }
+    } catch (error) {
+      tokenPaymentError = error instanceof Error ? error.message : String(error)
+      console.error('[residents] booking token payment failed after check-in', {
+        residentId: result.resident.id,
+        bookingId: booking.id,
+        error,
+      })
+    }
+  }
 
   await notifyResident(result.resident.id, {
     organizationId: input.organizationId,
@@ -212,7 +259,15 @@ export async function checkInResident(input: CheckInInput) {
     }
   }
 
-  return { ...result, firstInvoice: first.invoice, firstInvoiceError, inviteUrl, inviteSentVia }
+  return {
+    ...result,
+    firstInvoice: first.invoice,
+    firstInvoiceError,
+    inviteUrl,
+    inviteSentVia,
+    tokenPayment,
+    tokenPaymentError,
+  }
 }
 
 async function checkInOnce(input: CheckInInput) {
@@ -236,6 +291,27 @@ async function checkInOnce(input: CheckInInput) {
       }
       if (bed.status === 'MAINTENANCE' || bed.status === 'BLOCKED') {
         throw new ConflictError(`This bed is marked ${bed.status.toLowerCase()}`)
+      }
+
+      // --- Booking conversion ---------------------------------------------
+      // A bed held by a live booking may only be taken by that booking.
+      const booking = input.bookingId
+        ? await tx.booking.findFirst({
+            where: { id: input.bookingId, organizationId: input.organizationId, propertyId: property.id },
+          })
+        : null
+      if (input.bookingId && !booking) throw new NotFoundError('Booking not found in this PG')
+      if (booking && booking.status !== 'PENDING' && booking.status !== 'CONFIRMED') {
+        throw new ConflictError(`Booking ${booking.code} is ${booking.status.toLowerCase().replace('_', ' ')}`)
+      }
+      if (bed.status === 'RESERVED') {
+        const holder = await tx.booking.findFirst({
+          where: { bedId: bed.id, status: 'CONFIRMED' },
+          select: { id: true, code: true, name: true },
+        })
+        if (holder && holder.id !== booking?.id) {
+          throw new ConflictError(`This bed is reserved for ${holder.name} (${holder.code})`)
+        }
       }
 
       const code = await nextResidentCode(tx, input.organizationId)
@@ -308,6 +384,40 @@ async function checkInOnce(input: CheckInInput) {
       await tx.bedAllocation.create({
         data: { bedId: bed.id, residentId: resident.id, fromDate: joiningDate },
       })
+
+      if (booking) {
+        // They moved into a different bed than the one held: free the old one.
+        if (booking.status === 'CONFIRMED' && booking.bedId && booking.bedId !== bed.id) {
+          await tx.bed.updateMany({
+            where: { id: booking.bedId, status: 'RESERVED', residentId: null },
+            data: { status: 'AVAILABLE' },
+          })
+        }
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: { status: 'CHECKED_IN', residentId: resident.id, bedId: bed.id },
+        })
+        if (booking.leadId) {
+          const lead = await tx.residentLead.findUnique({
+            where: { id: booking.leadId },
+            select: { id: true, status: true, residentId: true },
+          })
+          if (lead && !lead.residentId) {
+            await tx.residentLead.update({
+              where: { id: lead.id },
+              data: { status: 'CHECKED_IN', residentId: resident.id, nextFollowUpAt: null, lostReason: null },
+            })
+            await tx.residentLeadActivity.create({
+              data: {
+                leadId: lead.id,
+                kind: 'STATUS',
+                body: `Checked in as ${code} · Room ${bed.room.number}, Bed ${bed.label} (booking ${booking.code})`,
+                actorName: input.actor.name,
+              },
+            })
+          }
+        }
+      }
 
       // --- Security deposit ledger ----------------------------------------
       const deposit = await tx.securityDeposit.create({
@@ -449,7 +559,7 @@ async function checkInOnce(input: CheckInInput) {
         tx,
       )
 
-      return { resident, bed, property, deposit, tenantEmail, tenantUserId }
+      return { resident, bed, property, deposit, tenantEmail, tenantUserId, booking }
     },
     { timeout: 20000 },
   )
@@ -545,387 +655,844 @@ export async function transferResident(params: {
 // Checkout
 // --------------------------------------------------------------------------
 
+type Db = Prisma.TransactionClient | typeof prisma
+
+const OPEN_INVOICE: InvoiceStatus[] = ['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
+
+export type RefundInput = {
+  method: string
+  reference?: string
+  note?: string
+  paidAt?: Date
+}
+
 export type CheckoutPreview = {
   residentId: string
   residentName: string
   exitDate: Date
+  joiningDate: Date
+  noticeDate: Date | null
+  plannedExitDate: Date | null
+  openInvoices: { id: string; number: string; balance: number; dueDate: Date }[]
   outstandingRent: number
-  proRataRent: number
-  foodCharges: number
+  utilities: { id: string; label: string; amount: number }[]
   utilityCharges: number
-  otherCharges: number
+  deductions: SettlementDeduction[]
+  deductionsTotal: number
+  exitMonth: {
+    label: string
+    invoiced: boolean
+    usedDays: number
+    unusedDays: number
+    charge: number
+    credit: number
+    lines: { label: string; amount: number }[]
+  }
   depositHeld: number
+  depositStatus: string | null
+  advance: number
+  owed: number
+  credits: number
+  applied: { unusedCredit: number; advance: number; deposit: number }
+  refundable: number
+  payable: number
+  /** Kept for older callers. */
   suggestedRefund: number
   suggestedPayable: number
-  openInvoices: { id: string; number: string; balance: number }[]
+}
+
+function exitLineLabel(kind: string, from: Date, exit: Date, used: number, total: number) {
+  const span = `${formatDate(from)} – ${formatDate(exit)} (${used}/${total} days)`
+  switch (kind) {
+    case 'RENT':
+      return `Room rent ${span}`
+    case 'MAINTENANCE':
+      return `Maintenance ${span}`
+    case 'FOOD':
+      return `Food plan ${span}`
+    default:
+      return `Discount ${span}`
+  }
+}
+
+/**
+ * Reads everything the settlement depends on through `db` — the plain client
+ * for the preview, the checkout's own transaction for the real thing — and
+ * runs the pure arithmetic over it.
+ */
+async function loadSettlement(
+  db: Db,
+  params: { residentId: string; exitDate: Date; deductions: SettlementDeduction[] },
+) {
+  const resident = await db.resident.findUnique({
+    where: { id: params.residentId },
+    include: {
+      deposit: true,
+      invoices: {
+        where: { status: { in: OPEN_INVOICE }, balance: { gt: 0 } },
+        orderBy: { dueDate: 'asc' },
+      },
+      utilityCharges: { where: { billed: false }, orderBy: { periodStart: 'asc' } },
+      payments: {
+        where: { status: 'SUCCESS' },
+        orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          amount: true,
+          purpose: true,
+          allocations: { select: { amount: true } },
+        },
+      },
+    },
+  })
+  if (!resident) throw new NotFoundError('Resident not found')
+
+  const exitDate = startOfDay(params.exitDate)
+  const joining = startOfDay(new Date(resident.joiningDate))
+  if (exitDate < joining) {
+    throw new ValidationError(`The exit date cannot be before the joining date (${formatDate(joining)}).`)
+  }
+
+  // --- Exit month: pro-rata charge, or credit for days already billed -------
+  const monthStart = startOfMonth(exitDate)
+  const totalDays = daysInMonth(monthStart)
+  const fromDate = joining > monthStart ? joining : monthStart
+  const exitMonthInvoice = await db.rentInvoice.findUnique({
+    where: { residentId_periodStart: { residentId: resident.id, periodStart: monthStart } },
+    include: { lines: true },
+  })
+  let invoicedCharge: number | null = null
+  if (exitMonthInvoice) {
+    invoicedCharge =
+      exitMonthInvoice.status === 'WAIVED' || exitMonthInvoice.status === 'CANCELLED'
+        ? 0
+        : Math.max(
+            0,
+            exitMonthInvoice.lines
+              .filter((l) => l.kind === 'RENT' || l.kind === 'MAINTENANCE' || l.kind === 'FOOD')
+              .reduce((s, l) => s + l.amount, 0) - exitMonthInvoice.discount,
+          )
+  }
+
+  // --- Money held: unallocated rent advance and deposit payments ------------
+  const free = (p: (typeof resident.payments)[number]) =>
+    Math.max(0, p.amount - p.allocations.reduce((s, a) => s + a.amount, 0))
+  const rentPayments = resident.payments
+    .filter((p) => p.purpose === 'RENT')
+    .map((p) => ({ id: p.id, free: free(p) }))
+    .filter((p) => p.free > 0)
+  const depositPayments = resident.payments
+    .filter((p) => p.purpose === 'DEPOSIT')
+    .map((p) => ({ id: p.id, free: free(p) }))
+    .filter((p) => p.free > 0)
+  const advance = rentPayments.reduce((s, p) => s + p.free, 0)
+  const depositHeld = Math.max(0, (resident.deposit?.collected ?? 0) - (resident.deposit?.deductions ?? 0) - (resident.deposit?.refunded ?? 0))
+
+  const openBalances = resident.invoices.reduce((s, i) => s + i.balance, 0)
+  const utilities = resident.utilityCharges.map((u) => ({
+    id: u.id,
+    kind: u.kind,
+    label: `${u.kind.charAt(0)}${u.kind.slice(1).toLowerCase()} — ${formatMonth(u.periodStart)}${
+      u.unitsUsed ? ` (${u.unitsUsed} units)` : ''
+    }`,
+    amount: u.amount,
+  }))
+
+  const result = computeSettlement({
+    openBalances,
+    utilities: utilities.reduce((s, u) => s + u.amount, 0),
+    deductions: params.deductions,
+    exitMonth: {
+      totalDays,
+      fromDay: fromDate.getDate(),
+      exitDay: exitDate.getDate(),
+      monthly: {
+        rent: resident.rentAmount,
+        maintenance: resident.maintenanceFee,
+        food: resident.foodOptIn ? resident.foodCharge : 0,
+        discount: resident.discountAmount,
+      },
+      invoicedCharge,
+    },
+    depositCollected: depositHeld,
+    advance,
+  })
+
+  const exitLines = result.exitMonthLines.map((l) => ({
+    kind: l.kind,
+    label: exitLineLabel(l.kind, fromDate, exitDate, result.usedDays, totalDays),
+    amount: l.amount,
+  }))
+
+  return {
+    resident,
+    exitDate,
+    monthStart,
+    totalDays,
+    exitMonthInvoice,
+    rentPayments,
+    depositPayments,
+    depositHeld,
+    advance,
+    utilities,
+    exitLines,
+    result,
+  }
+}
+
+type LoadedSettlement = Awaited<ReturnType<typeof loadSettlement>>
+
+function toPreview(s: LoadedSettlement): CheckoutPreview {
+  const r = s.result
+  return {
+    residentId: s.resident.id,
+    residentName: s.resident.fullName,
+    exitDate: s.exitDate,
+    joiningDate: s.resident.joiningDate,
+    noticeDate: s.resident.noticeDate,
+    plannedExitDate: s.resident.exitDate,
+    openInvoices: s.resident.invoices.map((i) => ({
+      id: i.id,
+      number: i.number,
+      balance: i.balance,
+      dueDate: i.dueDate,
+    })),
+    outstandingRent: s.resident.invoices.reduce((sum, i) => sum + i.balance, 0),
+    utilities: s.utilities.map(({ id, label, amount }) => ({ id, label, amount })),
+    utilityCharges: s.utilities.reduce((sum, u) => sum + u.amount, 0),
+    deductions: r.deductions,
+    deductionsTotal: r.deductionsTotal,
+    exitMonth: {
+      label: formatMonth(s.monthStart),
+      invoiced: Boolean(s.exitMonthInvoice),
+      usedDays: r.usedDays,
+      unusedDays: r.unusedDays,
+      charge: r.exitMonthCharge,
+      credit: r.unusedDaysCredit,
+      lines: s.exitLines.map(({ label, amount }) => ({ label, amount })),
+    },
+    depositHeld: s.depositHeld,
+    depositStatus: s.resident.deposit?.status ?? null,
+    advance: s.advance,
+    owed: r.owed,
+    credits: r.credits,
+    applied: r.applied,
+    refundable: r.refundable,
+    payable: r.payable,
+    suggestedRefund: r.refundable,
+    suggestedPayable: r.payable,
+  }
+}
+
+/** Older callers passed one damage amount and one "other" amount. */
+function normaliseDeductions(params: {
+  deductions?: SettlementDeduction[]
+  damageDeduction?: number
+  otherCharges?: number
+}): SettlementDeduction[] {
+  const list = [...(params.deductions ?? [])]
+  if (params.damageDeduction) list.push({ label: 'Damage', amount: params.damageDeduction })
+  if (params.otherCharges) list.push({ label: 'Other charges', amount: params.otherCharges })
+  return list
 }
 
 /** Computes the final settlement without writing anything. */
 export async function previewCheckout(params: {
   residentId: string
   exitDate: Date
+  deductions?: SettlementDeduction[]
   damageDeduction?: number
   otherCharges?: number
 }): Promise<CheckoutPreview> {
-  const resident = await prisma.resident.findUnique({
-    where: { id: params.residentId },
-    include: {
-      deposit: true,
-      invoices: {
-        where: { status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] } },
-        orderBy: { dueDate: 'asc' },
-      },
-      utilityCharges: { where: { billed: false } },
-    },
+  const loaded = await loadSettlement(prisma, {
+    residentId: params.residentId,
+    exitDate: params.exitDate,
+    deductions: normaliseDeductions(params),
   })
-  if (!resident) throw new NotFoundError('Resident not found')
+  return toPreview(loaded)
+}
 
-  const exitDate = startOfDay(params.exitDate)
-  const outstandingRent = resident.invoices.reduce((s, i) => s + i.balance, 0)
+type OpenInvoiceRow = {
+  id: string
+  number: string
+  status: InvoiceStatus
+  subtotal: number
+  total: number
+  amountPaid: number
+  balance: number
+}
 
-  // Pro-rate the month of exit only if it has not already been invoiced.
-  const exitMonthStart = startOfMonth(exitDate)
-  const alreadyInvoiced = await prisma.rentInvoice.findUnique({
-    where: { residentId_periodStart: { residentId: resident.id, periodStart: exitMonthStart } },
-    select: { id: true },
-  })
-  let proRataRent = 0
-  let foodCharges = 0
-  if (!alreadyInvoiced) {
-    const total = daysInMonth(exitMonthStart)
-    const days = exitDate.getDate()
-    proRataRent = Math.round((resident.rentAmount * days) / total)
-    if (resident.foodOptIn) foodCharges = Math.round((resident.foodCharge * days) / total)
-  }
-
-  const utilityCharges = resident.utilityCharges.reduce((s, u) => s + u.amount, 0)
-  const otherCharges = params.otherCharges ?? 0
-  const damage = params.damageDeduction ?? 0
-  const depositHeld = resident.deposit?.collected ?? 0
-
-  const dues = outstandingRent + proRataRent + foodCharges + utilityCharges + otherCharges + damage
-  const net = depositHeld - dues
-
-  return {
-    residentId: resident.id,
-    residentName: resident.fullName,
-    exitDate,
-    outstandingRent,
-    proRataRent,
-    foodCharges,
-    utilityCharges,
-    otherCharges,
-    depositHeld,
-    suggestedRefund: net > 0 ? net : 0,
-    suggestedPayable: net < 0 ? -net : 0,
-    openInvoices: resident.invoices.map((i) => ({
-      id: i.id,
-      number: i.number,
-      balance: i.balance,
-    })),
-  }
+function nextStatus(row: OpenInvoiceRow): InvoiceStatus {
+  if (row.balance <= 0) return 'PAID'
+  if (row.status === 'OVERDUE') return 'OVERDUE'
+  return row.amountPaid > 0 ? 'PARTIALLY_PAID' : row.status
 }
 
 export async function completeCheckout(params: {
   residentId: string
   exitDate: Date
   reason?: string
+  deductions?: SettlementDeduction[]
   damageDeduction?: number
   otherCharges?: number
   settlementNote?: string
-  /** Refund paid out now (rest stays as a pending refund). */
+  /** Refund paid out now. Leave empty to pay it later ("Mark refund paid"). */
+  refund?: RefundInput | null
+  /** @deprecated use `refund`. */
   refundPaid?: boolean
   actor: { id?: string; name: string }
 }) {
-  const preview = await previewCheckout(params)
+  const deductions = normaliseDeductions(params)
+  const refundNow: RefundInput | null =
+    params.refund ?? (params.refundPaid ? { method: 'CASH' } : null)
 
-  const result = await prisma.$transaction(
-    async (tx) => {
-      const resident = await tx.resident.findUnique({
-        where: { id: params.residentId },
-        include: {
-          bed: { include: { room: true } },
-          property: { include: { organization: { include: { settings: true } } } },
-          deposit: true,
-        },
-      })
-      if (!resident) throw new NotFoundError('Resident not found')
-      if (resident.status === 'CHECKED_OUT') throw new ConflictError('Already checked out')
+  const result = await retryOnUniqueConflict(
+    () =>
+      prisma.$transaction(
+        async (tx) => {
+          // Lock the resident's invoices and payments so a payment landing
+          // mid-checkout cannot be counted twice or missed.
+          await tx.$queryRaw`
+            SELECT "id" FROM "RentInvoice" WHERE "residentId" = ${params.residentId} ORDER BY "id" FOR UPDATE
+          `
+          await tx.$queryRaw`
+            SELECT "id" FROM "RentPayment" WHERE "residentId" = ${params.residentId} ORDER BY "id" FOR UPDATE
+          `
 
-      const exitDate = startOfDay(params.exitDate)
-
-      // --- Final pro-rata invoice ------------------------------------------
-      if (preview.proRataRent > 0 || preview.foodCharges > 0 || preview.otherCharges > 0) {
-        const periodStart = startOfMonth(exitDate)
-        const settings = resident.property.organization.settings
-        const stamp = `${periodStart.getFullYear()}${String(periodStart.getMonth() + 1).padStart(2, '0')}`
-        const number = `${settings?.invoicePrefix ?? 'INV'}-${stamp}-FIN-${resident.code}`
-        const subtotal = preview.proRataRent + preview.foodCharges + preview.otherCharges
-
-        const finalInvoice = await tx.rentInvoice.create({
-          data: {
-            organizationId: resident.organizationId,
-            propertyId: resident.propertyId,
-            residentId: resident.id,
-            number,
-            periodStart,
-            periodEnd: exitDate,
-            issueDate: exitDate,
-            dueDate: exitDate,
-            status: 'PENDING',
-            subtotal,
-            total: subtotal,
-            balance: subtotal,
-            autoGenerated: true,
-            notes: 'Final settlement invoice',
-            lines: {
-              create: [
-                ...(preview.proRataRent > 0
-                  ? [
-                      {
-                        kind: 'RENT' as const,
-                        label: `Rent till ${formatDate(exitDate)}`,
-                        quantity: 1,
-                        unitPrice: preview.proRataRent,
-                        amount: preview.proRataRent,
-                      },
-                    ]
-                  : []),
-                ...(preview.foodCharges > 0
-                  ? [
-                      {
-                        kind: 'FOOD' as const,
-                        label: `Food till ${formatDate(exitDate)}`,
-                        quantity: 1,
-                        unitPrice: preview.foodCharges,
-                        amount: preview.foodCharges,
-                      },
-                    ]
-                  : []),
-                ...(preview.otherCharges > 0
-                  ? [
-                      {
-                        kind: 'OTHER' as const,
-                        label: 'Other charges',
-                        quantity: 1,
-                        unitPrice: preview.otherCharges,
-                        amount: preview.otherCharges,
-                      },
-                    ]
-                  : []),
-              ],
+          const resident = await tx.resident.findUnique({
+            where: { id: params.residentId },
+            include: {
+              bed: { include: { room: true } },
+              property: { include: { organization: { include: { settings: true } } } },
+              deposit: true,
             },
-          },
-        })
-        await appendLedger(tx, {
-          organizationId: resident.organizationId,
-          residentId: resident.id,
-          kind: 'CHARGE',
-          label: `Final settlement invoice ${finalInvoice.number}`,
-          debit: subtotal,
-          entryDate: exitDate,
-          refType: 'RentInvoice',
-          refId: finalInvoice.id,
-        })
-      }
+          })
+          if (!resident) throw new NotFoundError('Resident not found')
+          if (resident.status === 'CHECKED_OUT') throw new ConflictError('Already checked out')
+          if (resident.status === 'PENDING') {
+            throw new ConflictError('This resident has not checked in yet')
+          }
 
-      // --- Utility charges become billed ------------------------------------
-      await tx.utilityCharge.updateMany({
-        where: { residentId: resident.id, billed: false },
-        data: { billed: true },
-      })
-
-      const damage = params.damageDeduction ?? 0
-      if (damage > 0) {
-        await appendLedger(tx, {
-          organizationId: resident.organizationId,
-          residentId: resident.id,
-          kind: 'ADJUSTMENT',
-          label: 'Damage / deduction at checkout',
-          debit: damage,
-          entryDate: exitDate,
-        })
-      }
-
-      // --- Deposit settlement ------------------------------------------------
-      const deductions = Math.min(preview.depositHeld, preview.depositHeld - preview.suggestedRefund)
-      if (resident.deposit) {
-        await tx.securityDeposit.update({
-          where: { id: resident.deposit.id },
-          data: {
+          const s = await loadSettlement(tx, {
+            residentId: resident.id,
+            exitDate: params.exitDate,
             deductions,
-            refunded: params.refundPaid ? preview.suggestedRefund : 0,
-            status:
-              preview.suggestedRefund === 0
-                ? 'FORFEITED'
-                : params.refundPaid
-                  ? 'REFUNDED'
-                  : 'PARTIALLY_REFUNDED',
-            refundedAt: params.refundPaid ? new Date() : null,
-            reason: params.settlementNote,
-          },
-        })
-        if (preview.depositHeld > 0) {
-          await appendLedger(tx, {
-            organizationId: resident.organizationId,
-            residentId: resident.id,
-            kind: 'DEPOSIT',
-            label: 'Security deposit adjusted against dues',
-            credit: preview.depositHeld - preview.suggestedRefund,
-            entryDate: exitDate,
           })
-        }
-        if (params.refundPaid && preview.suggestedRefund > 0) {
-          await appendLedger(tx, {
-            organizationId: resident.organizationId,
-            residentId: resident.id,
-            kind: 'REFUND',
-            label: 'Security deposit refunded',
-            debit: 0,
-            credit: 0,
-            entryDate: exitDate,
-          })
-        }
-      }
+          const r = s.result
+          const exitDate = s.exitDate
+          const ledgerBase = { organizationId: resident.organizationId, residentId: resident.id }
 
-      // --- Clear the open invoices covered by the deposit --------------------
-      const covered = preview.depositHeld - preview.suggestedRefund
-      if (covered > 0) {
-        let remaining = covered
-        const open = await tx.rentInvoice.findMany({
-          where: {
-            residentId: resident.id,
-            status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] },
-            balance: { gt: 0 },
-          },
-          orderBy: { dueDate: 'asc' },
-        })
-        for (const invoice of open) {
-          if (remaining <= 0) break
-          const applied = Math.min(remaining, invoice.balance)
-          remaining -= applied
-          const amountPaid = invoice.amountPaid + applied
-          const balance = invoice.total - amountPaid
-          await tx.rentInvoice.update({
-            where: { id: invoice.id },
+          // Open invoices as a working set; the settlement invoice joins at the end.
+          const open: OpenInvoiceRow[] = s.resident.invoices.map((i) => ({
+            id: i.id,
+            number: i.number,
+            status: i.status,
+            subtotal: i.subtotal,
+            total: i.total,
+            amountPaid: i.amountPaid,
+            balance: i.balance,
+          }))
+
+          // --- 1. Final "Settlement" invoice -------------------------------
+          const lines = [
+            ...s.exitLines.map((l) => ({ kind: l.kind, label: l.label, amount: l.amount })),
+            ...s.utilities.map((u) => ({
+              kind: (u.kind === 'ELECTRICITY' || u.kind === 'WATER' ? u.kind : 'OTHER') as InvoiceLineKind,
+              label: u.label,
+              amount: u.amount,
+            })),
+            ...r.deductions.map((d) => ({
+              kind: 'ADJUSTMENT' as InvoiceLineKind,
+              label: `Deduction — ${d.label}`,
+              amount: d.amount,
+            })),
+          ].filter((l) => l.amount !== 0)
+
+          let settlementInvoice: { id: string; number: string } | null = null
+          const settlementTotal = lines.reduce((sum, l) => sum + l.amount, 0)
+          if (lines.length && settlementTotal > 0) {
+            const number = await nextInvoiceNumber(
+              tx,
+              resident.organizationId,
+              resident.property.organization.settings?.invoicePrefix ?? 'INV',
+              exitDate,
+            )
+            const discount = -lines.filter((l) => l.amount < 0).reduce((sum, l) => sum + l.amount, 0)
+            const subtotal = settlementTotal + discount
+            // Monthly invoices sit at midnight on the 1st; the settlement is
+            // stamped at the end of the exit day so (resident, period) stays unique.
+            const stamp = new Date(exitDate)
+            stamp.setHours(23, 59, 59, 0)
+            const created = await tx.rentInvoice.create({
+              data: {
+                organizationId: resident.organizationId,
+                propertyId: resident.propertyId,
+                residentId: resident.id,
+                number,
+                periodStart: stamp,
+                periodEnd: stamp,
+                issueDate: exitDate,
+                dueDate: exitDate,
+                status: 'PENDING',
+                subtotal,
+                discount,
+                total: settlementTotal,
+                balance: settlementTotal,
+                autoGenerated: false,
+                notes: 'Settlement — final dues at checkout',
+                lines: {
+                  create: lines
+                    .filter((l) => l.amount > 0)
+                    .map((l) => ({
+                      kind: l.kind,
+                      label: l.label,
+                      quantity: 1,
+                      unitPrice: l.amount,
+                      amount: l.amount,
+                    }))
+                    .concat(
+                      lines
+                        .filter((l) => l.amount < 0)
+                        .map((l) => ({
+                          kind: 'DISCOUNT' as InvoiceLineKind,
+                          label: l.label,
+                          quantity: 1,
+                          unitPrice: l.amount,
+                          amount: l.amount,
+                        })),
+                    ),
+                },
+              },
+            })
+            settlementInvoice = { id: created.id, number: created.number }
+            open.push({
+              id: created.id,
+              number: created.number,
+              status: 'PENDING',
+              subtotal,
+              total: settlementTotal,
+              amountPaid: 0,
+              balance: settlementTotal,
+            })
+
+            const nonDeduction = settlementTotal - r.deductionsTotal
+            if (nonDeduction > 0) {
+              await appendLedger(tx, {
+                ...ledgerBase,
+                kind: 'CHARGE',
+                label: `Settlement invoice ${created.number} — final rent & utilities`,
+                debit: nonDeduction,
+                entryDate: exitDate,
+                refType: 'RentInvoice',
+                refId: created.id,
+              })
+            }
+            for (const d of r.deductions) {
+              await appendLedger(tx, {
+                ...ledgerBase,
+                kind: 'CHARGE',
+                label: `Deduction at checkout — ${d.label}`,
+                debit: d.amount,
+                entryDate: exitDate,
+                refType: 'RentInvoice',
+                refId: created.id,
+              })
+            }
+            if (s.utilities.length) {
+              await tx.utilityCharge.updateMany({
+                where: { id: { in: s.utilities.map((u) => u.id) } },
+                data: { billed: true, notes: `Billed on ${created.number}` },
+              })
+            }
+          }
+
+          // --- 2. Apply credits: unused days, advance, then deposit ---------
+          const save = async (row: OpenInvoiceRow) => {
+            await tx.rentInvoice.update({
+              where: { id: row.id },
+              data: {
+                subtotal: row.subtotal,
+                total: row.total,
+                amountPaid: row.amountPaid,
+                balance: Math.max(0, row.balance),
+                status: nextStatus(row),
+                paidAt: row.balance <= 0 ? exitDate : null,
+              },
+            })
+            row.status = nextStatus(row)
+          }
+
+          if (r.applied.unusedCredit > 0) {
+            // Credit the exit-month invoice first, then the oldest dues.
+            const order = [
+              ...open.filter((i) => i.id === s.exitMonthInvoice?.id),
+              ...open.filter((i) => i.id !== s.exitMonthInvoice?.id),
+            ]
+            let left = r.applied.unusedCredit
+            for (const row of order) {
+              if (left <= 0) break
+              const amount = Math.min(left, row.balance)
+              if (amount <= 0) continue
+              left -= amount
+              await tx.invoiceLine.create({
+                data: {
+                  invoiceId: row.id,
+                  kind: 'DISCOUNT',
+                  label: `Unused days credit — ${r.unusedDays} day${r.unusedDays === 1 ? '' : 's'} after ${formatDate(exitDate)}`,
+                  quantity: 1,
+                  unitPrice: -amount,
+                  amount: -amount,
+                },
+              })
+              row.subtotal -= amount
+              row.total -= amount
+              row.balance -= amount
+              await save(row)
+            }
+          }
+          if (r.unusedDaysCredit > 0) {
+            await appendLedger(tx, {
+              ...ledgerBase,
+              kind: 'ADJUSTMENT',
+              label: `Credit for ${r.unusedDays} unused day${r.unusedDays === 1 ? '' : 's'} in ${formatMonth(s.monthStart)}`,
+              credit: r.unusedDaysCredit,
+              entryDate: exitDate,
+              refType: s.exitMonthInvoice ? 'RentInvoice' : undefined,
+              refId: s.exitMonthInvoice?.id,
+            })
+          }
+
+          const allocate = async (
+            sources: { id: string; free: number }[],
+            total: number,
+            fallbackDirect: boolean,
+          ) => {
+            let left = total
+            for (const row of open) {
+              if (left <= 0) break
+              while (row.balance > 0 && left > 0) {
+                const source = sources.find((p) => p.free > 0)
+                const amount = Math.min(left, row.balance, source ? source.free : fallbackDirect ? left : 0)
+                if (amount <= 0) break
+                if (source) {
+                  await tx.paymentAllocation.upsert({
+                    where: { paymentId_invoiceId: { paymentId: source.id, invoiceId: row.id } },
+                    create: { paymentId: source.id, invoiceId: row.id, amount },
+                    update: { amount: { increment: amount } },
+                  })
+                  source.free -= amount
+                }
+                left -= amount
+                row.amountPaid += amount
+                row.balance -= amount
+              }
+              await save(row)
+            }
+          }
+
+          if (r.applied.advance > 0) await allocate(s.rentPayments, r.applied.advance, false)
+          // Deposits collected without a receipt (older records) still count.
+          if (r.applied.deposit > 0) await allocate(s.depositPayments, r.applied.deposit, true)
+
+          if (s.depositHeld > 0) {
+            await appendLedger(tx, {
+              ...ledgerBase,
+              kind: 'DEPOSIT',
+              label:
+                r.applied.deposit >= s.depositHeld
+                  ? 'Security deposit adjusted in full against final dues'
+                  : r.applied.deposit > 0
+                    ? `Security deposit applied — ${formatMoney(r.applied.deposit)} against dues`
+                    : 'Security deposit released for refund',
+              credit: s.depositHeld,
+              entryDate: exitDate,
+              refType: 'SecurityDeposit',
+              refId: resident.deposit?.id,
+            })
+          }
+
+          // --- 3. Refund ----------------------------------------------------
+          const refundPaidNow = r.refundable > 0 && Boolean(refundNow)
+          if (refundPaidNow) {
+            await appendLedger(tx, {
+              ...ledgerBase,
+              kind: 'REFUND',
+              label: `Refund paid — ${refundNow!.method.replace('_', ' ').toLowerCase()}${
+                refundNow!.reference ? ` (${refundNow!.reference})` : ''
+              }`,
+              debit: r.refundable,
+              entryDate: refundNow!.paidAt ? startOfDay(refundNow!.paidAt) : exitDate,
+              refType: 'SecurityDeposit',
+              refId: resident.deposit?.id,
+            })
+          }
+
+          if (resident.deposit) {
+            const status: DepositStatus =
+              s.depositHeld <= 0
+                ? resident.deposit.status
+                : r.refundable <= 0
+                  ? 'FORFEITED'
+                  : refundPaidNow
+                    ? 'REFUNDED'
+                    : r.applied.deposit > 0
+                      ? 'PARTIALLY_REFUNDED'
+                      : 'COLLECTED'
+            await tx.securityDeposit.update({
+              where: { id: resident.deposit.id },
+              data: {
+                deductions: resident.deposit.deductions + r.applied.deposit,
+                refunded: resident.deposit.refunded + (refundPaidNow ? r.depositReturned : 0),
+                status,
+                refundedAt: refundPaidNow ? (refundNow!.paidAt ?? new Date()) : null,
+                refundMethod: refundPaidNow ? refundNow!.method : null,
+                refundReference: refundPaidNow ? refundNow!.reference || null : null,
+                refundNote: refundPaidNow ? refundNow!.note || null : null,
+                reason: params.settlementNote ?? resident.deposit.reason,
+              },
+            })
+          }
+
+          // Running balances depend on entry order; recompute them once.
+          await rebuildLedger(tx, resident.id)
+
+          // --- 4. Checkout record -------------------------------------------
+          const foodPart = s.exitLines.filter((l) => l.kind === 'FOOD').reduce((sum, l) => sum + l.amount, 0)
+          const checkout = await tx.checkout.create({
             data: {
-              amountPaid,
-              balance: Math.max(0, balance),
-              status: balance <= 0 ? 'PAID' : 'PARTIALLY_PAID',
-              paidAt: balance <= 0 ? exitDate : null,
-              notes: 'Settled from security deposit at checkout',
+              residentId: resident.id,
+              exitDate,
+              reason: params.reason,
+              outstandingRent: s.resident.invoices.reduce((sum, i) => sum + i.balance, 0),
+              proRataRent: r.exitMonthCharge - foodPart - r.unusedDaysCredit,
+              foodCharges: foodPart,
+              utilityCharges: s.utilities.reduce((sum, u) => sum + u.amount, 0),
+              otherCharges: 0,
+              damageDeduction: r.deductionsTotal,
+              depositHeld: s.depositHeld,
+              refundAmount: r.refundable,
+              payableAmount: r.payable,
+              settledAt: r.refundable > 0 ? (refundPaidNow ? new Date() : null) : r.payable > 0 ? null : new Date(),
+              settlementNote: params.settlementNote,
+              processedBy: params.actor.name,
             },
           })
-        }
-      }
 
-      // --- Checkout record ---------------------------------------------------
-      const checkout = await tx.checkout.create({
-        data: {
-          residentId: resident.id,
-          exitDate,
-          reason: params.reason,
-          outstandingRent: preview.outstandingRent,
-          proRataRent: preview.proRataRent,
-          foodCharges: preview.foodCharges,
-          utilityCharges: preview.utilityCharges,
-          otherCharges: preview.otherCharges,
-          damageDeduction: damage,
-          depositHeld: preview.depositHeld,
-          refundAmount: preview.suggestedRefund,
-          payableAmount: preview.suggestedPayable,
-          settledAt: params.refundPaid || preview.suggestedRefund === 0 ? new Date() : null,
-          settlementNote: params.settlementNote,
-          processedBy: params.actor.name,
+          // --- 5. Release the bed, stop food, close the account -------------
+          if (resident.bed) {
+            await tx.bed.update({
+              where: { id: resident.bed.id },
+              data: { status: 'AVAILABLE', residentId: null, blockedReason: null },
+            })
+            await tx.bedAllocation.updateMany({
+              where: { bedId: resident.bed.id, residentId: resident.id, toDate: null },
+              data: { toDate: exitDate },
+            })
+          }
+          await tx.foodSubscription.updateMany({
+            where: { residentId: resident.id },
+            data: { active: false, endDate: exitDate },
+          })
+          await tx.resident.update({
+            where: { id: resident.id },
+            data: { status: 'CHECKED_OUT', exitDate, roomId: null },
+          })
+          if (resident.userId) {
+            await tx.user.update({ where: { id: resident.userId }, data: { status: 'ARCHIVED' } })
+          }
+          await tx.mealAttendance.deleteMany({
+            where: { residentId: resident.id, meal: { date: { gt: exitDate } } },
+          })
+
+          const outcome =
+            r.refundable > 0
+              ? refundPaidNow
+                ? `refund ${formatMoney(r.refundable)} paid`
+                : `refund ${formatMoney(r.refundable)} pending`
+              : r.payable > 0
+                ? `${formatMoney(r.payable)} still payable`
+                : 'fully settled'
+
+          await recordActivity(
+            {
+              organizationId: resident.organizationId,
+              propertyId: resident.propertyId,
+              actorId: params.actor.id,
+              actorName: params.actor.name,
+              event: 'CHECKOUT_COMPLETED',
+              entityType: 'Resident',
+              entityId: resident.id,
+              summary: `${resident.fullName} checked out of ${resident.property.name} — ${outcome}`,
+              meta: {
+                owed: r.owed,
+                credits: r.credits,
+                refund: r.refundable,
+                payable: r.payable,
+                depositHeld: s.depositHeld,
+                advance: s.advance,
+                unusedDaysCredit: r.unusedDaysCredit,
+                exitMonthCharge: r.exitMonthCharge,
+                deductions: r.deductions,
+                settlementInvoice: settlementInvoice?.number ?? null,
+              },
+            },
+            tx,
+          )
+          if (refundPaidNow) {
+            await recordActivity(
+              {
+                organizationId: resident.organizationId,
+                propertyId: resident.propertyId,
+                actorId: params.actor.id,
+                actorName: params.actor.name,
+                event: 'REFUND_ISSUED',
+                entityType: 'Resident',
+                entityId: resident.id,
+                summary: `${formatMoney(r.refundable)} refunded to ${resident.fullName} (${refundNow!.method.replace('_', ' ').toLowerCase()})`,
+              },
+              tx,
+            )
+          }
+          if (resident.bed) {
+            await recordActivity(
+              {
+                organizationId: resident.organizationId,
+                propertyId: resident.propertyId,
+                actorId: params.actor.id,
+                actorName: params.actor.name,
+                event: 'BED_RELEASED',
+                entityType: 'Bed',
+                entityId: resident.bed.id,
+                summary: `Bed ${resident.bed.label} in Room ${resident.bed.room.number} is now available`,
+              },
+              tx,
+            )
+          }
+          await notifyOrgAdmins(
+            resident.organizationId,
+            {
+              kind: 'SYSTEM',
+              title: 'Resident checked out',
+              body: `${resident.fullName} left ${resident.property.name}. ${
+                r.refundable > 0
+                  ? refundPaidNow
+                    ? `Refund of ${formatMoney(r.refundable)} paid.`
+                    : `Refund of ${formatMoney(r.refundable)} is still to be paid.`
+                  : r.payable > 0
+                    ? `${formatMoney(r.payable)} still payable.`
+                    : 'Fully settled.'
+              }`,
+              link: `/app/residents/${resident.id}`,
+            },
+            tx,
+          )
+
+          return { resident, checkout, settlementInvoice, refundPaid: refundPaidNow, result: r }
         },
-      })
-
-      // --- Release the bed, stop food, close the account ---------------------
-      if (resident.bed) {
-        await tx.bed.update({
-          where: { id: resident.bed.id },
-          data: { status: 'AVAILABLE', residentId: null },
-        })
-        await tx.bedAllocation.updateMany({
-          where: { bedId: resident.bed.id, residentId: resident.id, toDate: null },
-          data: { toDate: exitDate },
-        })
-      }
-      await tx.foodSubscription.updateMany({
-        where: { residentId: resident.id },
-        data: { active: false, endDate: exitDate },
-      })
-      await tx.resident.update({
-        where: { id: resident.id },
-        data: { status: 'CHECKED_OUT', exitDate, roomId: null },
-      })
-      if (resident.userId) {
-        await tx.user.update({ where: { id: resident.userId }, data: { status: 'ARCHIVED' } })
-      }
-      await tx.mealAttendance.deleteMany({
-        where: { residentId: resident.id, meal: { date: { gt: exitDate } } },
-      })
-
-      await recordActivity(
-        {
-          organizationId: resident.organizationId,
-          propertyId: resident.propertyId,
-          actorId: params.actor.id,
-          actorName: params.actor.name,
-          event: 'CHECKOUT_COMPLETED',
-          entityType: 'Resident',
-          entityId: resident.id,
-          summary: `${resident.fullName} checked out of ${resident.property.name}${
-            preview.suggestedRefund > 0
-              ? ` — refund ${formatMoney(preview.suggestedRefund)}`
-              : preview.suggestedPayable > 0
-                ? ` — ${formatMoney(preview.suggestedPayable)} still payable`
-                : ' — settled'
-          }`,
-          meta: {
-            refund: preview.suggestedRefund,
-            payable: preview.suggestedPayable,
-            depositHeld: preview.depositHeld,
-          },
-        },
-        tx,
-      )
-      if (resident.bed) {
-        await recordActivity(
-          {
-            organizationId: resident.organizationId,
-            propertyId: resident.propertyId,
-            actorId: params.actor.id,
-            actorName: params.actor.name,
-            event: 'BED_RELEASED',
-            entityType: 'Bed',
-            entityId: resident.bed.id,
-            summary: `Bed ${resident.bed.label} in Room ${resident.bed.room.number} is now available`,
-          },
-          tx,
-        )
-      }
-      await notifyOrgAdmins(
-        resident.organizationId,
-        {
-          kind: 'SYSTEM',
-          title: 'Resident checked out',
-          body: `${resident.fullName} left ${resident.property.name}. ${
-            preview.suggestedRefund > 0
-              ? `Refund due: ${formatMoney(preview.suggestedRefund)}.`
-              : preview.suggestedPayable > 0
-                ? `${formatMoney(preview.suggestedPayable)} still payable.`
-                : 'Fully settled.'
-          }`,
-          link: `/app/residents/${resident.id}`,
-        },
-        tx,
-      )
-
-      return { resident, checkout, preview }
-    },
-    { timeout: 20000 },
+        { timeout: 30000 },
+      ),
+    ['number'],
   )
+
+  const { resident, checkout } = result
+  await sendWhatsApp({
+    organizationId: resident.organizationId,
+    toName: resident.fullName,
+    toPhone: resident.whatsappPhone || resident.phone,
+    template: 'checkout_settlement',
+    body:
+      `Hi ${resident.fullName.split(' ')[0]} 👋\n\n` +
+      `Your checkout from ${resident.property.name} on ${formatDate(checkout.exitDate)} is complete.\n\n` +
+      `Total dues: ${formatMoney(result.result.owed)}\n` +
+      `Deposit & credits: ${formatMoney(result.result.credits)}\n` +
+      (checkout.refundAmount > 0
+        ? `Refund: ${formatMoney(checkout.refundAmount)}${result.refundPaid ? ' (paid)' : ' (we will pay this shortly)'}\n`
+        : '') +
+      (checkout.payableAmount > 0 ? `Balance payable: ${formatMoney(checkout.payableAmount)}\n` : '') +
+      `\nThank you for staying with us.`,
+    variables: [resident.fullName, formatMoney(checkout.refundAmount)],
+    refType: 'Checkout',
+    refId: checkout.id,
+  }).catch(() => undefined)
+
+  return result
+}
+
+/** Pays out a refund that was left pending at checkout. */
+export async function markRefundPaid(params: {
+  residentId: string
+  method: string
+  reference?: string
+  paidAt?: Date
+  note?: string
+  actor: { id?: string; name: string }
+}) {
+  const paidAt = params.paidAt ?? new Date()
+  const methodLabel = params.method.replace('_', ' ').toLowerCase()
+
+  const result = await prisma.$transaction(async (tx) => {
+    const resident = await tx.resident.findUnique({
+      where: { id: params.residentId },
+      include: { checkout: true, deposit: true, property: true },
+    })
+    if (!resident) throw new NotFoundError('Resident not found')
+    const checkout = resident.checkout
+    if (!checkout || checkout.refundAmount <= 0) {
+      throw new ConflictError('There is no refund due for this resident')
+    }
+    // Claim the pending refund atomically so it can only be paid once.
+    const claimed = await tx.checkout.updateMany({
+      where: { id: checkout.id, settledAt: null },
+      data: { settledAt: paidAt },
+    })
+    if (claimed.count !== 1) throw new ConflictError('This refund has already been marked as paid')
+
+    await appendLedger(tx, {
+      organizationId: resident.organizationId,
+      residentId: resident.id,
+      kind: 'REFUND',
+      label: `Refund paid — ${methodLabel}${params.reference ? ` (${params.reference})` : ''}`,
+      debit: checkout.refundAmount,
+      entryDate: startOfDay(paidAt),
+      refType: 'SecurityDeposit',
+      refId: resident.deposit?.id,
+    })
+    await rebuildLedger(tx, resident.id)
+
+    if (resident.deposit) {
+      const returned = Math.max(
+        0,
+        resident.deposit.collected - resident.deposit.deductions - resident.deposit.refunded,
+      )
+      await tx.securityDeposit.update({
+        where: { id: resident.deposit.id },
+        data: {
+          status: 'REFUNDED',
+          refunded: resident.deposit.refunded + returned,
+          refundedAt: paidAt,
+          refundMethod: params.method,
+          refundReference: params.reference || null,
+          refundNote: params.note || null,
+        },
+      })
+    }
+
+    await recordActivity(
+      {
+        organizationId: resident.organizationId,
+        propertyId: resident.propertyId,
+        actorId: params.actor.id,
+        actorName: params.actor.name,
+        event: 'REFUND_ISSUED',
+        entityType: 'Resident',
+        entityId: resident.id,
+        summary: `${formatMoney(checkout.refundAmount)} refunded to ${resident.fullName} (${methodLabel})`,
+        meta: { amount: checkout.refundAmount, method: params.method, reference: params.reference ?? null },
+      },
+      tx,
+    )
+    return { resident, amount: checkout.refundAmount }
+  })
 
   await sendWhatsApp({
     organizationId: result.resident.organizationId,
@@ -934,22 +1501,110 @@ export async function completeCheckout(params: {
     template: 'checkout_settlement',
     body:
       `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
-      `Your checkout from ${result.resident.property.name} on ${formatDate(result.checkout.exitDate)} is complete.\n\n` +
-      `Deposit held: ${formatMoney(result.checkout.depositHeld)}\n` +
-      `Dues adjusted: ${formatMoney(result.checkout.depositHeld - result.checkout.refundAmount)}\n` +
-      (result.checkout.refundAmount > 0
-        ? `Refund: ${formatMoney(result.checkout.refundAmount)}\n`
-        : '') +
-      (result.checkout.payableAmount > 0
-        ? `Balance payable: ${formatMoney(result.checkout.payableAmount)}\n`
-        : '') +
-      `\nThank you for staying with us.`,
-    variables: [result.resident.fullName, formatMoney(result.checkout.refundAmount)],
-    refType: 'Checkout',
-    refId: result.checkout.id,
+      `We have paid your refund of ${formatMoney(result.amount)} from ${result.resident.property.name}` +
+      `${params.reference ? ` (ref ${params.reference})` : ''}.\n\nThank you for staying with us.`,
+    variables: [result.resident.fullName, formatMoney(result.amount)],
+    refType: 'Resident',
+    refId: result.resident.id,
   }).catch(() => undefined)
 
   return result
+}
+
+/** Records a security deposit that was not collected at check-in. */
+export async function collectDeposit(params: {
+  residentId: string
+  amount?: number
+  method: PaymentMethodKind
+  reference?: string
+  paidAt?: Date
+  actor: { id?: string; name: string }
+}) {
+  return retryOnUniqueConflict(
+    () =>
+      prisma.$transaction(async (tx) => {
+        const resident = await tx.resident.findUnique({
+          where: { id: params.residentId },
+          include: { deposit: true, organization: { include: { settings: true } } },
+        })
+        if (!resident) throw new NotFoundError('Resident not found')
+        if (resident.status === 'CHECKED_OUT') {
+          throw new ConflictError('This resident has already checked out')
+        }
+        const deposit =
+          resident.deposit ??
+          (await tx.securityDeposit.create({
+            data: {
+              organizationId: resident.organizationId,
+              residentId: resident.id,
+              amount: resident.depositAmount,
+            },
+          }))
+        const due = Math.max(0, deposit.amount - deposit.collected)
+        if (due <= 0) throw new ConflictError('The deposit has already been collected in full')
+        const amount = params.amount && params.amount > 0 ? Math.min(params.amount, due) : due
+
+        const paidAt = params.paidAt ?? new Date()
+        const receiptNumber = await nextReceiptNumber(
+          tx,
+          resident.organizationId,
+          resident.organization.settings?.receiptPrefix ?? 'RCP',
+          paidAt,
+        )
+        const payment = await tx.rentPayment.create({
+          data: {
+            organizationId: resident.organizationId,
+            propertyId: resident.propertyId,
+            residentId: resident.id,
+            receiptNumber,
+            amount,
+            method: params.method,
+            // Held money, not rent: never allocated to invoices or counted as revenue.
+            purpose: 'DEPOSIT',
+            status: 'SUCCESS',
+            paidAt,
+            reference: params.reference,
+            notes: 'Security deposit collected',
+            recordedBy: params.actor.name,
+          },
+        })
+        const collected = deposit.collected + amount
+        await tx.securityDeposit.update({
+          where: { id: deposit.id },
+          data: {
+            collected,
+            status: collected >= deposit.amount ? 'COLLECTED' : 'PENDING',
+            collectedAt: paidAt,
+          },
+        })
+        // Memo line, as at check-in: a deposit is held, not a payment towards rent.
+        await appendLedger(tx, {
+          organizationId: resident.organizationId,
+          residentId: resident.id,
+          kind: 'DEPOSIT',
+          label: `Security deposit received — ${formatMoney(amount)} (${receiptNumber})`,
+          entryDate: paidAt,
+          refType: 'SecurityDeposit',
+          refId: deposit.id,
+        })
+        await recordActivity(
+          {
+            organizationId: resident.organizationId,
+            propertyId: resident.propertyId,
+            actorId: params.actor.id,
+            actorName: params.actor.name,
+            event: 'PAYMENT_COMPLETED',
+            entityType: 'RentPayment',
+            entityId: payment.id,
+            summary: `Security deposit ${formatMoney(amount)} from ${resident.fullName} (${receiptNumber})`,
+            meta: { residentId: resident.id, amount, purpose: 'DEPOSIT', method: params.method },
+          },
+          tx,
+        )
+        return { resident, payment, amount, remaining: deposit.amount - collected }
+      }),
+    ['receiptNumber'],
+  )
 }
 
 /** Marks a resident as serving notice; the bed stays occupied until exit. */

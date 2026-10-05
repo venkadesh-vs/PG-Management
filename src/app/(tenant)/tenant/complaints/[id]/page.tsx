@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import { ComplaintThread } from '@/app/(owner)/app/complaints/[id]/complaint-thread'
 import { TenantComplaintActions } from './tenant-actions'
+import { PhotoGallery } from '@/components/app/photo-upload'
 
 export const metadata: Metadata = { title: 'Complaint' }
 
@@ -85,6 +86,7 @@ export default async function TenantComplaintPage({
           <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">
             {complaint.description}
           </p>
+          {complaint.photoUrls.length > 0 && <PhotoGallery urls={complaint.photoUrls} className="mt-3" />}
         </CardContent>
       </Card>
 
@@ -161,7 +163,13 @@ export default async function TenantComplaintPage({
                 What was done
               </p>
               <p className="mt-1 text-sm text-emerald-900">{complaint.resolutionNote}</p>
+              {complaint.resolutionPhotoUrl && (
+                <PhotoGallery urls={[complaint.resolutionPhotoUrl]} className="mt-2" />
+              )}
             </div>
+          )}
+          {!complaint.resolutionNote && complaint.resolutionPhotoUrl && (
+            <PhotoGallery urls={[complaint.resolutionPhotoUrl]} className="mt-4" />
           )}
         </CardContent>
       </Card>
@@ -204,6 +212,7 @@ export default async function TenantComplaintPage({
               message: u.message,
               statusTo: u.statusTo,
               createdAt: u.createdAt.toISOString(),
+              photoUrl: u.photoUrl,
             }))}
           />
         </CardContent>

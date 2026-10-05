@@ -2,15 +2,18 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, animate, motion } from 'framer-motion'
 import {
   ArrowRightLeft,
   CalendarClock,
   Check,
   CircleCheck,
   DoorOpen,
+  FileText,
   MoreHorizontal,
+  Plus,
   Receipt,
+  Trash2,
   Wallet,
 } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
@@ -43,19 +46,43 @@ type Resident = {
   rentAmount: number
   outstanding: number
   exitDate: string | null
+  noticeDate?: string | null
 }
 
 type Invoice = { id: string; number: string; balance: number; dueDate: string }
 
 type CheckoutPreview = {
+  exitDate: string
+  openInvoices: { id: string; number: string; balance: number; dueDate: string }[]
   outstandingRent: number
-  proRataRent: number
-  foodCharges: number
+  utilities: { id: string; label: string; amount: number }[]
   utilityCharges: number
-  otherCharges: number
+  deductions: { label: string; amount: number }[]
+  deductionsTotal: number
+  exitMonth: {
+    label: string
+    invoiced: boolean
+    usedDays: number
+    unusedDays: number
+    charge: number
+    credit: number
+    lines: { label: string; amount: number }[]
+  }
   depositHeld: number
-  suggestedRefund: number
-  suggestedPayable: number
+  advance: number
+  owed: number
+  credits: number
+  applied: { unusedCredit: number; advance: number; deposit: number }
+  refundable: number
+  payable: number
+}
+
+type CheckoutResult = {
+  message: string
+  refund: number
+  payable: number
+  refundPaid: boolean
+  settlementInvoice: { id: string; number: string } | null
 }
 
 /**
@@ -512,6 +539,37 @@ function NoticeDialog({
 
 // -------------------------------------------------------------- checkout ----
 
+type DeductionRow = { key: number; label: string; amount: string }
+
+const REFUND_METHODS = [
+  { value: 'UPI', label: 'UPI' },
+  { value: 'CASH', label: 'Cash' },
+  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
+  { value: 'CHEQUE', label: 'Cheque' },
+]
+
+const STEPS = ['Exit date', 'Settlement', 'Refund'] as const
+
+/** A rupee figure that counts to its new value instead of jumping. */
+function AnimatedMoney({ value, className }: { value: number; className?: string }) {
+  const [display, setDisplay] = React.useState(value)
+  const from = React.useRef(value)
+  React.useEffect(() => {
+    const controls = animate(from.current, value, {
+      duration: 0.45,
+      ease: 'easeOut',
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    })
+    from.current = value
+    return () => controls.stop()
+  }, [value])
+  return <span className={cn('tabular', className)}>{formatMoney(display)}</span>
+}
+
+function daysBetween(a: Date, b: Date) {
+  return Math.round((b.getTime() - a.getTime()) / 86400000)
+}
+
 function CheckoutDialog({
   open,
   onClose,
@@ -523,62 +581,111 @@ function CheckoutDialog({
 }) {
   const router = useRouter()
   const toast = useToast()
+  const today = toISODate(new Date())
+  const [step, setStep] = React.useState(0)
   const [exitDate, setExitDate] = React.useState(
-    resident.exitDate ? resident.exitDate.slice(0, 10) : toISODate(new Date()),
+    resident.exitDate ? resident.exitDate.slice(0, 10) : today,
   )
-  const [damage, setDamage] = React.useState('0')
-  const [other, setOther] = React.useState('0')
   const [reason, setReason] = React.useState('')
+  const [rows, setRows] = React.useState<DeductionRow[]>([])
   const [note, setNote] = React.useState('')
-  const [refundPaid, setRefundPaid] = React.useState(true)
+  const [refundMode, setRefundMode] = React.useState<'now' | 'later'>('now')
+  const [method, setMethod] = React.useState('UPI')
+  const [reference, setReference] = React.useState('')
   const [preview, setPreview] = React.useState<CheckoutPreview | null>(null)
-  const [busy, setBusy] = React.useState(false)
+  const [previewError, setPreviewError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const [done, setDone] = React.useState<{ refund: number; payable: number } | null>(null)
+  const [busy, setBusy] = React.useState(false)
+  const [done, setDone] = React.useState<CheckoutResult | null>(null)
+  const nextKey = React.useRef(1)
 
-  // Recompute the settlement whenever an input that affects it changes.
   React.useEffect(() => {
-    if (!open) return
+    if (open) {
+      setStep(0)
+      setDone(null)
+      setPreviewError(null)
+    }
+  }, [open])
+
+  const deductions = React.useMemo(
+    () =>
+      rows
+        .map((r) => ({ label: r.label.trim() || 'Deduction', amount: Math.max(0, Math.round(Number(r.amount) || 0)) }))
+        .filter((d) => d.amount > 0),
+    [rows],
+  )
+  const deductionKey = JSON.stringify(deductions)
+
+  // Live settlement: recompute shortly after any input that affects it changes.
+  React.useEffect(() => {
+    if (!open || !exitDate) return
     let cancelled = false
     setLoading(true)
-    api
-      .post<{ preview: CheckoutPreview }>('/api/residents/actions', {
-        action: 'CHECKOUT_PREVIEW',
-        residentId: resident.id,
-        exitDate,
-        damageDeduction: Number(damage) || 0,
-        otherCharges: Number(other) || 0,
-      })
-      .then((data) => {
-        if (!cancelled) setPreview(data.preview)
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [open, resident.id, exitDate, damage, other])
-
-  async function submit() {
-    setBusy(true)
-    try {
-      const result = await api.post<{ message: string; refund: number; payable: number }>(
-        '/api/residents/actions',
-        {
-          action: 'CHECKOUT',
+    const timer = setTimeout(() => {
+      api
+        .post<{ preview: CheckoutPreview }>('/api/residents/actions', {
+          action: 'CHECKOUT_PREVIEW',
           residentId: resident.id,
           exitDate,
-          reason: reason || undefined,
-          damageDeduction: Number(damage) || 0,
-          otherCharges: Number(other) || 0,
-          settlementNote: note || undefined,
-          refundPaid,
-        },
+          deductions: JSON.parse(deductionKey),
+        })
+        .then((data) => {
+          if (cancelled) return
+          setPreview(data.preview)
+          setPreviewError(null)
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setPreviewError(error instanceof ApiError ? error.message : 'Could not calculate the settlement.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [open, resident.id, exitDate, deductionKey])
+
+  // Notice check
+  const exit = new Date(`${exitDate}T00:00:00`)
+  const notice = resident.noticeDate ? new Date(resident.noticeDate) : null
+  const noticeDays = notice ? daysBetween(notice, exit) : null
+  const futureExit = exitDate > today
+
+  async function submit() {
+    if (!preview) return
+    if (preview.refundable > 0 && refundMode === 'now' && !method) {
+      toast.error('Choose a refund method', 'Pick how the refund was paid, or choose “Pay later”.')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.post<CheckoutResult>('/api/residents/actions', {
+        action: 'CHECKOUT',
+        residentId: resident.id,
+        exitDate,
+        reason: reason || undefined,
+        deductions,
+        settlementNote: note || undefined,
+        refund:
+          preview.refundable > 0 && refundMode === 'now'
+            ? { method, reference: reference || undefined }
+            : null,
+      })
+      setDone(result)
+      toast.success(
+        'Checkout complete',
+        result.refund > 0
+          ? result.refundPaid
+            ? `${formatMoney(result.refund)} refunded to ${resident.fullName}.`
+            : `${formatMoney(result.refund)} refund saved as pending.`
+          : result.payable > 0
+            ? `${formatMoney(result.payable)} is still payable on the settlement invoice.`
+            : `${resident.fullName} is fully settled.`,
       )
-      setDone({ refund: result.refund, payable: result.payable })
-      toast.success('Checkout completed', result.message)
       router.refresh()
     } catch (error) {
       toast.error(
@@ -590,169 +697,214 @@ function CheckoutDialog({
     }
   }
 
+  const canNext = step === 0 ? Boolean(exitDate) && !previewError : Boolean(preview) && !loading
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
       <DialogContent size="lg">
         {done ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="space-y-4 text-center"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-              className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-100"
-            >
-              <Check className="size-7 text-emerald-600" strokeWidth={3} />
-            </motion.div>
-            <DialogTitle>{resident.fullName} has checked out</DialogTitle>
-            <DialogDescription>
-              {done.refund > 0
-                ? `${formatMoney(done.refund)} refunded from the deposit.`
-                : done.payable > 0
-                  ? `${formatMoney(done.payable)} is still payable.`
-                  : 'Fully settled — nothing outstanding.'}
-            </DialogDescription>
-            <ul className="mx-auto max-w-sm space-y-1 text-left text-sm text-slate-600">
-              {[
-                'Bed released and marked available',
-                'PG occupancy recalculated',
-                'Rent schedule stopped',
-                'Food plan ended',
-                'Resident app account closed',
-                'Final settlement saved to the ledger',
-              ].map((line) => (
-                <li key={line} className="flex items-start gap-2">
-                  <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-                  {line}
-                </li>
-              ))}
-            </ul>
-            <Button variant="primary" className="w-full" onClick={onClose}>
-              Done
-            </Button>
-          </motion.div>
+          <CheckoutSuccess done={done} name={resident.fullName} onClose={onClose} />
         ) : (
           <>
             <DialogHeader>
               <DialogTitle>Check out {resident.fullName}</DialogTitle>
               <DialogDescription>
-                The settlement below is calculated from live invoices, the deposit and any unbilled
-                utility charges.
+                We settle everything in one go — dues, utilities, deductions, the deposit and any
+                advance — then free up the bed.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-4">
-                <Field label="Exit date" required>
-                  <Input type="date" value={exitDate} onChange={(e) => setExitDate(e.target.value)} />
-                </Field>
-                <Field label="Reason for leaving">
-                  <Input
-                    placeholder="Job relocation"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                  />
-                </Field>
-                <Field label="Damage / deduction" hint="Deducted from the deposit">
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={damage}
-                    onChange={(e) => setDamage(e.target.value)}
-                  />
-                </Field>
-                <Field label="Other charges">
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={other}
-                    onChange={(e) => setOther(e.target.value)}
-                  />
-                </Field>
-                <Field label="Settlement note">
-                  <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-                </Field>
-              </div>
+            <ol className="flex items-center gap-2 text-xs">
+              {STEPS.map((label, i) => (
+                <li key={label} className="flex flex-1 items-center gap-2">
+                  <span
+                    className={cn(
+                      'flex size-6 shrink-0 items-center justify-center rounded-full font-semibold transition-colors',
+                      i < step
+                        ? 'bg-emerald-500 text-white'
+                        : i === step
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-500',
+                    )}
+                  >
+                    {i < step ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
+                  </span>
+                  <span className={cn('truncate', i === step ? 'font-medium text-slate-900' : 'text-slate-500')}>
+                    {label}
+                  </span>
+                  {i < STEPS.length - 1 && <span className="h-px flex-1 bg-slate-200" />}
+                </li>
+              ))}
+            </ol>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Final settlement
-                </p>
-                {loading || !preview ? (
-                  <div className="space-y-2 pt-3">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className="skeleton h-4 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    <SettleRow label="Outstanding rent" value={preview.outstandingRent} />
-                    <SettleRow label="Rent till exit date" value={preview.proRataRent} />
-                    {preview.foodCharges > 0 && (
-                      <SettleRow label="Food charges" value={preview.foodCharges} />
-                    )}
-                    {preview.utilityCharges > 0 && (
-                      <SettleRow label="Utility charges" value={preview.utilityCharges} />
-                    )}
-                    {preview.otherCharges > 0 && (
-                      <SettleRow label="Other charges" value={preview.otherCharges} />
-                    )}
-                    {Number(damage) > 0 && (
-                      <SettleRow label="Damage deduction" value={Number(damage)} />
-                    )}
-                    <div className="border-t border-slate-200 pt-2">
-                      <SettleRow label="Deposit held" value={preview.depositHeld} positive />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={step}
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.18 }}
+                className="min-h-[18rem]"
+              >
+                {step === 0 && (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Exit date" required hint="The last day they stay">
+                        <Input type="date" value={exitDate} onChange={(e) => setExitDate(e.target.value)} />
+                      </Field>
+                      <Field label="Reason for leaving">
+                        <Input
+                          placeholder="Job relocation"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                        />
+                      </Field>
                     </div>
+
                     <div
                       className={cn(
-                        'mt-2 rounded-xl p-3 text-center',
-                        preview.suggestedRefund > 0
-                          ? 'bg-emerald-100/70'
-                          : preview.suggestedPayable > 0
-                            ? 'bg-red-100/70'
-                            : 'bg-slate-200/60',
+                        'flex items-start gap-3 rounded-2xl border p-4 text-sm',
+                        noticeDays != null && noticeDays >= 30
+                          ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800'
+                          : 'border-amber-200 bg-amber-50/70 text-amber-800',
                       )}
                     >
-                      <p className="text-[11px] uppercase tracking-wide text-slate-600">
-                        {preview.suggestedRefund > 0
-                          ? 'Refund to resident'
-                          : preview.suggestedPayable > 0
-                            ? 'Resident still owes'
-                            : 'Fully settled'}
-                      </p>
-                      <p className="font-display text-2xl font-semibold text-slate-900 tabular">
-                        {formatMoney(
-                          preview.suggestedRefund > 0
-                            ? preview.suggestedRefund
-                            : preview.suggestedPayable,
+                      <CalendarClock className="mt-0.5 size-4 shrink-0" />
+                      <div>
+                        {notice ? (
+                          <>
+                            <p className="font-medium">
+                              Notice given on {formatDate(notice)} —{' '}
+                              {noticeDays != null && noticeDays >= 0
+                                ? `${noticeDays} day${noticeDays === 1 ? '' : 's'} before exit`
+                                : 'after this exit date'}
+                            </p>
+                            <p className="mt-0.5 text-xs opacity-80">
+                              {noticeDays != null && noticeDays >= 30
+                                ? 'Full notice period served.'
+                                : 'Shorter than a month. Add a notice-period deduction in the next step if your house rules call for one.'}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-medium">No notice was recorded</p>
+                            <p className="mt-0.5 text-xs opacity-80">
+                              If they left without notice, you can add a deduction in the next step.
+                            </p>
+                          </>
                         )}
-                      </p>
+                      </div>
                     </div>
-                    {preview.suggestedRefund > 0 && (
-                      <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm text-slate-600">
-                        <Checkbox
-                          checked={refundPaid}
-                          onCheckedChange={(c) => setRefundPaid(c === true)}
-                        />
-                        Refund paid out today
-                      </label>
+
+                    {futureExit && (
+                      <p className="text-xs text-slate-500">
+                        The exit date is in the future. Checking out now still frees the bed today —
+                        if they are staying on, use “Mark notice period” instead.
+                      </p>
                     )}
+                    {previewError && <p className="text-sm text-red-600">{previewError}</p>}
                   </div>
                 )}
-              </div>
-            </div>
+
+                {step === 1 && (
+                  <SettlementStep
+                    preview={preview}
+                    loading={loading}
+                    error={previewError}
+                    rows={rows}
+                    onRows={setRows}
+                    nextKey={() => nextKey.current++}
+                  />
+                )}
+
+                {step === 2 && preview && (
+                  <div className="space-y-4">
+                    <SettlementResult preview={preview} />
+
+                    {preview.refundable > 0 ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['now', 'later'] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setRefundMode(m)}
+                              className={cn(
+                                'rounded-xl border p-3 text-left transition-colors',
+                                refundMode === m
+                                  ? 'border-slate-900 bg-slate-900 text-white'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                              )}
+                            >
+                              <p className="text-sm font-semibold">{m === 'now' ? 'Refund now' : 'Pay later'}</p>
+                              <p className={cn('text-xs', refundMode === m ? 'text-white/70' : 'text-slate-500')}>
+                                {m === 'now'
+                                  ? 'I am paying it today'
+                                  : 'Keep it pending on the deposit card'}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                        <AnimatePresence initial={false}>
+                          {refundMode === 'now' && (
+                            <motion.div
+                              key="refund-now"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="grid gap-4 overflow-hidden sm:grid-cols-2"
+                            >
+                              <Field label="Paid by" required>
+                                <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+                                  {REFUND_METHODS.map((m) => (
+                                    <option key={m.value} value={m.value}>
+                                      {m.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </Field>
+                              <Field label="Reference" hint="UPI ref, cheque no. or transaction id">
+                                <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+                              </Field>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ) : preview.payable > 0 ? (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                        {formatMoney(preview.payable)} stays open on their invoices. Record a payment
+                        from this page whenever they pay.
+                      </p>
+                    ) : null}
+
+                    <Field label="Settlement note" hint="Saved with the checkout and shown on the deposit card">
+                      <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+                    </Field>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
 
             <DialogFooter>
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button variant="destructive" loading={busy} onClick={submit}>
-                <DoorOpen className="size-4" />
-                Complete checkout
-              </Button>
+              {step === 0 ? (
+                <Button variant="ghost" onClick={onClose}>
+                  Cancel
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={() => setStep(step - 1)} disabled={busy}>
+                  Back
+                </Button>
+              )}
+              {step < 2 ? (
+                <Button variant="default" onClick={() => setStep(step + 1)} disabled={!canNext}>
+                  Continue
+                </Button>
+              ) : (
+                <Button variant="destructive" loading={busy} onClick={submit} disabled={!preview || loading}>
+                  <DoorOpen className="size-4" />
+                  Complete checkout
+                </Button>
+              )}
             </DialogFooter>
           </>
         )}
@@ -761,24 +913,275 @@ function CheckoutDialog({
   )
 }
 
-function SettleRow({
-  label,
-  value,
-  positive,
+function SettlementStep({
+  preview,
+  loading,
+  error,
+  rows,
+  onRows,
+  nextKey,
 }: {
-  label: string
-  value: number
+  preview: CheckoutPreview | null
+  loading: boolean
+  error: string | null
+  rows: DeductionRow[]
+  onRows: (rows: DeductionRow[]) => void
+  nextKey: () => number
+}) {
+  if (error) return <p className="text-sm text-red-600">{error}</p>
+  if (!preview) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="skeleton h-5 w-full" />
+        ))}
+      </div>
+    )
+  }
+  const m = preview.exitMonth
+  return (
+    <div className="grid gap-4 sm:grid-cols-[1fr_15rem]">
+      <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1">
+        <Section title="Rent dues" total={preview.outstandingRent}>
+          {preview.openInvoices.length ? (
+            preview.openInvoices.map((i) => (
+              <Line key={i.id} label={`${i.number} · due ${formatDate(i.dueDate)}`} value={i.balance} />
+            ))
+          ) : (
+            <p className="text-xs text-slate-500">No unpaid invoices.</p>
+          )}
+        </Section>
+
+        <Section title={`Exit month · ${m.label}`} total={m.charge - m.credit}>
+          {m.invoiced ? (
+            m.credit > 0 ? (
+              <Line
+                label={`Credit for ${m.unusedDays} unused day${m.unusedDays === 1 ? '' : 's'} (already invoiced)`}
+                value={-m.credit}
+              />
+            ) : (
+              <p className="text-xs text-slate-500">Already invoiced in full — no unused days.</p>
+            )
+          ) : m.lines.length ? (
+            m.lines.map((l) => <Line key={l.label} label={l.label} value={l.amount} />)
+          ) : (
+            <p className="text-xs text-slate-500">Nothing to charge for this month.</p>
+          )}
+        </Section>
+
+        {preview.utilities.length > 0 && (
+          <Section title="Unbilled utilities" total={preview.utilityCharges}>
+            {preview.utilities.map((u) => (
+              <Line key={u.id} label={u.label} value={u.amount} />
+            ))}
+          </Section>
+        )}
+
+        <Section title="Deductions" total={preview.deductionsTotal}>
+          <AnimatePresence initial={false}>
+            {rows.map((row) => (
+              <motion.div
+                key={row.key}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex items-center gap-2 overflow-hidden py-0.5"
+              >
+                <Input
+                  className="h-9 flex-1"
+                  placeholder="Broken chair, cleaning…"
+                  value={row.label}
+                  maxLength={80}
+                  onChange={(e) =>
+                    onRows(rows.map((r) => (r.key === row.key ? { ...r, label: e.target.value } : r)))
+                  }
+                />
+                <Input
+                  className="h-9 w-28"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="₹"
+                  value={row.amount}
+                  onChange={(e) =>
+                    onRows(rows.map((r) => (r.key === row.key ? { ...r, amount: e.target.value } : r)))
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Remove deduction"
+                  onClick={() => onRows(rows.filter((r) => r.key !== row.key))}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-1"
+            onClick={() => onRows([...rows, { key: nextKey(), label: '', amount: '' }])}
+          >
+            <Plus className="size-3.5" />
+            Add deduction
+          </Button>
+        </Section>
+
+        <Section title="Credits" total={-preview.credits} positive>
+          <Line label="Security deposit held" value={-preview.depositHeld} positive />
+          {preview.advance > 0 && <Line label="Advance paid (unused)" value={-preview.advance} positive />}
+        </Section>
+      </div>
+
+      <div className={cn('transition-opacity', loading && 'opacity-60')}>
+        <SettlementResult preview={preview} compact />
+      </div>
+    </div>
+  )
+}
+
+function SettlementResult({ preview, compact }: { preview: CheckoutPreview; compact?: boolean }) {
+  const tone =
+    preview.refundable > 0 ? 'refund' : preview.payable > 0 ? 'payable' : 'settled'
+  return (
+    <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-600">Total dues</span>
+        <AnimatedMoney value={preview.owed} className="font-medium text-slate-800" />
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-600">Deposit & credits</span>
+        <AnimatedMoney value={preview.credits} className="font-medium text-emerald-600" />
+      </div>
+      <motion.div
+        layout
+        className={cn(
+          'mt-2 rounded-xl p-3 text-center transition-colors',
+          tone === 'refund' ? 'bg-emerald-100/80' : tone === 'payable' ? 'bg-red-100/70' : 'bg-slate-200/60',
+        )}
+      >
+        <p className="text-[11px] uppercase tracking-wide text-slate-600">
+          {tone === 'refund' ? 'Refund to resident' : tone === 'payable' ? 'Resident still owes' : 'Fully settled'}
+        </p>
+        <AnimatedMoney
+          value={tone === 'refund' ? preview.refundable : preview.payable}
+          className={cn('font-display font-semibold text-slate-900', compact ? 'text-2xl' : 'text-3xl')}
+        />
+      </motion.div>
+      {!compact && preview.applied.deposit > 0 && (
+        <p className="text-center text-xs text-slate-500">
+          {formatMoney(preview.applied.deposit)} of the deposit goes towards dues.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Section({
+  title,
+  total,
+  positive,
+  children,
+}: {
+  title: string
+  total: number
   positive?: boolean
+  children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-600">{label}</span>
-      <span
-        className={cn('font-medium tabular', positive ? 'text-emerald-600' : 'text-slate-800')}
-      >
-        {positive ? '+' : ''}
-        {formatMoney(value)}
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+        <span className={cn('text-xs font-semibold tabular', positive || total < 0 ? 'text-emerald-600' : 'text-slate-700')}>
+          {total < 0 ? `− ${formatMoney(-total)}` : formatMoney(total)}
+        </span>
+      </div>
+      <div className="space-y-1">{children}</div>
+    </div>
+  )
+}
+
+function Line({ label, value, positive }: { label: string; value: number; positive?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="min-w-0 text-slate-600">{label}</span>
+      <span className={cn('shrink-0 tabular', positive || value < 0 ? 'text-emerald-600' : 'text-slate-800')}>
+        {value < 0 ? `− ${formatMoney(-value)}` : formatMoney(value)}
       </span>
     </div>
+  )
+}
+
+function CheckoutSuccess({
+  done,
+  name,
+  onClose,
+}: {
+  done: CheckoutResult
+  name: string
+  onClose: () => void
+}) {
+  const lines = [
+    'Bed released and marked available',
+    `Settlement recorded${done.settlementInvoice ? ` on ${done.settlementInvoice.number}` : ''}`,
+    done.refund > 0
+      ? `Refund ${formatMoney(done.refund)} ${done.refundPaid ? 'paid' : 'pending — mark it paid from the deposit card'}`
+      : done.payable > 0
+        ? `${formatMoney(done.payable)} still payable`
+        : 'Nothing left to pay or refund',
+    'Rent schedule stopped and food plan ended',
+    'Resident app account closed',
+  ]
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="space-y-4 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+        className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-100"
+      >
+        <Check className="size-7 text-emerald-600" strokeWidth={3} />
+      </motion.div>
+      <DialogTitle>{name} has checked out</DialogTitle>
+      <DialogDescription>Everything is settled and saved. Here is what happened:</DialogDescription>
+      <ul className="mx-auto max-w-sm space-y-1.5 text-left text-sm text-slate-600">
+        {lines.map((line, i) => (
+          <motion.li
+            key={line}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 + i * 0.07 }}
+            className="flex items-start gap-2"
+          >
+            <CircleCheck
+              className={cn(
+                'mt-0.5 size-4 shrink-0',
+                i === 2 && done.refund > 0 && !done.refundPaid ? 'text-amber-500' : 'text-emerald-500',
+              )}
+            />
+            {line}
+          </motion.li>
+        ))}
+      </ul>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {done.settlementInvoice && (
+          <Button variant="outline" className="flex-1" asChild>
+            <a href={`/api/documents/rent-invoice/${done.settlementInvoice.id}.pdf`} target="_blank" rel="noopener">
+              <FileText className="size-4" />
+              Settlement PDF
+            </a>
+          </Button>
+        )}
+        <Button variant="primary" className="flex-1" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </motion.div>
   )
 }

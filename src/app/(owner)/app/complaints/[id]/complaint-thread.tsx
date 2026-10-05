@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
+import { PhotoGallery } from '@/components/app/photo-upload'
 
 type Update = {
   id: string
@@ -19,6 +20,7 @@ type Update = {
   message: string
   statusTo: string | null
   createdAt: string
+  photoUrl?: string | null
 }
 
 const ROLE_TONE: Record<string, string> = {
@@ -94,6 +96,7 @@ export function ComplaintThread({
                 <time className="text-xs text-slate-400">{relativeTime(update.createdAt)}</time>
               </div>
               <p className="mt-0.5 text-sm leading-relaxed text-slate-600">{update.message}</p>
+              {update.photoUrl && <PhotoGallery urls={[update.photoUrl]} size="sm" className="mt-1.5" />}
               {update.statusTo && (
                 <span className="mt-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
                   → {update.statusTo.replace('_', ' ').toLowerCase()}

@@ -5,18 +5,54 @@ import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/app/page-header'
 import { getLookup } from '@/server/services/org-defaults'
-import { CheckInWizard } from './check-in-wizard'
+import { toISODate } from '@/lib/utils'
+import { CheckInWizard, type CheckInPrefill } from './check-in-wizard'
 
 export const metadata: Metadata = { title: 'Check in resident' }
 
 export default async function NewResidentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ property?: string; bed?: string }>
+  searchParams: Promise<{ property?: string; bed?: string; booking?: string }>
 }) {
   const user = await requireAccess({ module: 'residents', permission: 'residents.manage' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
+
+  // Checking in from a booking: carry its details over.
+  let prefill: CheckInPrefill | null = null
+  if (params.booking) {
+    const booking = await prisma.booking.findFirst({
+      where: {
+        id: params.booking,
+        organizationId: scope.organizationId,
+        propertyId: { in: scope.allowedPropertyIds },
+        status: { in: ['PENDING', 'CONFIRMED'] },
+      },
+      include: {
+        bed: { select: { id: true, label: true, room: { select: { number: true } } } },
+        lead: { select: { gender: true } },
+      },
+    })
+    if (booking) {
+      const today = new Date()
+      prefill = {
+        bookingId: booking.id,
+        code: booking.code,
+        fullName: booking.name,
+        phone: booking.phone,
+        email: booking.email ?? '',
+        gender: booking.lead?.gender ?? '',
+        propertyId: booking.propertyId,
+        bedId: booking.bed?.id ?? '',
+        bedName: booking.bed ? `${booking.bed.room.number}-${booking.bed.label}` : null,
+        joiningDate: toISODate(booking.checkInDate > today ? booking.checkInDate : today),
+        rentAmount: booking.rent,
+        depositAmount: booking.deposit,
+        tokenAmount: booking.tokenPaidAt ? booking.tokenAmount : 0,
+      }
+    }
+  }
 
   const properties = await prisma.property.findMany({
     where: { id: { in: scope.allowedPropertyIds } },
@@ -51,7 +87,7 @@ export default async function NewResidentPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Check in a resident"
+        title={prefill ? `Check in ${prefill.fullName}` : 'Check in a resident'}
         subtitle="One form replaces the paper admission book. Everything it touches — bed, rent schedule, deposit, food plan and resident app — is set up when you finish."
         icon="userPlus"
         breadcrumbs={[
@@ -62,7 +98,8 @@ export default async function NewResidentPage({
       />
       <CheckInWizard
         properties={properties}
-        defaultPropertyId={scope.propertyId ?? properties[0].id}
+        defaultPropertyId={prefill?.propertyId ?? scope.propertyId ?? properties[0].id}
+        prefill={prefill}
         defaultBedId={params.bed}
         rentDueDay={settings?.rentDueDay ?? 5}
         idTypes={idTypes}

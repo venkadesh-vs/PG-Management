@@ -6,8 +6,11 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AirVent,
+  Ban,
   Bath,
   Bed as BedIcon,
+  CalendarCheck,
+  CircleCheck,
   DoorOpen,
   Phone,
   Sun,
@@ -15,6 +18,7 @@ import {
   UserRound,
   Wallet,
   Wrench,
+  X,
 } from 'lucide-react'
 import type { BedStatus } from '@prisma/client'
 import { BED_STATUS_STYLE, PROPERTY_THEMES } from '@/lib/theme'
@@ -24,15 +28,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, StatusChip } from '@/components/ui/badge'
-import { Field, Select, Textarea } from '@/components/ui/input'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Field, Textarea } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/feedback'
 import { OccupancyBar } from '@/components/app/occupancy-ring'
 
@@ -43,6 +39,14 @@ type BedRow = {
   rent: number | null
   notes: string | null
   blockedReason: string | null
+  booking: {
+    id: string
+    code: string
+    name: string
+    phone: string
+    checkInDate: string
+    status: string
+  } | null
   resident: {
     id: string
     fullName: string
@@ -84,7 +88,7 @@ export function BedMap({
   canManage = true,
   canCheckIn = true,
 }: {
-  /** properties.manage — change a bed's status. */
+  /** properties.manage — block, maintenance, release. */
   canManage?: boolean
   /** residents.manage — check someone into a free bed. */
   canCheckIn?: boolean
@@ -275,7 +279,7 @@ export function BedMap({
 
       <AnimatePresence>
         {selected && (
-          <BedDetailDialog
+          <BedPanel
             bed={selected.bed}
             room={selected.room}
             property={property}
@@ -317,7 +321,7 @@ function FilterChip({
   )
 }
 
-function BedDetailDialog({
+function BedPanel({
   bed,
   room,
   property,
@@ -334,21 +338,35 @@ function BedDetailDialog({
 }) {
   const router = useRouter()
   const toast = useToast()
-  const [status, setStatus] = React.useState<BedStatus>(bed.status)
-  const [reason, setReason] = React.useState(bed.blockedReason ?? '')
-  const [busy, setBusy] = React.useState(false)
+  const [mode, setMode] = React.useState<'BLOCK' | 'MAINTENANCE' | null>(null)
+  const [reason, setReason] = React.useState('')
+  const [busy, setBusy] = React.useState<string | null>(null)
   const style = BED_STATUS_STYLE[bed.status]
+  const outOfService = bed.status === 'BLOCKED' || bed.status === 'MAINTENANCE'
+  const actionable = canManage && !bed.resident && !bed.booking
 
-  async function save() {
-    setBusy(true)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  async function run(action: 'BLOCK' | 'MAINTENANCE' | 'RELEASE') {
+    if (action !== 'RELEASE' && !reason.trim()) {
+      toast.error('Add a reason first', 'A short note helps your team know why this bed is out of use.')
+      return
+    }
+    setBusy(action)
     try {
-      const result = await api.post<{ message: string }>('/api/rooms', {
-        action: 'UPDATE_BED',
+      const result = await api.post<{ message: string }>('/api/beds', {
+        action,
         bedId: bed.id,
-        status,
-        blockedReason: status === 'MAINTENANCE' || status === 'BLOCKED' ? reason : '',
+        ...(action === 'RELEASE' ? {} : { reason: reason.trim() }),
       })
-      toast.success('Bed updated', result.message)
+      toast.success(
+        action === 'RELEASE' ? 'Bed is available again' : action === 'BLOCK' ? 'Bed blocked' : 'Sent for maintenance',
+        result.message,
+      )
       onClose()
       router.refresh()
     } catch (error) {
@@ -357,24 +375,47 @@ function BedDetailDialog({
         error instanceof ApiError ? error.message : 'Please try again.',
       )
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BedIcon className="size-4 text-slate-400" />
-            Room {room.number} · Bed {bed.label}
-          </DialogTitle>
-          <DialogDescription>
-            {property.name} · {room.type.toLowerCase()} room
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <motion.div
+        key="bed-panel-backdrop"
+        className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.aside
+        key="bed-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Room ${room.number}, bed ${bed.label}`}
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl"
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 font-display text-base font-semibold text-slate-900">
+              <BedIcon className="size-4 text-slate-400" />
+              Room {room.number} · Bed {bed.label}
+            </p>
+            <p className="mt-0.5 text-xs capitalize text-slate-500">
+              {property.name} · {room.type.toLowerCase()} room
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
 
-        <div className="space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="flex items-center justify-between">
             <StatusChip label={style.label} chip={style.chip} dot={style.dot} />
             <span className="text-sm font-semibold text-slate-700 tabular">
@@ -382,7 +423,18 @@ function BedDetailDialog({
             </span>
           </div>
 
-          {bed.resident ? (
+          {outOfService && bed.blockedReason && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+              {bed.status === 'MAINTENANCE' ? (
+                <Wrench className="mt-0.5 size-4 shrink-0" />
+              ) : (
+                <Ban className="mt-0.5 size-4 shrink-0" />
+              )}
+              <span>{bed.blockedReason}</span>
+            </div>
+          )}
+
+          {bed.resident && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
@@ -420,64 +472,134 @@ function BedDetailDialog({
               <Button variant="outline" size="sm" className="mt-3 w-full" asChild>
                 <Link href={`/app/residents/${bed.resident.id}`}>Open resident</Link>
               </Button>
+              <p className="mt-2 text-[11px] text-slate-500">
+                To free this bed, check the resident out or move them from their profile.
+              </p>
             </div>
-          ) : (
-            <>
-              <Field label="Bed status">
-                <Select value={status} disabled={!canManage} onChange={(e) => setStatus(e.target.value as BedStatus)}>
-                  {STATUSES.filter((s) => s !== 'OCCUPIED').map((s) => (
-                    <option key={s} value={s}>
-                      {BED_STATUS_STYLE[s].label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              {(status === 'MAINTENANCE' || status === 'BLOCKED') && (
-                <Field label="Reason" hint="Shown on the bed map so your team knows why">
-                  <Textarea
-                    rows={2}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Mattress replacement"
-                  />
-                </Field>
-              )}
-
-              {bed.status === 'AVAILABLE' && canCheckIn && (
-                <Button
-                  variant={property.type === 'WOMENS' ? 'pink' : 'primary'}
-                  className="w-full"
-                  asChild
-                >
-                  <Link href={`/app/residents/new?property=${property.id}&bed=${bed.id}`}>
-                    <UserPlus className="size-4" />
-                    Check someone into this bed
-                  </Link>
-                </Button>
-              )}
-            </>
           )}
 
-          {bed.blockedReason && bed.status !== 'AVAILABLE' && !bed.resident && (
-            <p className="flex items-start gap-1.5 text-xs text-slate-500">
-              <Wrench className="mt-0.5 size-3 shrink-0" />
-              {bed.blockedReason}
+          {bed.booking && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                <CalendarCheck className="size-3.5" />
+                Held for a booking
+              </p>
+              <p className="mt-2 font-medium text-slate-900">{bed.booking.name}</p>
+              <p className="text-xs text-slate-500">
+                {bed.booking.code} · {bed.booking.status.toLowerCase()} · moving in{' '}
+                {formatDate(bed.booking.checkInDate)}
+              </p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
+                <Phone className="size-3" />
+                {formatPhone(bed.booking.phone)}
+              </p>
+              <Button variant="outline" size="sm" className="mt-3 w-full" asChild>
+                <Link href="/app/bookings">View bookings</Link>
+              </Button>
+            </div>
+          )}
+
+          {bed.status === 'RESERVED' && !bed.booking && (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+              This bed is marked reserved but no active booking holds it. You can release it below.
+            </p>
+          )}
+
+          {bed.status === 'AVAILABLE' && canCheckIn && (
+            <Button
+              variant={property.type === 'WOMENS' ? 'pink' : 'primary'}
+              className="w-full"
+              asChild
+            >
+              <Link href={`/app/residents/new?property=${property.id}&bed=${bed.id}`}>
+                <UserPlus className="size-4" />
+                Check someone into this bed
+              </Link>
+            </Button>
+          )}
+
+          {actionable && (
+            <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bed actions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {bed.status !== 'BLOCKED' && (
+                  <Button
+                    variant={mode === 'BLOCK' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMode(mode === 'BLOCK' ? null : 'BLOCK')}
+                  >
+                    <Ban className="size-4" />
+                    Block
+                  </Button>
+                )}
+                {bed.status !== 'MAINTENANCE' && (
+                  <Button
+                    variant={mode === 'MAINTENANCE' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMode(mode === 'MAINTENANCE' ? null : 'MAINTENANCE')}
+                  >
+                    <Wrench className="size-4" />
+                    Maintenance
+                  </Button>
+                )}
+              </div>
+
+              <AnimatePresence initial={false}>
+                {mode && (
+                  <motion.div
+                    key="reason"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-3 overflow-hidden"
+                  >
+                    <Field
+                      label={mode === 'BLOCK' ? 'Why is it blocked?' : 'What needs fixing?'}
+                      hint="Shown on the bed map so your team knows"
+                      required
+                    >
+                      <Textarea
+                        rows={2}
+                        value={reason}
+                        autoFocus
+                        maxLength={200}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder={mode === 'BLOCK' ? 'Kept for the owner’s guest' : 'Mattress replacement'}
+                      />
+                    </Field>
+                    <Button
+                      variant="default"
+                      className="w-full"
+                      loading={busy === mode}
+                      onClick={() => run(mode)}
+                    >
+                      {mode === 'BLOCK' ? 'Block this bed' : 'Send for maintenance'}
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {(outOfService || bed.status === 'RESERVED') && (
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  loading={busy === 'RELEASE'}
+                  onClick={() => run('RELEASE')}
+                >
+                  <CircleCheck className="size-4" />
+                  Release — make it available
+                </Button>
+              )}
+            </div>
+          )}
+
+          {!canManage && !bed.resident && (
+            <p className="text-xs text-slate-500">
+              Ask the PG owner for “Edit PG details, rooms and beds” access to change this bed.
             </p>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-          {!bed.resident && canManage && (
-            <Button variant="default" loading={busy} onClick={save} disabled={status === bed.status}>
-              Save status
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </motion.aside>
+    </>
   )
 }

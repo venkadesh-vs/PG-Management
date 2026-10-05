@@ -12,3 +12,6 @@ dist
 .netlify
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Local file uploads (STORAGE_PROVIDER=local)
+/storage/

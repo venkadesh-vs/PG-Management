@@ -14,6 +14,9 @@ import { enforceGracePeriods, runSubscriptionBilling } from './subscriptions'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
 import { retryFailedWhatsApp } from '../integrations/whatsapp'
 import { orgsWithModuleOff } from './org-modules'
+import { expireBookings } from './bookings'
+import { sendLeadFollowUpReminders } from './leads'
+import { markSlaBreaches } from './complaints'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -32,6 +35,10 @@ export type AutomationReport = {
   occupancy: { snapshots: number }
   meals: { refreshed: number }
   whatsappRetries: { retried: number; sent: number; failed: number }
+  /** Complaints newly past their SLA deadline (owners notified once each). */
+  sla: { breached: number }
+  bookings: { expired: number; bedsReleased: number }
+  leadFollowUps: { due: number; notified: number }
   errors: string[]
 }
 
@@ -94,6 +101,9 @@ export async function runDailyAutomation(options?: {
     occupancy: { snapshots: 0 },
     meals: { refreshed: 0 },
     whatsappRetries: { retried: 0, sent: 0, failed: 0 },
+    sla: { breached: 0 },
+    bookings: { expired: 0, bedsReleased: 0 },
+    leadFollowUps: { due: 0, notified: 0 },
     errors,
   }
 
@@ -195,6 +205,14 @@ async function runSteps(
     errors.push(`occupancy: ${(error as Error).message}`)
   }
 
+  // Complaint SLA: flag complaints past their deadline and tell the owners
+  // once per breach (pages also run this check on load).
+  try {
+    report.sla.breached = await markSlaBreaches(options?.organizationId)
+  } catch (error) {
+    errors.push(`sla: ${(error as Error).message}`)
+  }
+
   // Housekeeping: old rate-limit rows and expired sessions.
   try {
     await sweepRateLimits()
@@ -234,6 +252,31 @@ async function runSteps(
     report.whatsappRetries = await retryFailedWhatsApp({ organizationId: options?.organizationId, now })
   } catch (error) {
     errors.push(`whatsapp retries: ${(error as Error).message}`)
+  }
+
+  // 8. Bed bookings whose hold ran out → EXPIRED, and the RESERVED bed goes
+  //    back on the market.
+  try {
+    const result = await expireBookings({ organizationId: options?.organizationId, now })
+    report.bookings = { expired: result.expired, bedsReleased: result.released }
+  } catch (error) {
+    errors.push(`bookings: ${(error as Error).message}`)
+  }
+
+  // 9. Enquiry follow-ups due today: one in-app nudge to the owner/managers
+  //    (skipped for organizations with Enquiries switched off).
+  try {
+    const leadsOff = await orgsWithModuleOff('leads', options?.organizationId)
+    if (!options?.organizationId || !leadsOff.includes(options.organizationId)) {
+      const result = await sendLeadFollowUpReminders({
+        organizationId: options?.organizationId,
+        excludeOrganizationIds: leadsOff,
+        now,
+      })
+      report.leadFollowUps = { due: result.due, notified: result.notified }
+    }
+  } catch (error) {
+    errors.push(`lead follow-ups: ${(error as Error).message}`)
   }
 }
 

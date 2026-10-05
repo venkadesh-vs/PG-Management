@@ -14,6 +14,8 @@ import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { NewComplaintButton } from './new-complaint'
+import { SlaChip } from '@/components/app/sla-chip'
+import { refreshSlaBreaches } from '@/server/services/complaints'
 
 export const metadata: Metadata = { title: 'Complaints' }
 
@@ -43,6 +45,21 @@ export default async function ComplaintsPage({
   const status = params.status as ComplaintStatus | undefined
   const category = params.category
   const priority = params.priority
+  const sla = params.sla
+  const sort = params.sort
+
+  // On-read SLA check: flag anything that slipped since the daily run.
+  await refreshSlaBreaches(scope.organizationId)
+  const now = new Date()
+  const OPEN: ComplaintStatus[] = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD']
+  const slaWhere: Prisma.ComplaintWhereInput =
+    sla === 'breached'
+      ? { status: { in: OPEN }, slaDueAt: { lt: now } }
+      : sla === 'due_soon'
+        ? { status: { in: OPEN }, slaDueAt: { gte: now, lt: new Date(now.getTime() + 2 * 3_600_000) } }
+        : sla === 'missed'
+          ? { slaBreachedAt: { not: null } }
+          : {}
 
   const where: Prisma.ComplaintWhereInput = {
     organizationId: scope.organizationId,
@@ -50,6 +67,7 @@ export default async function ComplaintsPage({
     ...(status ? { status } : {}),
     ...(category ? { category } : {}),
     ...(priority ? { priority: priority as never } : {}),
+    ...slaWhere,
     ...(q
       ? {
           OR: [
@@ -72,7 +90,10 @@ export default async function ComplaintsPage({
           assignedStaff: { select: { id: true, name: true } },
           _count: { select: { updates: true } },
         },
-        orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
+        orderBy:
+          sort === 'sla' || sla === 'breached' || sla === 'due_soon'
+            ? [{ slaDueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }]
+            : [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
       }),
@@ -110,11 +131,19 @@ export default async function ComplaintsPage({
       getLookup(scope.organizationId, 'COMPLAINT_CATEGORY'),
       getLookupLabels(scope.organizationId, 'COMPLAINT_CATEGORY'),
     ])
+  const breachedOpen = await prisma.complaint.count({
+    where: {
+      organizationId: scope.organizationId,
+      propertyId: { in: propertyIds },
+      status: { in: OPEN },
+      slaDueAt: { lt: now },
+    },
+  })
 
   const countFor = (s: string) => counts.find((c) => c.status === s)?._count._all ?? 0
   const open = countFor('OPEN')
   const inProgress = countFor('ASSIGNED') + countFor('IN_PROGRESS')
-  const activeFilters = [q, status, category, priority].filter(Boolean).length
+  const activeFilters = [q, status, category, priority, sla].filter(Boolean).length
 
   return (
     <div className="space-y-6">
@@ -135,9 +164,18 @@ export default async function ComplaintsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
         <StatCard label="Open" value={open} icon="warning" tone={open > 0 ? 'red' : 'emerald'} hint="Not yet assigned" />
         <StatCard label="Being worked on" value={inProgress} icon="wrench" tone="amber" hint="Assigned or in progress" />
+        <Link href="/app/complaints?sla=breached" className="block">
+          <StatCard
+            label="SLA breached"
+            value={breachedOpen}
+            icon="warning"
+            tone={breachedOpen > 0 ? 'red' : 'emerald'}
+            hint={breachedOpen > 0 ? 'Open and past due — tap to see' : 'Everything on time'}
+          />
+        </Link>
         <StatCard label="Resolved this month" value={resolvedThisMonth} icon="check" tone="emerald" />
         <StatCard label="Total raised" value={counts.reduce((s, c) => s + c._count._all, 0)} icon="clipboard" tone="blue" hint="All time" />
       </div>
@@ -156,6 +194,20 @@ export default async function ComplaintsPage({
               { value: 'MEDIUM', label: 'Medium' },
               { value: 'LOW', label: 'Low' },
             ]}
+          />
+          <FilterSelect
+            paramKey="sla"
+            placeholder="Any SLA"
+            options={[
+              { value: 'breached', label: 'SLA breached (open)' },
+              { value: 'due_soon', label: 'Due in 2 hours' },
+              { value: 'missed', label: 'Ever missed SLA' },
+            ]}
+          />
+          <FilterSelect
+            paramKey="sort"
+            placeholder="Sort: status & priority"
+            options={[{ value: 'sla', label: 'Sort: SLA due first' }]}
           />
         </FilterBar>
       </Suspense>
@@ -212,7 +264,13 @@ export default async function ComplaintsPage({
                       </p>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                      <SlaChip
+                        status={complaint.status}
+                        slaDueAt={complaint.slaDueAt}
+                        createdAt={complaint.createdAt}
+                        resolvedAt={complaint.resolvedAt}
+                      />
                       <div className="text-right">
                         <p className="text-xs text-slate-500">
                           {complaint.assignedStaff ? complaint.assignedStaff.name : 'Unassigned'}

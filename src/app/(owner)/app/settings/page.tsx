@@ -109,6 +109,10 @@ export default async function SettingsPage({
                 upiPayeeName: settings.upiPayeeName ?? '',
                 invoicePrefix: settings.invoicePrefix,
                 receiptPrefix: settings.receiptPrefix,
+                slaUrgentHours: settings.slaUrgentHours,
+                slaHighHours: settings.slaHighHours,
+                slaMediumHours: settings.slaMediumHours,
+                slaLowHours: settings.slaLowHours,
               }
             : null
         }

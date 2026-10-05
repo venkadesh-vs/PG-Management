@@ -10,7 +10,7 @@ import {
   requirePermission,
 } from '@/lib/tenancy'
 import { taskActionSchema, taskSchema } from '@/lib/validation'
-import { advanceTask, createTask } from '@/server/services/complaints'
+import { advanceTask, assertOwnUploads, createTask } from '@/server/services/complaints'
 
 /** POST /api/tasks — owner/manager creates a worker task. */
 export const POST = route(
@@ -71,6 +71,8 @@ export const PATCH = route(
       requirePermission(user, 'complaints.manage')
       assertInScope(user, task.propertyId)
     }
+
+    await assertOwnUploads(task.organizationId, [body.photoUrl], user.role === 'WORKER' ? user.id : undefined)
 
     await advanceTask({
       taskId: task.id,

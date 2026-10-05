@@ -49,6 +49,7 @@ import { getLookupLabels } from '@/server/services/org-defaults'
 import { ResidentActions } from './resident-actions'
 import { ResendInviteButton } from '@/components/app/invite-link'
 import { LedgerTable } from './ledger-table'
+import { DepositCard } from './deposit-card'
 
 export const metadata: Metadata = { title: 'Resident' }
 
@@ -125,6 +126,7 @@ export default async function ResidentDetailPage({
               rentAmount: resident.rentAmount,
               outstanding,
               exitDate: resident.exitDate?.toISOString() ?? null,
+              noticeDate: resident.noticeDate?.toISOString() ?? null,
             }}
             openInvoices={openInvoices.map((i) => ({
               id: i.id,
@@ -303,18 +305,38 @@ export default async function ResidentDetailPage({
                     />
                   )}
                   <Row label="Rent due day" value={`${resident.rentDueDay} of every month`} />
-                  <div className="border-t border-slate-100 pt-2">
-                    <Row
-                      label="Deposit"
-                      value={`${formatMoney(resident.deposit?.collected ?? 0)} of ${formatMoney(resident.depositAmount)}`}
-                    />
-                    <Row
-                      label="Deposit status"
-                      value={(resident.deposit?.status ?? 'PENDING').replace('_', ' ').toLowerCase()}
-                    />
-                  </div>
                 </CardContent>
               </Card>
+
+              <DepositCard
+                residentId={resident.id}
+                residentName={resident.fullName}
+                checkedOut={resident.status === 'CHECKED_OUT'}
+                depositAmount={resident.depositAmount}
+                deposit={
+                  resident.deposit
+                    ? {
+                        amount: resident.deposit.amount,
+                        collected: resident.deposit.collected,
+                        deductions: resident.deposit.deductions,
+                        refunded: resident.deposit.refunded,
+                        status: resident.deposit.status,
+                        collectedAt: resident.deposit.collectedAt?.toISOString() ?? null,
+                        refundedAt: resident.deposit.refundedAt?.toISOString() ?? null,
+                        refundMethod: resident.deposit.refundMethod,
+                        refundReference: resident.deposit.refundReference,
+                        refundNote: resident.deposit.refundNote,
+                      }
+                    : null
+                }
+                pendingRefund={
+                  resident.checkout && !resident.checkout.settledAt ? resident.checkout.refundAmount : 0
+                }
+                can={{
+                  refund: has('residents.checkout'),
+                  collect: has('payments.record') || has('residents.checkout'),
+                }}
+              />
 
               <Card>
                 <CardHeader className="pb-3">
@@ -362,10 +384,32 @@ export default async function ResidentDetailPage({
                     <CardTitle className="text-sm">Final settlement</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
+                    <Row label="Exit date" value={formatDate(resident.checkout.exitDate)} />
+                    <Row label="Rent dues at exit" value={formatMoney(resident.checkout.outstandingRent)} />
+                    <Row
+                      label={resident.checkout.proRataRent < 0 ? 'Unused days credit' : 'Exit month charges'}
+                      value={
+                        resident.checkout.proRataRent < 0
+                          ? `− ${formatMoney(-resident.checkout.proRataRent)}`
+                          : formatMoney(resident.checkout.proRataRent + resident.checkout.foodCharges)
+                      }
+                    />
+                    {resident.checkout.utilityCharges > 0 && (
+                      <Row label="Utilities" value={formatMoney(resident.checkout.utilityCharges)} />
+                    )}
+                    <Row
+                      label="Deductions"
+                      value={formatMoney(resident.checkout.damageDeduction + resident.checkout.otherCharges)}
+                    />
                     <Row label="Deposit held" value={formatMoney(resident.checkout.depositHeld)} />
-                    <Row label="Dues adjusted" value={formatMoney(resident.checkout.outstandingRent + resident.checkout.proRataRent)} />
-                    <Row label="Deductions" value={formatMoney(resident.checkout.damageDeduction)} />
-                    <Row label="Refunded" value={formatMoney(resident.checkout.refundAmount)} />
+                    {resident.checkout.refundAmount > 0 ? (
+                      <Row
+                        label={resident.checkout.settledAt ? 'Refunded' : 'Refund pending'}
+                        value={formatMoney(resident.checkout.refundAmount)}
+                      />
+                    ) : (
+                      <Row label="Still payable" value={formatMoney(resident.checkout.payableAmount)} />
+                    )}
                     {resident.checkout.settlementNote && (
                       <p className="pt-1 text-xs text-slate-500">{resident.checkout.settlementNote}</p>
                     )}

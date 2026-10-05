@@ -83,13 +83,15 @@ export const checkInSchema = z.object({
   whatsappConsent: z.boolean().default(true),
   notes: optionalString,
   signatureUrl: optionalString,
+  /** Set when checking in from a booking (/app/residents/new?booking=…). */
+  bookingId: optionalString,
 })
 
 export type CheckInValues = z.infer<typeof checkInSchema>
 
 export const residentUpdateSchema = checkInSchema
   .partial()
-  .omit({ bedId: true, propertyId: true, joiningDate: true, whatsappConsent: true })
+  .omit({ bedId: true, propertyId: true, joiningDate: true, whatsappConsent: true, bookingId: true })
   .extend({ kycStatus: z.enum(['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED']).optional() })
 
 export const transferSchema = z.object({

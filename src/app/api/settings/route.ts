@@ -1,7 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
 import { settingsSchema } from '@/lib/validation'
+import { slaSettingsSchema } from '@/lib/sla'
 import { recordActivity } from '@/server/events'
+
+/** Complaint SLA targets (PRD §43) ride along with the rent settings. */
+const settingsWithSlaSchema = settingsSchema.merge(slaSettingsSchema)
 
 /**
  * POST /api/settings — organization-wide automation settings. These drive
@@ -9,7 +13,7 @@ import { recordActivity } from '@/server/events'
  */
 export const POST = route(
   async ({ user, request }) => {
-    const body = await parseBody(request, settingsSchema)
+    const body = await parseBody(request, settingsWithSlaSchema)
     const organizationId = user.organizationId!
 
     const data = {
@@ -27,6 +31,10 @@ export const POST = route(
       upiPayeeName: body.upiPayeeName || null,
       invoicePrefix: body.invoicePrefix.toUpperCase(),
       receiptPrefix: body.receiptPrefix.toUpperCase(),
+      ...(body.slaUrgentHours !== undefined ? { slaUrgentHours: body.slaUrgentHours } : {}),
+      ...(body.slaHighHours !== undefined ? { slaHighHours: body.slaHighHours } : {}),
+      ...(body.slaMediumHours !== undefined ? { slaMediumHours: body.slaMediumHours } : {}),
+      ...(body.slaLowHours !== undefined ? { slaLowHours: body.slaLowHours } : {}),
     }
 
     const settings = await prisma.orgSetting.upsert({
@@ -43,7 +51,7 @@ export const POST = route(
       event: 'SETTINGS_UPDATED',
       entityType: 'OrgSetting',
       entityId: settings.id,
-      summary: 'Rent, late fee and reminder settings updated',
+      summary: 'Rent, reminder and complaint SLA settings updated',
     })
 
     return ok({ settings, message: 'Settings saved' })

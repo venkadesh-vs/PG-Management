@@ -3,9 +3,10 @@
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Check, CheckCircle2, PauseCircle, PlayCircle, UserCog, XCircle } from 'lucide-react'
-import type { ComplaintStatus } from '@prisma/client'
+import { Check, CheckCircle2, Flag, PauseCircle, PlayCircle, UserCog, XCircle } from 'lucide-react'
+import type { ComplaintPriority, ComplaintStatus } from '@prisma/client'
 import { api, ApiError } from '@/lib/client'
+import { PhotoUpload } from '@/components/app/photo-upload'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,7 +38,14 @@ export function ComplaintWorkflow({
   canAssign = true,
   canManage = true,
 }: {
-  complaint: { id: string; code: string; status: ComplaintStatus; assignedStaffId: string | null }
+  complaint: {
+    id: string
+    code: string
+    status: ComplaintStatus
+    assignedStaffId: string | null
+    priority?: ComplaintPriority
+    residentId?: string | null
+  }
   staff: { id: string; name: string; role: string }[]
   /** STAFF_ROLE value → label. */
   roleLabels?: Record<string, string>
@@ -54,10 +62,30 @@ export function ComplaintWorkflow({
   const [note, setNote] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [celebrate, setCelebrate] = React.useState(false)
+  const [resolutionPhoto, setResolutionPhoto] = React.useState<string[]>([])
+  const [uploading, setUploading] = React.useState(false)
 
   const done = complaint.status === 'CLOSED' || complaint.status === 'RESOLVED'
 
-  async function setStatus(status: ComplaintStatus, message?: string) {
+  async function setPriority(priority: ComplaintPriority) {
+    if (priority === complaint.priority) return
+    setBusy(true)
+    try {
+      const result = await api.patch<{ message: string }>('/api/complaints', {
+        complaintId: complaint.id,
+        action: 'PRIORITY',
+        priority,
+      })
+      toast.success('Priority changed', result.message)
+      router.refresh()
+    } catch (error) {
+      toast.fromError(error, 'change the priority')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setStatus(status: ComplaintStatus, message?: string, photoUrl?: string) {
     setBusy(true)
     try {
       const result = await api.patch<{ message: string }>('/api/complaints', {
@@ -65,6 +93,7 @@ export function ComplaintWorkflow({
         action: 'STATUS',
         status,
         message,
+        photoUrl,
       })
       if (status === 'RESOLVED') {
         setCelebrate(true)
@@ -76,6 +105,7 @@ export function ComplaintWorkflow({
       )
       setResolveOpen(false)
       setNote('')
+      setResolutionPhoto([])
       router.refresh()
     } catch (error) {
       toast.error(
@@ -164,6 +194,19 @@ export function ComplaintWorkflow({
             <CheckCircle2 />
             Close
           </DropdownMenuItem>
+          {complaint.priority && !done && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Priority (resets the SLA)</DropdownMenuLabel>
+              {(['URGENT', 'HIGH', 'MEDIUM', 'LOW'] as const).map((p) => (
+                <DropdownMenuItem key={p} onSelect={() => setPriority(p)}>
+                  <Flag className={p === 'URGENT' ? 'text-red-500' : p === 'HIGH' ? 'text-orange-500' : p === 'MEDIUM' ? 'text-amber-500' : 'text-slate-400'} />
+                  {p.charAt(0) + p.slice(1).toLowerCase()}
+                  {p === complaint.priority && <Check className="ml-auto" />}
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem destructive onSelect={() => setStatus('REJECTED')}>
             <XCircle />
@@ -231,6 +274,18 @@ export function ComplaintWorkflow({
               placeholder="Replaced the tap washer and checked for leaks."
             />
           </Field>
+          <Field label="After photo" hint="Optional — shows the resident the fix">
+            <PhotoUpload
+              value={resolutionPhoto}
+              onChange={setResolutionPhoto}
+              purpose="COMPLAINT"
+              residentId={complaint.residentId ?? undefined}
+              max={1}
+              label="Add photo"
+              hint="One photo of the finished work."
+              onBusyChange={setUploading}
+            />
+          </Field>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setResolveOpen(false)}>
               Cancel
@@ -238,7 +293,8 @@ export function ComplaintWorkflow({
             <Button
               variant="success"
               loading={busy}
-              onClick={() => setStatus('RESOLVED', note || 'Issue resolved')}
+              disabled={uploading}
+              onClick={() => setStatus('RESOLVED', note || 'Issue resolved', resolutionPhoto[0])}
             >
               <CheckCircle2 className="size-4" />
               Mark resolved

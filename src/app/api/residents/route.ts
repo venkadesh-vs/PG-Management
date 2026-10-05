@@ -55,6 +55,7 @@ export const POST = route(
       createTenantAccount: body.createTenantAccount,
       whatsappConsent: body.whatsappConsent,
       documents: body.documents,
+      bookingId: body.bookingId || undefined,
       actor: { id: user.id, name: user.name },
     })
 
@@ -72,6 +73,10 @@ export const POST = route(
         // Check-in succeeded but the first rent invoice did not; the owner
         // can raise it from the Rent page.
         firstInvoiceError: result.firstInvoiceError ?? null,
+        // Booking conversion: the token recorded as the first rent payment.
+        booking: result.booking ? { code: result.booking.code } : null,
+        tokenPayment: result.tokenPayment,
+        tokenPaymentError: result.tokenPaymentError,
         // No password: the resident sets one from the invite link, which the
         // owner can also copy and share by hand.
         tenantLogin: result.tenantEmail

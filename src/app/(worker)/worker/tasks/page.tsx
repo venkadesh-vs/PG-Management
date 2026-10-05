@@ -7,6 +7,7 @@ import { startOfDay } from '@/lib/utils'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect } from '@/components/app/filters'
 import { TaskCard } from './task-card'
+import { refreshSlaBreaches } from '@/server/services/complaints'
 
 export const metadata: Metadata = { title: 'My Tasks' }
 
@@ -21,6 +22,7 @@ export default async function WorkerTasksPage({
   const params = await searchParams
   const status = params.status
   const today = startOfDay(new Date())
+  if (user.organizationId) await refreshSlaBreaches(user.organizationId)
 
   const tasks = await prisma.maintenanceTask.findMany({
     where: {
@@ -32,7 +34,17 @@ export default async function WorkerTasksPage({
     include: {
       property: { select: { name: true, type: true } },
       room: { select: { number: true } },
-      complaint: { select: { code: true, category: true } },
+      complaint: {
+        select: {
+          code: true,
+          category: true,
+          status: true,
+          photoUrls: true,
+          slaDueAt: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
+      },
     },
     orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }],
     take: 60,
@@ -107,6 +119,16 @@ export default async function WorkerTasksPage({
                   roomNumber: task.room?.number ?? null,
                   complaintCode: task.complaint?.code ?? null,
                   createdAt: task.createdAt.toISOString(),
+                  complaintPhotos: task.complaint?.photoUrls ?? [],
+                  completionPhotoUrl: task.completionPhotoUrl,
+                  sla: task.complaint
+                    ? {
+                        status: task.complaint.status,
+                        dueAt: task.complaint.slaDueAt?.toISOString() ?? null,
+                        createdAt: task.complaint.createdAt.toISOString(),
+                        resolvedAt: task.complaint.resolvedAt?.toISOString() ?? null,
+                      }
+                    : null,
                 }}
               />
             </li>

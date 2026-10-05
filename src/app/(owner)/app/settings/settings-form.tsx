@@ -13,9 +13,11 @@ import {
   CreditCard,
   MessageCircle,
   Save,
+  Timer,
 } from 'lucide-react'
 import type { z } from 'zod'
 import { settingsSchema } from '@/lib/validation'
+import { DEFAULT_SLA_HOURS, slaSettingsSchema } from '@/lib/sla'
 import { api, ApiError } from '@/lib/client'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -30,7 +32,8 @@ import { RolesPanel } from '@/components/settings/roles-panel'
 import { LookupsPanel } from '@/components/settings/lookups-panel'
 import type { RoleRow, SettingsTab } from '@/components/settings/shared'
 
-type Values = z.infer<typeof settingsSchema>
+const formSchema = settingsSchema.merge(slaSettingsSchema)
+type Values = z.infer<typeof formSchema>
 
 /** Tabs that belong to the settings form (the others save on their own). */
 const FORM_TABS = ['billing', 'reminders']
@@ -74,8 +77,8 @@ export function SettingsForm({
   const toast = useToast()
 
   const form = useForm<Values>({
-    resolver: zodResolver(settingsSchema),
-    defaultValues: settings ?? {
+    resolver: zodResolver(formSchema),
+    defaultValues: settings ? { ...DEFAULT_SLA_HOURS, ...settings } : {
       rentDueDay: 5,
       rentGenerateDay: 1,
       lateFeeEnabled: true,
@@ -90,6 +93,7 @@ export function SettingsForm({
       upiPayeeName: '',
       invoicePrefix: 'INV',
       receiptPrefix: 'RCP',
+      ...DEFAULT_SLA_HOURS,
     },
   })
 
@@ -261,6 +265,7 @@ export function SettingsForm({
 
         {/* ---------------------------------------------------- Reminders */}
         <TabsContent value="reminders">
+          <div className="space-y-4">
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -339,6 +344,46 @@ export function SettingsForm({
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Timer className="size-4 text-slate-400" />
+                Complaint SLA
+              </CardTitle>
+              <p className="text-xs text-slate-500">
+                How quickly a complaint should be resolved, by priority. Overdue complaints are
+                flagged in red and you get a heads-up the moment one slips.
+              </p>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-4">
+              {(
+                [
+                  ['slaUrgentHours', 'Urgent'],
+                  ['slaHighHours', 'High'],
+                  ['slaMediumHours', 'Medium'],
+                  ['slaLowHours', 'Low'],
+                ] as const
+              ).map(([name, label]) => (
+                <Field
+                  key={name}
+                  label={label}
+                  hint="Hours, 1–168"
+                  error={form.formState.errors[name]?.message}
+                >
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={168}
+                    {...form.register(name)}
+                    disabled={!canEdit}
+                  />
+                </Field>
+              ))}
+            </CardContent>
+          </Card>
+          </div>
         </TabsContent>
 
         {/* ------------------------------------------------- Organization */}

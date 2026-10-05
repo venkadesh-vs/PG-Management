@@ -1,17 +1,24 @@
 import { prisma } from '@/lib/prisma'
 import { route } from '@/lib/api-helpers'
+import { assertPropertyAccess, resolveScope } from '@/lib/tenancy'
 
 /** GET /api/staff — the org's active staff, for assignment pickers. */
 export const GET = route(
   async ({ user, request }) => {
     const url = new URL(request.url)
     const propertyId = url.searchParams.get('propertyId')
+    if (propertyId) await assertPropertyAccess(user, propertyId)
+    const scope = await resolveScope(user)
 
     const staff = await prisma.staff.findMany({
       where: {
-        organizationId: user.organizationId!,
+        organizationId: scope.organizationId,
         active: true,
-        ...(propertyId ? { OR: [{ propertyId }, { propertyId: null }] } : {}),
+        // Org-wide staff (no PG) can be assigned anywhere; everyone else only
+        // shows up for PGs the caller can see.
+        OR: propertyId
+          ? [{ propertyId }, { propertyId: null }]
+          : [{ propertyId: { in: scope.allowedPropertyIds } }, { propertyId: null }],
       },
       select: {
         id: true,

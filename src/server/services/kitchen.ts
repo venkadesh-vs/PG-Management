@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { MealType, StockUnit } from '@prisma/client'
+import type { MealType, Prisma, StockUnit } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, recordActivity } from '../events'
@@ -129,14 +129,34 @@ export async function markMealServed(params: {
   actualCount: number
   preparedBy?: string
 }) {
-  const meal = await prisma.meal.update({
-    where: { id: params.mealId },
-    data: { actualCount: params.actualCount, preparedBy: params.preparedBy },
-    include: { property: true },
+  const { meal, crossedMinimum } = await prisma.$transaction(async (tx) => {
+    // The Meal model has no served flag; `actualCount` is null until the meal
+    // is served, so the conditional update is the "served once" guard. Of two
+    // overlapping calls only one matches, and only that one deducts stock.
+    const claim = await tx.meal.updateMany({
+      where: { id: params.mealId, actualCount: null },
+      data: { actualCount: params.actualCount, preparedBy: params.preparedBy },
+    })
+    const firstServe = claim.count === 1
+    if (!firstServe) {
+      // Already served: a correction updates the count but never re-deducts.
+      await tx.meal.update({
+        where: { id: params.mealId },
+        data: { actualCount: params.actualCount, preparedBy: params.preparedBy },
+      })
+    }
+    const meal = await tx.meal.findUniqueOrThrow({
+      where: { id: params.mealId },
+      include: { property: true },
+    })
+    const crossedMinimum = firstServe
+      ? await consumeStockForMeal(tx, meal.propertyId, params.actualCount)
+      : []
+    return { meal, crossedMinimum }
   })
 
-  // Serving a meal consumes stock according to each item's configured factor.
-  await consumeStockForMeal(meal.propertyId, params.actualCount)
+  // Alerts go out after commit, only for items this meal pushed below minimum.
+  for (const itemId of crossedMinimum) await raiseLowStock(itemId)
   return meal
 }
 
@@ -199,9 +219,26 @@ export async function purchasePlan(propertyId: string, days = 7) {
   })
 }
 
-/** Deducts stock when a meal is served, then raises low-stock alerts. */
-async function consumeStockForMeal(propertyId: string, count: number) {
-  const items = await prisma.groceryItem.findMany({
+/**
+ * Deducts stock when a meal is served.
+ *
+ * TODO(kitchen): GroceryItem has no meal-type mapping, so every item with a
+ * per-meal factor is deducted for every meal (tea leaves at dinner, rice at
+ * breakfast). Deducting per meal type needs a schema field such as
+ * `mealTypes MealType[]` on GroceryItem; until then this keeps the old
+ * behaviour.
+ *
+ * NOTE: currentStock is an Int column, so a deduction below one whole unit
+ * (e.g. 0.3 kg of salt) is lost to rounding and never accumulates. Fixing that
+ * needs currentStock (and minimumStock) to become Float/Decimal.
+ */
+async function consumeStockForMeal(
+  tx: Prisma.TransactionClient,
+  propertyId: string,
+  count: number,
+): Promise<string[]> {
+  const crossedMinimum: string[] = []
+  const items = await tx.groceryItem.findMany({
     where: { propertyId, perResidentPerMeal: { gt: 0 } },
   })
   for (const item of items) {
@@ -209,13 +246,19 @@ async function consumeStockForMeal(propertyId: string, count: number) {
       item.unit === 'KG' || item.unit === 'LITRE'
         ? (item.perResidentPerMeal * count) / 1000
         : item.perResidentPerMeal * count
-    const next = Math.max(0, Math.round(item.currentStock - used))
-    if (next === item.currentStock) continue
-    await prisma.groceryItem.update({ where: { id: item.id }, data: { currentStock: next } })
+    const deduct = Math.min(item.currentStock, Math.round(used))
+    if (deduct <= 0) continue
+    const next = item.currentStock - deduct
+    // Atomic decrement so a purchase recorded at the same moment is not lost.
+    await tx.groceryItem.update({
+      where: { id: item.id },
+      data: { currentStock: { decrement: deduct } },
+    })
     if (next <= item.minimumStock && item.currentStock > item.minimumStock) {
-      await raiseLowStock(item.id)
+      crossedMinimum.push(item.id)
     }
   }
+  return crossedMinimum
 }
 
 async function raiseLowStock(itemId: string) {
@@ -306,7 +349,7 @@ export async function recordPurchase(params: {
     await tx.groceryItem.update({
       where: { id: item.id },
       data: {
-        currentStock: item.currentStock + params.quantity,
+        currentStock: { increment: params.quantity },
         lastPurchasePrice: params.unitPrice,
         vendor: params.vendor ?? item.vendor,
       },

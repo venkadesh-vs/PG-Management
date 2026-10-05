@@ -16,6 +16,8 @@ import { occupancyFor } from './residents'
 /**
  * Every dashboard number is computed here, straight from PostgreSQL. Nothing
  * on a screen is hard-coded or cached in a counter column that could drift.
+ * Collections count RENT payments only: a security deposit is held money
+ * that is refunded at checkout, not revenue.
  */
 
 export type DashboardSummary = Awaited<ReturnType<typeof dashboardSummary>>
@@ -59,6 +61,7 @@ export async function dashboardSummary(scope: PropertyScope) {
       where: {
         propertyId: { in: propertyIds },
         status: 'SUCCESS',
+        purpose: 'RENT',
         paidAt: { gte: today, lt: tomorrow },
       },
       _sum: { amount: true },
@@ -68,6 +71,7 @@ export async function dashboardSummary(scope: PropertyScope) {
       where: {
         propertyId: { in: propertyIds },
         status: 'SUCCESS',
+        purpose: 'RENT',
         paidAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { amount: true },
@@ -215,7 +219,12 @@ export async function revenueTrend(propertyIds: string[], months = 6) {
 
   const [payments, expenses, invoices] = await Promise.all([
     prisma.rentPayment.findMany({
-      where: { propertyId: { in: propertyIds }, status: 'SUCCESS', paidAt: { gte: start } },
+      where: {
+        propertyId: { in: propertyIds },
+        status: 'SUCCESS',
+        purpose: 'RENT',
+        paidAt: { gte: start },
+      },
       select: { amount: true, paidAt: true },
     }),
     prisma.expense.findMany({
@@ -354,6 +363,7 @@ export async function propertyComparison(organizationId: string, propertyIds: st
           where: {
             propertyId: property.id,
             status: 'SUCCESS',
+            purpose: 'RENT',
             paidAt: { gte: monthStart, lte: monthEnd },
           },
           _sum: { amount: true },
@@ -428,6 +438,7 @@ export async function reportTotals(propertyIds: string[], from: Date, to: Date) 
         where: {
           propertyId: { in: propertyIds },
           status: 'SUCCESS',
+          purpose: 'RENT',
           paidAt: { gte: from, lte: endOfDay(to) },
         },
         _sum: { amount: true },

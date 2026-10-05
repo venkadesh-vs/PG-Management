@@ -1,8 +1,8 @@
-import { headers } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { fail, handleError, ok, parseBody } from '@/lib/api-helpers'
 import { leadSchema } from '@/lib/validation'
 import { notifySuperAdmins, recordActivity } from '@/server/events'
+import { clientIp, isRateLimited, recordHit } from '@/lib/rate-limit'
 
 /**
  * POST /api/leads — the public demo-request endpoint.
@@ -10,28 +10,14 @@ import { notifySuperAdmins, recordActivity } from '@/server/events'
  * This is the only unauthenticated write in the product, so it is rate
  * limited per IP and stores nothing that is ever rendered publicly.
  */
-const RATE_LIMIT = { windowMs: 60_000, max: 3 }
-const attempts = new Map<string, { count: number; resetAt: number }>()
-
-function rateLimited(ip: string) {
-  const now = Date.now()
-  const entry = attempts.get(ip)
-  if (!entry || entry.resetAt < now) {
-    attempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT.windowMs })
-    return false
-  }
-  entry.count++
-  return entry.count > RATE_LIMIT.max
-}
-
 export async function POST(request: Request) {
   try {
-    const hdrs = await headers()
-    const ip = (hdrs.get('x-forwarded-for') ?? '').split(',')[0]?.trim() || 'local'
-
-    if (rateLimited(ip)) {
+    const ip = await clientIp()
+    const key = `lead:ip:${ip}`
+    if (await isRateLimited(key, 3, 1)) {
       return fail('Too many enquiries from this connection. Please try again in a minute.', 429)
     }
+    await recordHit(key)
 
     const body = await parseBody(request, leadSchema)
 

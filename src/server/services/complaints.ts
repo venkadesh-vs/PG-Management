@@ -2,7 +2,14 @@ import 'server-only'
 
 import type { ComplaintCategory, ComplaintPriority, ComplaintStatus, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { ConflictError, NotFoundError } from '@/lib/tenancy'
+import {
+  assertResidentInProperty,
+  assertRoomInProperty,
+  assertStaffForProperty,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '@/lib/tenancy'
 import { notifyOrgAdmins, notifyResident, notifyStaff, recordActivity } from '../events'
 import { sendWhatsApp } from '../integrations/whatsapp'
 
@@ -30,6 +37,12 @@ export async function createComplaint(params: {
   photoUrls?: string[]
   actor: { id?: string; name: string; role: UserRole }
 }) {
+  // Ids may come from the client: they must belong to this org and PG.
+  if (params.residentId) {
+    await assertResidentInProperty(params.residentId, params.organizationId, params.propertyId)
+  }
+  if (params.roomId) await assertRoomInProperty(params.roomId, params.propertyId)
+
   const code = await nextComplaintCode(params.organizationId)
 
   const complaint = await prisma.$transaction(async (tx) => {
@@ -107,8 +120,14 @@ export async function assignComplaint(params: {
     if (!complaint) throw new NotFoundError('Complaint not found')
     if (complaint.status === 'CLOSED') throw new ConflictError('This complaint is already closed')
 
+    // Only active staff who work at this PG (or across the org) can take it.
     const staff = await tx.staff.findFirst({
-      where: { id: params.staffId, organizationId: complaint.organizationId },
+      where: {
+        id: params.staffId,
+        organizationId: complaint.organizationId,
+        active: true,
+        OR: [{ propertyId: complaint.propertyId }, { propertyId: null }],
+      },
     })
     if (!staff) throw new NotFoundError('Staff member not found')
 
@@ -389,6 +408,11 @@ export async function createTask(params: {
   assignedStaffId?: string | null
   actor: { id?: string; name: string; role: UserRole }
 }) {
+  if (params.roomId) await assertRoomInProperty(params.roomId, params.propertyId)
+  if (params.assignedStaffId) {
+    await assertStaffForProperty(params.assignedStaffId, params.organizationId, params.propertyId)
+  }
+
   const task = await prisma.maintenanceTask.create({
     data: {
       organizationId: params.organizationId,
@@ -441,12 +465,11 @@ export async function advanceTask(params: {
     include: { complaint: true },
   })
   if (!task) throw new NotFoundError('Task not found')
-  if (
-    params.actor.role === 'WORKER' &&
-    task.assignedStaffId &&
-    task.assignedStaffId !== params.actor.staffId
-  ) {
-    throw new ConflictError('This task is assigned to someone else')
+  if (params.actor.role === 'WORKER') {
+    if (!task.assignedStaffId || task.assignedStaffId !== params.actor.staffId) {
+      throw new ForbiddenError('This task is not assigned to you')
+    }
+    if (params.action === 'CANCEL') throw new ForbiddenError('Ask your manager to cancel a task')
   }
 
   const now = new Date()

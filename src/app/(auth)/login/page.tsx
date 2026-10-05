@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Building2, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import { getSessionUser, HOME_FOR_ROLE } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { serverEnv } from '@/lib/env'
 import { LoginForm } from './login-form'
 import { Logo } from '@/components/marketing/logo'
 
@@ -23,12 +24,16 @@ export default async function LoginPage() {
   const user = await getSessionUser()
   if (user) redirect(HOME_FOR_ROLE[user.role])
 
-  // Demo credentials are shown only when the seeded demo accounts exist.
-  const demoUsers = await prisma.user.findMany({
-    where: { email: { endsWith: '@stayflow.app' }, status: 'ACTIVE' },
-    select: { email: true, role: true, name: true },
-    orderBy: { role: 'asc' },
-  })
+  // Demo credentials are shown only on a deployment explicitly marked as a
+  // public demo (DEMO_MODE=true) — never just because seeded accounts exist.
+  const demoUsers = serverEnv.demoMode
+    ? await prisma.user.findMany({
+        where: { email: { endsWith: '@stayflow.app' }, status: 'ACTIVE' },
+        select: { email: true, role: true, name: true },
+        orderBy: { role: 'asc' },
+      })
+    : []
+  const demoPassword = serverEnv.demoMode ? serverEnv.seedPassword : ''
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
@@ -92,7 +97,7 @@ export default async function LoginPage() {
           </div>
 
           <div className="mt-8">
-            <LoginForm demoUsers={demoUsers} />
+            <LoginForm demoUsers={demoUsers} demoPassword={demoPassword} />
           </div>
 
           <p className="mt-8 text-center text-sm text-slate-500">

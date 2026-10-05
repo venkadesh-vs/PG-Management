@@ -106,6 +106,7 @@ export default async function ExpensesPage({
         organizationId: scope.organizationId,
         propertyId: { in: propertyIds },
         status: 'SUCCESS',
+        purpose: 'RENT',
         paidAt: { gte: from, lte: to },
       },
       _sum: { amount: true },

@@ -1,6 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
+import {
+  assertInScope,
+  assertPropertyAccess,
+  assertRoomInProperty,
+  assertStaffForProperty,
+  ForbiddenError,
+  NotFoundError,
+} from '@/lib/tenancy'
 import { taskActionSchema, taskSchema } from '@/lib/validation'
 import { advanceTask, createTask } from '@/server/services/complaints'
 
@@ -9,6 +16,10 @@ export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, taskSchema)
     await assertPropertyAccess(user, body.propertyId)
+    if (body.roomId) await assertRoomInProperty(body.roomId, body.propertyId)
+    if (body.assignedStaffId) {
+      await assertStaffForProperty(body.assignedStaffId, user.organizationId!, body.propertyId)
+    }
 
     const task = await createTask({
       organizationId: user.organizationId!,
@@ -34,11 +45,27 @@ export const PATCH = route(async ({ user, request }) => {
 
   const task = await prisma.maintenanceTask.findUnique({
     where: { id: body.taskId },
-    select: { id: true, organizationId: true, assignedStaffId: true, title: true },
+    select: {
+      id: true,
+      organizationId: true,
+      propertyId: true,
+      assignedStaffId: true,
+      title: true,
+    },
   })
   if (!task) throw new NotFoundError('Task not found')
   if (task.organizationId !== user.organizationId) throw new ForbiddenError()
   if (user.role === 'TENANT') throw new ForbiddenError()
+
+  if (user.role === 'WORKER') {
+    // Workers only see — and so only move — tasks assigned to them.
+    if (!user.staffId || task.assignedStaffId !== user.staffId) {
+      throw new ForbiddenError('Not your task')
+    }
+    if (body.action === 'CANCEL') throw new ForbiddenError('Ask your manager to cancel a task')
+  } else {
+    assertInScope(user, task.propertyId)
+  }
 
   await advanceTask({
     taskId: task.id,

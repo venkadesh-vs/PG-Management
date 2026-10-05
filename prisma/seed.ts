@@ -77,6 +77,13 @@ const PASSWORD = process.env.SEED_PASSWORD ?? 'StayFlow@2026'
 // ------------------------------------------------------------- cleanup ----
 
 async function reset() {
+  // The seed wipes every table. Never let it near a production database by
+  // accident: it must be asked for explicitly there.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
+    throw new Error(
+      'Refusing to seed: NODE_ENV=production. This would DELETE all data. Set ALLOW_SEED=true only on a throwaway database.',
+    )
+  }
   console.log('  clearing existing data…')
   // Order matters only where there is no cascade; most FKs cascade from
   // Organization, so the two root deletes do the bulk of the work.

@@ -40,6 +40,7 @@ export const EVENT_LABEL: Record<EventType, string> = {
   LEAD_CREATED: 'New enquiry',
   LEAD_UPDATED: 'Enquiry updated',
   AUTH_LOGIN: 'Signed in',
+  AUTH_PASSWORD_CHANGED: 'Password changed',
   SETTINGS_UPDATED: 'Settings updated',
 }
 
@@ -110,6 +111,7 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
       'STAFF_CREATED',
       'SETTINGS_UPDATED',
       'AUTH_LOGIN',
+      'AUTH_PASSWORD_CHANGED',
     ],
   },
 ]

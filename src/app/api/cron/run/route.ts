@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { serverEnv } from '@/lib/env'
 import { getSessionUser } from '@/lib/auth'
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const bearer = header.startsWith('Bearer ') ? header.slice(7) : ''
 
     const authorised =
-      (secret && bearer && bearer === secret) ||
+      (secret.length >= 16 && bearer && safeEqual(bearer, secret)) ||
       (await getSessionUser())?.role === 'SUPER_ADMIN'
 
     if (!authorised) {
@@ -52,12 +53,17 @@ export async function POST(request: Request) {
   }
 }
 
-/** GET is a health check so a scheduler can verify the endpoint exists. */
+function safeEqual(a: string, b: string) {
+  const x = Buffer.from(a)
+  const y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+/** GET describes the endpoint; it never reveals whether a secret is set. */
 export async function GET() {
   return NextResponse.json({
     endpoint: 'POST /api/cron/run',
     auth: 'Authorization: Bearer <CRON_SECRET>',
-    configured: Boolean(serverEnv.cronSecret),
     steps: [
       'Generate this month\'s rent invoices',
       'Flag overdue invoices and apply late fees',

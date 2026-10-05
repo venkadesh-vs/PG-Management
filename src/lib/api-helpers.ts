@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { ZodError, type ZodSchema } from 'zod'
 import { Prisma } from '@prisma/client'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from './tenancy'
-import { getSessionUser, type SessionUser } from './auth'
+import { getSessionUser, isOrgRestricted, type SessionUser } from './auth'
 import type { UserRole } from '@prisma/client'
 
 /**
@@ -46,13 +46,32 @@ export function handleError(error: unknown) {
 /** Wraps a handler with auth + error handling. */
 export function route<T>(
   handler: (ctx: { user: SessionUser; request: Request }) => Promise<T>,
-  options?: { roles?: UserRole[]; public?: boolean },
+  options?: {
+    roles?: UserRole[]
+    public?: boolean
+    allowPendingPassword?: boolean
+    /** Lets a suspended organization still call this (billing, sign-out). */
+    allowRestricted?: boolean
+  },
 ) {
   return async (request: Request) => {
     try {
       const user = await getSessionUser()
       if (!options?.public) {
         if (!user) return fail('Please sign in', 401)
+        if (user.mustChangePassword && !options?.allowPendingPassword) {
+          return fail('Set a new password before continuing', 403)
+        }
+        // A suspended organization can read its data but change nothing until
+        // the subscription is paid.
+        if (
+          request.method !== 'GET' &&
+          isOrgRestricted(user) &&
+          user.role !== 'SUPER_ADMIN' &&
+          !options?.allowRestricted
+        ) {
+          return fail('Your StayFlow subscription is suspended. Pay the pending invoice to continue.', 402)
+        }
         if (options?.roles && !options.roles.includes(user.role)) {
           return fail('You do not have permission to do that', 403)
         }

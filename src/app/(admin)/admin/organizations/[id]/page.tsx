@@ -70,7 +70,7 @@ export default async function AdminOrganizationPage({
       ? occupancyFor(propertyIds)
       : Promise.resolve({ total: 0, occupied: 0, available: 0, reserved: 0, maintenance: 0, blocked: 0, rate: 0 }),
     prisma.rentPayment.aggregate({
-      where: { organizationId: org.id, status: 'SUCCESS' },
+      where: { organizationId: org.id, status: 'SUCCESS', purpose: 'RENT' },
       _sum: { amount: true },
     }),
     prisma.activityLog.findMany({

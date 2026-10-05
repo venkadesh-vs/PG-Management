@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serverEnv } from '@/lib/env'
 import { verifyWebhookSignature } from '@/server/integrations/payments'
-import { recordPayment } from '@/server/services/billing'
+import { isUniqueViolation, recordPayment } from '@/server/services/billing'
 import { handleError } from '@/lib/api-helpers'
 
 /**
@@ -57,15 +57,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true, handled: false })
     }
 
-    // Idempotency: a gateway may deliver the same event more than once.
-    const existing = await prisma.rentPayment.findFirst({
-      where: { gatewayPaymentId: payment.id },
-      select: { id: true, receiptNumber: true },
-    })
-    if (existing) {
-      return NextResponse.json({ received: true, duplicate: true, receipt: existing.receiptNumber })
-    }
-
     const invoiceId = payment.notes?.invoiceId
     const residentId = payment.notes?.residentId
     if (!invoiceId || !residentId) {
@@ -86,21 +77,41 @@ export async function POST(request: Request) {
     // The gateway reports paise; this product stores whole rupees.
     const amount = Math.round((payment.amount ?? 0) / 100)
 
-    const result = await recordPayment({
-      residentId,
-      amount,
-      method: 'GATEWAY',
-      reference: payment.order_id,
-      notes: 'Paid online by the resident',
-      invoiceIds: [invoice.id],
-      actor: { name: 'Payment gateway' },
-      gateway: {
-        provider: serverEnv.payment.provider,
-        orderId: payment.order_id,
-        paymentId: payment.id,
-        isDemo: false,
-      },
-    })
+    // Idempotency: a gateway may deliver the same event more than once, even
+    // concurrently. RentPayment.gatewayPaymentId is unique, so the database
+    // rejects the second insert; a check-then-insert here would race.
+    let result: Awaited<ReturnType<typeof recordPayment>>
+    try {
+      result = await recordPayment({
+        residentId,
+        amount,
+        method: 'GATEWAY',
+        reference: payment.order_id,
+        notes: 'Paid online by the resident',
+        invoiceIds: [invoice.id],
+        actor: { name: 'Payment gateway' },
+        gateway: {
+          provider: serverEnv.payment.provider,
+          orderId: payment.order_id,
+          paymentId: payment.id,
+          isDemo: false,
+        },
+      })
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error
+      const existing = await prisma.rentPayment.findUnique({
+        where: { gatewayPaymentId: payment.id },
+        select: { receiptNumber: true },
+      })
+      // A unique clash on anything other than this payment id is a real error.
+      if (!existing) throw error
+      return NextResponse.json({
+        received: true,
+        duplicate: true,
+        message: 'already processed',
+        receipt: existing.receiptNumber,
+      })
+    }
 
     return NextResponse.json({
       received: true,

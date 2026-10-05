@@ -10,25 +10,26 @@
 # ---------------------------------------------------------------------------
 
 [build]
-  command = "npm run db:deploy && npm run build"
+  command = "npm run build"
   publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
+
+# Only the production deploy migrates the production database. Deploy
+# previews and branch deploys must point DATABASE_URL at a separate database.
+[context.production]
+  command = "npm run db:deploy && npm run build"
+
+# The daily automation (rent, reminders, billing) runs as a scheduled
+# function: netlify/functions/daily-automation.mts (06:00 IST).
+[functions]
+  directory = "netlify/functions"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Security headers for every response. The app sets no third-party scripts by
-# default, so a strict policy is safe here.
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
-    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+# Security headers are set by next.config.ts so every host gets the same set.
 
 # Signed-in surfaces must never be cached by a CDN.
 [[headers]]

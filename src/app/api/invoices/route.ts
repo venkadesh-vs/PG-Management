@@ -1,7 +1,15 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertPropertyAccess, assertResidentAccess, ValidationError } from '@/lib/tenancy'
+import {
+  assertInScope,
+  assertPropertyAccess,
+  assertResidentAccess,
+  ForbiddenError,
+  requirePermission,
+  restrictedPropertyIds,
+  ValidationError,
+} from '@/lib/tenancy'
 import { generateInvoiceSchema, utilitySplitSchema } from '@/lib/validation'
 import {
   appendLedger,
@@ -11,7 +19,7 @@ import {
   sendRentReminders,
 } from '@/server/services/billing'
 import { endOfMonthUtilitySplit } from '@/server/services/residents'
-import { formatMoney } from '@/lib/utils'
+import { endOfMonth, formatMoney, startOfMonth } from '@/lib/utils'
 
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('GENERATE') }).merge(generateInvoiceSchema),
@@ -33,6 +41,8 @@ export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, schema)
     const orgId = user.organizationId!
+    // A manager limited to some PGs; null = sees every PG in the org.
+    const restricted = restrictedPropertyIds(user)
 
     switch (body.action) {
       case 'GENERATE': {
@@ -52,11 +62,13 @@ export const POST = route(
               : 'An invoice already exists for this month',
           })
         }
-        const result = await generateMonthlyInvoices({
-          organizationId: orgId,
-          month,
-          actor: { id: user.id, name: user.name },
-        })
+        const result = restricted
+          ? await generateScopedInvoices(orgId, restricted, month, { id: user.id, name: user.name })
+          : await generateMonthlyInvoices({
+              organizationId: orgId,
+              month,
+              actor: { id: user.id, name: user.name },
+            })
         return ok({
           ...result,
           message:
@@ -67,11 +79,17 @@ export const POST = route(
       }
 
       case 'REMIND': {
+        // The reminder run covers every PG in the org, so a manager limited
+        // to some PGs cannot trigger it.
+        if (restricted) {
+          throw new ForbiddenError('Reminders for all PGs can only be sent by the owner')
+        }
         if (body.invoiceId) {
           const invoice = await prisma.rentInvoice.findFirst({
             where: { id: body.invoiceId, organizationId: orgId },
           })
           if (!invoice) throw new ValidationError('Invoice not found')
+          assertInScope(user, invoice.propertyId)
           // Reuse the scheduler by clearing today's guard for this invoice.
           await prisma.rentInvoice.update({
             where: { id: invoice.id },
@@ -89,6 +107,9 @@ export const POST = route(
       }
 
       case 'REFRESH_OVERDUE': {
+        if (restricted) {
+          throw new ForbiddenError('Overdue refresh runs across all PGs and is owner-only')
+        }
         const result = await applyOverdueAndLateFees(orgId)
         return ok({
           ...result,
@@ -112,10 +133,15 @@ export const POST = route(
       }
 
       case 'WAIVE': {
+        requirePermission(user, 'invoice:waive')
         const invoice = await prisma.rentInvoice.findFirst({
           where: { id: body.invoiceId, organizationId: orgId },
         })
         if (!invoice) throw new ValidationError('Invoice not found')
+        assertInScope(user, invoice.propertyId)
+        if (!['DRAFT', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status)) {
+          throw new ValidationError('Only an unpaid invoice can be waived')
+        }
         await prisma.$transaction(async (tx) => {
           await tx.rentInvoice.update({
             where: { id: invoice.id },
@@ -137,3 +163,35 @@ export const POST = route(
   },
   { roles: ['OWNER', 'MANAGER'] },
 )
+
+/** generateMonthlyInvoices, limited to the PGs a restricted manager can see. */
+async function generateScopedInvoices(
+  organizationId: string,
+  propertyIds: string[],
+  monthDate: Date,
+  actor: { id: string; name: string },
+) {
+  const month = startOfMonth(monthDate)
+  const residents = await prisma.resident.findMany({
+    where: {
+      organizationId,
+      propertyId: { in: propertyIds },
+      status: { in: ['ACTIVE', 'NOTICE'] },
+      joiningDate: { lte: endOfMonth(month) },
+    },
+    select: { id: true },
+  })
+
+  let created = 0
+  let skipped = 0
+  for (const resident of residents) {
+    try {
+      const result = await generateInvoice({ residentId: resident.id, periodStart: month, actor })
+      if (result.created) created++
+      else skipped++
+    } catch {
+      skipped++
+    }
+  }
+  return { created, skipped, total: residents.length, month }
+}

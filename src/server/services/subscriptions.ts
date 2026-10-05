@@ -6,6 +6,7 @@ import { NotFoundError } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifySuperAdmins, recordActivity } from '../events'
 import { addDays, addMonths, formatMoney, startOfDay } from '@/lib/utils'
 import { simulateAutopayDebit, paymentMode } from '../integrations/payments'
+import { nextCounterNumber, retryOnUniqueConflict } from './billing'
 
 /**
  * SaaS subscriptions — charged per PG property.
@@ -190,12 +191,28 @@ export async function cancelAutopay(subscriptionId: string) {
   })
 }
 
+/**
+ * SF-YYYYMM-0001… Platform-wide (SubscriptionInvoice.number is globally
+ * unique), issued from a counter instead of `count + 1`, which raced.
+ */
 async function nextSubInvoiceNumber(tx: Prisma.TransactionClient, date: Date) {
   const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`
-  const count = await tx.subscriptionInvoice.count({
-    where: { number: { startsWith: `SF-${stamp}` } },
+  const head = `SF-${stamp}-`
+  return nextCounterNumber(tx, {
+    key: `subscription-invoice:${stamp}`,
+    head,
+    taken: async (number) =>
+      Boolean(
+        await tx.subscriptionInvoice.findUnique({ where: { number }, select: { id: true } }),
+      ),
+    used: async () =>
+      (
+        await tx.subscriptionInvoice.findMany({
+          where: { number: { startsWith: head } },
+          select: { number: true },
+        })
+      ).map((r) => r.number),
   })
-  return `SF-${stamp}-${String(count + 1).padStart(4, '0')}`
 }
 
 /**
@@ -223,24 +240,37 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
 
   for (const subscription of due) {
     const periodStart = startOfDay(subscription.nextBillingDate)
-    const periodEnd = addMonths(periodStart, 1)
+    const periodEnd = startOfDay(addMonths(periodStart, 1))
 
-    const invoice = await prisma.$transaction(async (tx) => {
-      const number = await nextSubInvoiceNumber(tx, periodStart)
-      return tx.subscriptionInvoice.create({
-        data: {
-          subscriptionId: subscription.id,
-          number,
-          periodStart,
-          periodEnd,
-          issueDate: periodStart,
-          dueDate: addDays(periodStart, 3),
-          amount: subscription.amount,
-          total: subscription.amount,
-          status: 'PENDING',
-        },
-      })
-    })
+    // Claim this billing cycle and raise its invoice in one transaction: the
+    // conditional update on nextBillingDate lets only one of two overlapping
+    // runs bill (and charge) the same period.
+    const invoice = await retryOnUniqueConflict(
+      () =>
+        prisma.$transaction(async (tx) => {
+          const claim = await tx.subscription.updateMany({
+            where: { id: subscription.id, nextBillingDate: subscription.nextBillingDate },
+            data: { nextBillingDate: periodEnd },
+          })
+          if (claim.count !== 1) return null
+          const number = await nextSubInvoiceNumber(tx, periodStart)
+          return tx.subscriptionInvoice.create({
+            data: {
+              subscriptionId: subscription.id,
+              number,
+              periodStart,
+              periodEnd,
+              issueDate: periodStart,
+              dueDate: startOfDay(addDays(periodStart, 3)),
+              amount: subscription.amount,
+              total: subscription.amount,
+              status: 'PENDING',
+            },
+          })
+        }),
+      ['number'],
+    )
+    if (!invoice) continue
 
     if (!subscription.autopayEnabled || subscription.mandateStatus !== 'ACTIVE') {
       await prisma.subscription.update({

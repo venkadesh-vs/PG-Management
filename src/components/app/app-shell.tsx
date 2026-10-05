@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   X,
+  KeyRound,
 } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { isActive, type NavSection } from '@/lib/navigation'
@@ -34,6 +35,7 @@ import { useToast } from '@/components/ui/toast'
 import { api } from '@/lib/client'
 import { GlobalSearch } from './global-search'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
+import { RestrictedGate } from './restricted-gate'
 
 export type ShellProperty = {
   id: string
@@ -71,6 +73,7 @@ export function AppShell({
   showPropertySwitcher = true,
   searchScope = 'org',
   installName,
+  restricted = false,
 }: {
   nav: NavSection[]
   user: ShellUser
@@ -80,6 +83,8 @@ export function AppShell({
   showPropertySwitcher?: boolean
   searchScope?: 'org' | 'platform'
   installName?: string
+  /** Organization suspended for non-payment: only billing pages render. */
+  restricted?: boolean
 }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = React.useState(false)
@@ -186,7 +191,7 @@ export function AppShell({
 
         <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
           {installName && <InstallPrompt appName={installName} className="mb-6 lg:hidden" />}
-          {children}
+          {restricted ? <RestrictedGate pathname={pathname}>{children}</RestrictedGate> : children}
         </main>
       </div>
 
@@ -306,6 +311,12 @@ function UserPanel({ user }: { user: ShellUser }) {
             <Link href="/app/notifications">
               <Bell />
               Notifications
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/change-password">
+              <KeyRound />
+              Change password
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />

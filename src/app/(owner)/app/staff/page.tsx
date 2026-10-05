@@ -146,12 +146,17 @@ export default async function StaffPage({
               },
               { kind: 'number', name: 'salary', label: 'Monthly salary', half: true },
               { kind: 'text', name: 'idNumber', label: 'ID number', half: true },
-              {
-                kind: 'switch',
-                name: 'createLogin',
-                label: 'Create a worker app login',
-                hint: 'They can accept, update and complete tasks from their phone.',
-              },
+              // Only the owner may create logins (staff:login).
+              ...(user.role === 'OWNER'
+                ? [
+                    {
+                      kind: 'switch' as const,
+                      name: 'createLogin',
+                      label: 'Create a worker app login',
+                      hint: 'They can accept, update and complete tasks from their phone.',
+                    },
+                  ]
+                : []),
             ]}
           />
         }

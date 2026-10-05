@@ -5,7 +5,7 @@ import { cookies, headers } from 'next/headers'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { SignJWT, jwtVerify } from 'jose'
-import type { UserRole } from '@prisma/client'
+import type { OrgStatus, UserRole } from '@prisma/client'
 
 import { prisma } from './prisma'
 import { serverEnv } from './env'
@@ -20,11 +20,16 @@ export type SessionUser = {
   organizationId: string | null
   organizationName: string | null
   organizationSlug: string | null
+  /** null for platform users. SUSPENDED/CANCELLED orgs are restricted. */
+  organizationStatus: OrgStatus | null
   avatarUrl: string | null
   residentId: string | null
   staffId: string | null
   /** Property ids a MANAGER/WORKER is restricted to. Empty = unrestricted. */
   propertyIds: string[]
+  /** Generated password still in use — everything is blocked until it changes. */
+  mustChangePassword: boolean
+  sessionId: string
 }
 
 // Password helpers live in lib/password.ts so services and CLI scripts can
@@ -145,12 +150,23 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     organizationId: user.organizationId,
     organizationName: user.organization?.name ?? null,
     organizationSlug: user.organization?.slug ?? null,
+    organizationStatus: user.organization?.status ?? null,
     avatarUrl: user.avatarUrl,
     residentId: user.resident?.id ?? null,
     staffId: user.staff?.id ?? null,
     propertyIds: user.propertyAccess.map((p) => p.propertyId),
+    mustChangePassword: user.mustChangePassword,
+    sessionId: session.id,
   }
 })
+
+/** Signs the user out of every other device, e.g. after a password change. */
+export async function revokeOtherSessions(userId: string, keepSessionId: string) {
+  await prisma.session.updateMany({
+    where: { userId, id: { not: keepSessionId }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  })
+}
 
 // --------------------------------------------------------------------------
 // Guards. Server components and route handlers call these — never rely on
@@ -168,6 +184,7 @@ export const HOME_FOR_ROLE: Record<UserRole, string> = {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser()
   if (!user) redirect('/login')
+  if (user.mustChangePassword) redirect('/change-password')
   return user
 }
 
@@ -175,6 +192,11 @@ export async function requireRole(...roles: UserRole[]): Promise<SessionUser> {
   const user = await requireUser()
   if (!roles.includes(user.role)) redirect(HOME_FOR_ROLE[user.role])
   return user
+}
+
+/** True when the organization has lost access for non-payment or cancellation. */
+export function isOrgRestricted(user: Pick<SessionUser, 'organizationStatus'>) {
+  return user.organizationStatus === 'SUSPENDED' || user.organizationStatus === 'CANCELLED'
 }
 
 /** OWNER or MANAGER of an organization. */
@@ -191,41 +213,17 @@ export async function requireSuperAdmin(): Promise<SessionUser> {
 export async function requireTenant(): Promise<SessionUser & { residentId: string }> {
   const user = await requireRole('TENANT')
   if (!user.residentId) redirect('/login')
+  if (isOrgRestricted(user)) redirect('/service-paused')
   return user as SessionUser & { residentId: string }
 }
 
 export async function requireWorker(): Promise<SessionUser & { staffId: string }> {
   const user = await requireRole('WORKER')
   if (!user.staffId) redirect('/login')
+  if (isOrgRestricted(user)) redirect('/service-paused')
   return user as SessionUser & { staffId: string }
 }
 
-// --------------------------------------------------------------------------
-// Permissions — a single source of truth shared by UI and API.
-// --------------------------------------------------------------------------
-
-export const PERMISSIONS = {
-  'property:write': ['OWNER', 'MANAGER'],
-  'property:delete': ['OWNER'],
-  'resident:write': ['OWNER', 'MANAGER'],
-  'resident:checkout': ['OWNER', 'MANAGER'],
-  'payment:record': ['OWNER', 'MANAGER'],
-  'payment:refund': ['OWNER'],
-  'expense:write': ['OWNER', 'MANAGER'],
-  'complaint:assign': ['OWNER', 'MANAGER'],
-  'complaint:resolve': ['OWNER', 'MANAGER', 'WORKER'],
-  'staff:write': ['OWNER', 'MANAGER'],
-  'grocery:write': ['OWNER', 'MANAGER', 'WORKER'],
-  'food:write': ['OWNER', 'MANAGER', 'WORKER'],
-  'settings:write': ['OWNER'],
-  'subscription:manage': ['OWNER'],
-  'platform:manage': ['SUPER_ADMIN'],
-} as const satisfies Record<string, readonly UserRole[]>
-
-export type Permission = keyof typeof PERMISSIONS
-
-export function can(user: Pick<SessionUser, 'role'> | null, permission: Permission): boolean {
-  if (!user) return false
-  if (user.role === 'SUPER_ADMIN') return true
-  return (PERMISSIONS[permission] as readonly UserRole[]).includes(user.role)
-}
+// Permissions live in lib/permissions so CLI scripts and services can use
+// them without pulling in next/navigation.
+export { PERMISSIONS, can, type Permission } from './permissions'

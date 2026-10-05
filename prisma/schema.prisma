@@ -128,6 +128,11 @@ enum InvoiceLineKind {
   OTHER
 }
 
+enum PaymentPurpose {
+  RENT
+  DEPOSIT
+}
+
 enum PaymentMethodKind {
   CASH
   UPI
@@ -371,31 +376,32 @@ enum EventType {
   LEAD_CREATED
   LEAD_UPDATED
   AUTH_LOGIN
+  AUTH_PASSWORD_CHANGED
   SETTINGS_UPDATED
 }
 
 // ============================ PLATFORM =====================================
 
 model Organization {
-  id            String    @id @default(cuid())
-  name          String
-  slug          String    @unique
-  ownerName     String
-  contactEmail  String
-  contactPhone  String
-  whatsappPhone String?
-  city          String?
-  state         String?
-  addressLine   String?
-  logoUrl       String?
-  status        OrgStatus @default(TRIAL)
-  trialEndsAt   DateTime?
-  notes         String?
+  id               String    @id @default(cuid())
+  name             String
+  slug             String    @unique
+  ownerName        String
+  contactEmail     String
+  contactPhone     String
+  whatsappPhone    String?
+  city             String?
+  state            String?
+  addressLine      String?
+  logoUrl          String?
+  status           OrgStatus @default(TRIAL)
+  trialEndsAt      DateTime?
+  notes            String?
   // Feature flags resolved against the plan; org-level overrides live here.
   featureOverrides Json?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  archivedAt    DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  archivedAt       DateTime?
 
   users             User[]
   properties        Property[]
@@ -431,10 +437,10 @@ model OrgSetting {
   organizationId String       @unique
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  currency        String  @default("INR")
-  timezone        String  @default("Asia/Kolkata")
-  rentDueDay      Int     @default(5) // day of month rent invoices fall due
-  rentGenerateDay Int     @default(1) // day of month invoices are generated
+  currency        String @default("INR")
+  timezone        String @default("Asia/Kolkata")
+  rentDueDay      Int    @default(5) // day of month rent invoices fall due
+  rentGenerateDay Int    @default(1) // day of month invoices are generated
 
   lateFeeEnabled   Boolean @default(true)
   lateFeeGraceDays Int     @default(5)
@@ -460,17 +466,20 @@ model User {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  email        String     @unique
-  phone        String?
-  passwordHash String
-  name         String
-  role         UserRole
-  status       UserStatus @default(ACTIVE)
-  avatarUrl    String?
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  archivedAt   DateTime?
+  email              String     @unique
+  phone              String?
+  passwordHash       String
+  name               String
+  role               UserRole
+  status             UserStatus @default(ACTIVE)
+  avatarUrl          String?
+  lastLoginAt        DateTime?
+  /// Set for generated passwords; the user must pick their own before anything else.
+  mustChangePassword Boolean    @default(false)
+  passwordChangedAt  DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  archivedAt         DateTime?
 
   // Scoped links — a TENANT user maps to a Resident, a WORKER to a Staff row.
   resident Resident?
@@ -666,7 +675,7 @@ model OccupancySnapshot {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  date        DateTime @db.Date
+  date        DateTime
   totalBeds   Int
   occupied    Int
   vacant      Int
@@ -818,11 +827,11 @@ model RentInvoice {
   residentId     String
   resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
 
-  number      String        @unique
-  periodStart DateTime      @db.Date
-  periodEnd   DateTime      @db.Date
-  issueDate   DateTime      @db.Date
-  dueDate     DateTime      @db.Date
+  number      String
+  periodStart DateTime
+  periodEnd   DateTime
+  issueDate   DateTime
+  dueDate     DateTime
   status      InvoiceStatus @default(PENDING)
 
   subtotal   Int @default(0)
@@ -845,6 +854,7 @@ model RentInvoice {
   allocations PaymentAllocation[]
 
   @@unique([residentId, periodStart])
+  @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([propertyId, dueDate])
   @@index([status, dueDate])
@@ -872,9 +882,11 @@ model RentPayment {
   residentId     String
   resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
 
-  receiptNumber String            @unique
+  receiptNumber String
   amount        Int
   method        PaymentMethodKind
+  /// DEPOSIT payments are held money, never rent revenue.
+  purpose       PaymentPurpose    @default(RENT)
   status        PaymentStatus     @default(SUCCESS)
   paidAt        DateTime          @default(now())
   reference     String?
@@ -893,6 +905,8 @@ model RentPayment {
 
   allocations PaymentAllocation[]
 
+  @@unique([organizationId, receiptNumber])
+  @@unique([gatewayPaymentId])
   @@index([organizationId, paidAt])
   @@index([propertyId, paidAt])
   @@index([residentId])
@@ -962,8 +976,8 @@ model UtilityCharge {
   resident       Resident?    @relation(fields: [residentId], references: [id], onDelete: SetNull)
 
   kind        String // ELECTRICITY | WATER | GAS
-  periodStart DateTime @db.Date
-  periodEnd   DateTime @db.Date
+  periodStart DateTime
+  periodEnd   DateTime
   unitsUsed   Int      @default(0)
   ratePerUnit Int      @default(0)
   amount      Int
@@ -1023,7 +1037,7 @@ model Meal {
   propertyId     String
   property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  date          DateTime @db.Date
+  date          DateTime
   type          MealType
   menu          String
   expectedCount Int      @default(0)
@@ -1059,14 +1073,14 @@ model GroceryItem {
   propertyId     String
   property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  name         String
-  category     String
-  unit         StockUnit
-  currentStock Int       @default(0) // stored in whole units
-  minimumStock Int       @default(0)
+  name               String
+  category           String
+  unit               StockUnit
+  currentStock       Int       @default(0) // stored in whole units
+  minimumStock       Int       @default(0)
   // Configurable consumption formula: grams/ml/pieces per resident per meal.
-  perResidentPerMeal Int @default(0)
-  lastPurchasePrice  Int @default(0)
+  perResidentPerMeal Int       @default(0)
+  lastPurchasePrice  Int       @default(0)
   vendor             String?
   expiresOn          DateTime?
   createdAt          DateTime  @default(now())
@@ -1091,7 +1105,7 @@ model GroceryPurchase {
   unitPrice    Int
   totalAmount  Int
   vendor       String?
-  purchaseDate DateTime @db.Date
+  purchaseDate DateTime
   invoiceRef   String?
   expenseId    String?
   purchasedBy  String?
@@ -1129,7 +1143,7 @@ model Expense {
 
   title       String
   amount      Int
-  spentOn     DateTime          @db.Date
+  spentOn     DateTime
   paidTo      String?
   paymentMode PaymentMethodKind @default(CASH)
   reference   String?
@@ -1157,7 +1171,7 @@ model Complaint {
   roomId         String?
   room           Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
-  code        String            @unique
+  code        String
   category    ComplaintCategory
   priority    ComplaintPriority @default(MEDIUM)
   status      ComplaintStatus   @default(OPEN)
@@ -1181,6 +1195,7 @@ model Complaint {
   updates ComplaintUpdate[]
   tasks   MaintenanceTask[]
 
+  @@unique([organizationId, code])
   @@index([organizationId, status])
   @@index([propertyId, status])
   @@index([assignedStaffId, status])
@@ -1273,7 +1288,7 @@ model StaffAttendance {
   id        String           @id @default(cuid())
   staffId   String
   staff     Staff            @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  date      DateTime         @db.Date
+  date      DateTime
   status    AttendanceStatus @default(PRESENT)
   checkIn   DateTime?
   checkOut  DateTime?
@@ -1419,11 +1434,11 @@ model OutboundMessage {
 // ============================ SAAS BILLING =================================
 
 model Plan {
-  id           String       @id @default(cuid())
-  name         String
-  slug         String       @unique
-  description  String?
-  pricingBasis PricingBasis @default(STANDARD_RENT)
+  id            String       @id @default(cuid())
+  name          String
+  slug          String       @unique
+  description   String?
+  pricingBasis  PricingBasis @default(STANDARD_RENT)
   // STANDARD_RENT: subscription = property.standardRent * multiplier%
   // PER_BED:       subscription = bedCount * perBedPrice
   // FLAT:          subscription = flatPrice
@@ -1501,10 +1516,10 @@ model SubscriptionInvoice {
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   number      String        @unique
-  periodStart DateTime      @db.Date
-  periodEnd   DateTime      @db.Date
-  issueDate   DateTime      @db.Date
-  dueDate     DateTime      @db.Date
+  periodStart DateTime
+  periodEnd   DateTime
+  issueDate   DateTime
+  dueDate     DateTime
   amount      Int
   tax         Int           @default(0)
   total       Int
@@ -1538,6 +1553,7 @@ model SubscriptionPayment {
   isDemo           Boolean           @default(true)
   createdAt        DateTime          @default(now())
 
+  @@unique([gatewayPaymentId])
   @@index([subscriptionId, status])
 }
 
@@ -1557,6 +1573,15 @@ model PaymentMethod {
 }
 
 // ============================ GROWTH =======================================
+
+/// One row per attempt; counted over a sliding window. Swept by the daily job.
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
 
 model Lead {
   id              String     @id @default(cuid())

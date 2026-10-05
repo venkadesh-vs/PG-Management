@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { Building2, Clock, DoorOpen, Phone, Star, UserRound } from 'lucide-react'
 import { requireOrgUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ForbiddenError } from '@/lib/tenancy'
+import { inScope } from '@/lib/tenancy'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE, themeFor } from '@/lib/theme'
 import { cn, formatDateTime, formatPhone, relativeTime } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
@@ -34,8 +34,11 @@ export default async function ComplaintDetailPage({
       tasks: true,
     },
   })
+  // Another org's complaint, or a PG this manager is not assigned to, is
+  // indistinguishable from a missing one.
   if (!complaint) notFound()
-  if (complaint.organizationId !== user.organizationId) throw new ForbiddenError()
+  if (complaint.organizationId !== user.organizationId) notFound()
+  if (!inScope(user, complaint.propertyId)) notFound()
 
   const staff = await prisma.staff.findMany({
     where: {

@@ -30,8 +30,10 @@ const ROLE_META: Record<string, { label: string; icon: React.ElementType; tone: 
 
 export function LoginForm({
   demoUsers,
+  demoPassword,
 }: {
   demoUsers: { email: string; role: string; name: string }[]
+  demoPassword: string
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -60,7 +62,7 @@ export function LoginForm({
 
   function useDemo(email: string) {
     form.setValue('email', email)
-    form.setValue('password', 'StayFlow@2026')
+    form.setValue('password', demoPassword)
     form.clearErrors()
     toast.info('Demo credentials filled', 'Press Sign in to continue.')
   }
@@ -131,7 +133,7 @@ export function LoginForm({
           <p className="mt-1.5 text-xs text-slate-500">
             Tap a role to fill the form. Every account uses the password{' '}
             <code className="rounded bg-white px-1 py-0.5 font-mono text-[11px] text-slate-700">
-              StayFlow@2026
+              {demoPassword}
             </code>
             .
           </p>

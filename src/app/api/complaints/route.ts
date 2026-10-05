@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
+import {
+  assertInScope,
+  assertPropertyAccess,
+  ForbiddenError,
+  NotFoundError,
+  requirePermission,
+} from '@/lib/tenancy'
 import { complaintActionSchema, complaintSchema } from '@/lib/validation'
 import {
   addComplaintComment,
@@ -43,6 +49,7 @@ export const POST = route(async ({ user, request }) => {
 
   if (!['OWNER', 'MANAGER'].includes(user.role)) throw new ForbiddenError()
   await assertPropertyAccess(user, body.propertyId)
+  // createComplaint checks residentId / roomId belong to this org and PG.
 
   const complaint = await createComplaint({
     organizationId: user.organizationId!,
@@ -69,27 +76,40 @@ export const PATCH = route(async ({ user, request }) => {
 
   const complaint = await prisma.complaint.findUnique({
     where: { id: body.complaintId },
-    select: { id: true, organizationId: true, residentId: true, assignedStaffId: true, code: true },
+    select: {
+      id: true,
+      organizationId: true,
+      propertyId: true,
+      residentId: true,
+      assignedStaffId: true,
+      code: true,
+    },
   })
   if (!complaint) throw new NotFoundError('Complaint not found')
 
   // Scope check: an org user must own it; a tenant must be the raiser; a
   // worker must be the assignee.
   if (user.role === 'TENANT') {
-    if (complaint.residentId !== user.residentId) throw new ForbiddenError()
+    if (!user.residentId || complaint.residentId !== user.residentId) throw new ForbiddenError()
     if (body.action !== 'COMMENT' && !(body.action === 'STATUS' && body.status === 'CLOSED')) {
       throw new ForbiddenError('Residents can comment or close their own complaint')
     }
   } else if (user.role === 'WORKER') {
-    if (complaint.assignedStaffId !== user.staffId) throw new ForbiddenError('Not your task')
+    if (!user.staffId || complaint.assignedStaffId !== user.staffId) {
+      throw new ForbiddenError('Not your task')
+    }
     if (body.action === 'ASSIGN') throw new ForbiddenError('Only an owner can reassign')
-  } else if (complaint.organizationId !== user.organizationId) {
+  } else if (!['OWNER', 'MANAGER'].includes(user.role)) {
     throw new ForbiddenError()
+  } else {
+    if (complaint.organizationId !== user.organizationId) throw new ForbiddenError()
+    assertInScope(user, complaint.propertyId)
   }
 
   const actor = { id: user.id, name: user.name, role: user.role }
 
   if (body.action === 'ASSIGN') {
+    requirePermission(user, 'complaint:assign')
     if (!body.staffId) throw new NotFoundError('Choose a staff member')
     await assignComplaint({
       complaintId: complaint.id,

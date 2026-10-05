@@ -1,7 +1,9 @@
 import 'server-only'
 
+import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { startOfDay, startOfMonth } from '@/lib/utils'
+import { addDays, startOfDay, startOfMonth } from '@/lib/utils'
+import { sweepRateLimits } from '@/lib/rate-limit'
 import {
   applyOverdueAndLateFees,
   generateMonthlyInvoices,
@@ -19,13 +21,55 @@ import { expectedMealCount, MEAL_TYPES } from './kitchen'
 
 export type AutomationReport = {
   ranAt: Date
-  invoices: { created: number; skipped: number }
+  /** False when another run held the lock and this one did nothing. */
+  ran: boolean
+  invoices: { created: number; skipped: number; failed: number }
   overdue: { flagged: number; feesApplied: number }
   reminders: { sent: number }
   subscriptions: { billed: number; failed: number; suspended: number }
   occupancy: { snapshots: number }
   meals: { refreshed: number }
   errors: string[]
+}
+
+// --------------------------------------------------------------------------
+// Run lock
+// --------------------------------------------------------------------------
+
+/**
+ * Two overlapping runs (a slow cron plus a manual "run now", or two cron
+ * instances) must not double-send reminders or double-charge AutoPay.
+ *
+ * Why a lease row and not pg_advisory_lock: a session advisory lock belongs to
+ * one pooled connection, and Prisma may run the unlock on a different one, so
+ * the lock leaks until that connection is recycled. The transaction-scoped
+ * variant would need the whole multi-minute run inside one interactive
+ * transaction, while every step here opens transactions of its own on other
+ * connections. A row in SystemSetting (unique `key`) works across connections
+ * and server instances, and a stale lease (crashed run) expires on its own.
+ *
+ * The lock is global, not per organization: a single-org manual run and the
+ * all-org cron touch the same invoices.
+ */
+const RUN_LOCK_KEY = 'automation:daily-run:lock'
+const RUN_LOCK_TTL_MINUTES = 30
+
+async function acquireRunLock(token: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ key: string }[]>`
+    INSERT INTO "SystemSetting" ("id", "key", "value", "updatedAt")
+    VALUES (gen_random_uuid()::text, ${RUN_LOCK_KEY}, jsonb_build_object('token', ${token}::text), NOW())
+    ON CONFLICT ("key") DO UPDATE
+      SET "value" = EXCLUDED."value", "updatedAt" = NOW()
+      WHERE "SystemSetting"."updatedAt" < NOW() - make_interval(mins => ${RUN_LOCK_TTL_MINUTES}::int)
+    RETURNING "key"
+  `
+  return rows.length === 1
+}
+
+async function releaseRunLock(token: string) {
+  await prisma.$executeRaw`
+    DELETE FROM "SystemSetting" WHERE "key" = ${RUN_LOCK_KEY} AND "value"->>'token' = ${token}
+  `
 }
 
 export async function runDailyAutomation(options?: {
@@ -39,7 +83,8 @@ export async function runDailyAutomation(options?: {
 
   const report: AutomationReport = {
     ranAt: now,
-    invoices: { created: 0, skipped: 0 },
+    ran: false,
+    invoices: { created: 0, skipped: 0, failed: 0 },
     overdue: { flagged: 0, feesApplied: 0 },
     reminders: { sent: 0 },
     subscriptions: { billed: 0, failed: 0, suspended: 0 },
@@ -47,6 +92,30 @@ export async function runDailyAutomation(options?: {
     meals: { refreshed: 0 },
     errors,
   }
+
+  const token = randomUUID()
+  if (!(await acquireRunLock(token))) {
+    errors.push('skipped: another automation run is already in progress')
+    return report
+  }
+  try {
+    report.ran = true
+    await runSteps(now, report, options)
+  } finally {
+    await releaseRunLock(token).catch((error) => {
+      // The lease expires on its own; just make the leak visible.
+      console.error('[automation] failed to release run lock', error)
+    })
+  }
+  return report
+}
+
+async function runSteps(
+  now: Date,
+  report: AutomationReport,
+  options?: { organizationId?: string; skipInvoices?: boolean },
+) {
+  const errors = report.errors
 
   // 1. Generate this month's rent for every active resident, on or after the
   //    configured generation day.
@@ -70,6 +139,10 @@ export async function runDailyAutomation(options?: {
         })
         report.invoices.created += result.created
         report.invoices.skipped += result.skipped
+        report.invoices.failed += result.failed
+        for (const failure of result.failures) {
+          errors.push(`invoice for resident ${failure.residentId} (${org.name}): ${failure.error}`)
+        }
       }
     } catch (error) {
       errors.push(`invoices: ${(error as Error).message}`)
@@ -117,6 +190,14 @@ export async function runDailyAutomation(options?: {
     errors.push(`occupancy: ${(error as Error).message}`)
   }
 
+  // Housekeeping: old rate-limit rows and expired sessions.
+  try {
+    await sweepRateLimits()
+    await prisma.session.deleteMany({ where: { expiresAt: { lt: addDays(now, -30) } } })
+  } catch (error) {
+    errors.push(`housekeeping: ${(error as Error).message}`)
+  }
+
   // 6. Refresh today's expected meal counts from live subscriptions.
   try {
     const meals = await prisma.meal.findMany({
@@ -135,8 +216,6 @@ export async function runDailyAutomation(options?: {
   } catch (error) {
     errors.push(`meals: ${(error as Error).message}`)
   }
-
-  return report
 }
 
 /** Creates tomorrow's meal rows from today's menu so the kitchen has a plan. */

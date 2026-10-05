@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Bell, LogOut, MoreHorizontal } from 'lucide-react'
+import { Bell, KeyRound, LogOut, MoreHorizontal } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { isActive, type NavItem } from '@/lib/navigation'
 import { Icon } from '@/lib/icons'
@@ -120,7 +120,13 @@ export function MobileShell({
                   </Link>
                 </DropdownMenuItem>
               ))}
-              {moreNav && moreNav.length > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuItem asChild>
+                <Link href="/change-password">
+                  <KeyRound />
+                  Change password
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem destructive onSelect={signOut}>
                 <LogOut />
                 Sign out

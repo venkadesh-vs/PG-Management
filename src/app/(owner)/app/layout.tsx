@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
-import { requireOrgUser } from '@/lib/auth'
+import { isOrgRestricted, requireOrgUser } from '@/lib/auth'
 import { OWNER_NAV } from '@/lib/navigation'
 import { AppShell } from '@/components/app/app-shell'
 import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
@@ -46,6 +46,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       properties={properties}
       badges={{ complaints, notifications, tasks, leads: 0 }}
       installName={PWA_APPS.owner.shortName}
+      restricted={isOrgRestricted(user)}
     >
       {children}
     </AppShell>

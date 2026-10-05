@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { fail, handleError, ok } from '@/lib/api-helpers'
-import { assertResidentAccess } from '@/lib/tenancy'
+import { assertResidentAccess, withMaskedId } from '@/lib/tenancy'
 import { residentUpdateSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 
@@ -12,6 +12,9 @@ export async function GET(_request: Request, { params }: Params) {
   try {
     const user = await getSessionUser()
     if (!user) return fail('Please sign in', 401)
+    // The full record carries ID numbers, documents and the money trail —
+    // only the owner/manager, or the resident themselves, may read it.
+    if (!['OWNER', 'MANAGER', 'TENANT'].includes(user.role)) return fail('Not allowed', 403)
     const { id } = await params
     await assertResidentAccess(user, id)
 
@@ -30,7 +33,7 @@ export async function GET(_request: Request, { params }: Params) {
       },
     })
     if (!resident) return fail('Resident not found', 404)
-    return ok({ resident })
+    return ok({ resident: withMaskedId(resident, user.role) })
   } catch (error) {
     return handleError(error)
   }
@@ -67,7 +70,10 @@ export async function PATCH(request: Request, { params }: Params) {
         ...(body.companyName !== undefined ? { companyName: body.companyName || null } : {}),
         ...(body.designation !== undefined ? { designation: body.designation || null } : {}),
         ...(body.idType !== undefined ? { idType: body.idType || null } : {}),
-        ...(body.idNumber !== undefined ? { idNumber: body.idNumber || null } : {}),
+        // Ignore a masked value echoed back from a read.
+        ...(body.idNumber !== undefined && !body.idNumber?.startsWith('XXXX')
+          ? { idNumber: body.idNumber || null }
+          : {}),
         ...(body.rentAmount !== undefined ? { rentAmount: body.rentAmount } : {}),
         ...(body.depositAmount !== undefined ? { depositAmount: body.depositAmount } : {}),
         ...(body.maintenanceFee !== undefined ? { maintenanceFee: body.maintenanceFee } : {}),
@@ -106,7 +112,7 @@ export async function PATCH(request: Request, { params }: Params) {
       summary: `${resident.fullName}'s details updated`,
     })
 
-    return NextResponse.json({ resident })
+    return NextResponse.json({ resident: withMaskedId(resident, user.role) })
   } catch (error) {
     return handleError(error)
   }

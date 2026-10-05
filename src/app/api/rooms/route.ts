@@ -1,7 +1,12 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertPropertyAccess, ConflictError, NotFoundError } from '@/lib/tenancy'
+import {
+  assertFloorInProperty,
+  assertPropertyAccess,
+  ConflictError,
+  NotFoundError,
+} from '@/lib/tenancy'
 import { bedUpdateSchema, floorSchema, roomSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 
@@ -69,6 +74,12 @@ export const POST = route(
         data: { propertyId: body.propertyId, name: body.name, level: body.level },
       })
       return ok({ floor, message: `${floor.name} added` }, { status: 201 })
+    }
+
+    // A room's floor must sit in the same PG, or beds end up split across
+    // properties (and across organizations).
+    if (body.action === 'ADD_ROOM' || body.action === 'BULK_ROOMS') {
+      await assertFloorInProperty(body.floorId, body.propertyId)
     }
 
     if (body.action === 'ADD_ROOM') {
@@ -174,34 +185,37 @@ export const POST = route(
 )
 
 /** GET /api/rooms?propertyId= — the bed picker data source. */
-export const GET = route(async ({ user, request }) => {
-  const url = new URL(request.url)
-  const propertyId = url.searchParams.get('propertyId')
-  const onlyAvailable = url.searchParams.get('available') === '1'
-  if (!propertyId) return { floors: [] }
-  await assertPropertyAccess(user, propertyId)
+export const GET = route(
+  async ({ user, request }) => {
+    const url = new URL(request.url)
+    const propertyId = url.searchParams.get('propertyId')
+    const onlyAvailable = url.searchParams.get('available') === '1'
+    if (!propertyId) return { floors: [] }
+    await assertPropertyAccess(user, propertyId)
 
-  const floors = await prisma.floor.findMany({
-    where: { propertyId },
-    orderBy: { level: 'asc' },
-    include: {
-      rooms: {
-        orderBy: { number: 'asc' },
-        include: {
-          beds: {
-            orderBy: { label: 'asc' },
-            where: onlyAvailable ? { status: { in: ['AVAILABLE', 'RESERVED'] } } : undefined,
-            include: { resident: { select: { id: true, fullName: true, code: true } } },
+    const floors = await prisma.floor.findMany({
+      where: { propertyId },
+      orderBy: { level: 'asc' },
+      include: {
+        rooms: {
+          orderBy: { number: 'asc' },
+          include: {
+            beds: {
+              orderBy: { label: 'asc' },
+              where: onlyAvailable ? { status: { in: ['AVAILABLE', 'RESERVED'] } } : undefined,
+              include: { resident: { select: { id: true, fullName: true, code: true } } },
+            },
           },
         },
       },
-    },
-  })
+    })
 
-  return {
-    floors: floors.map((floor) => ({
-      ...floor,
-      rooms: floor.rooms.filter((room) => !onlyAvailable || room.beds.length > 0),
-    })),
-  }
-})
+    return {
+      floors: floors.map((floor) => ({
+        ...floor,
+        rooms: floor.rooms.filter((room) => !onlyAvailable || room.beds.length > 0),
+      })),
+    }
+  },
+  { roles: ['OWNER', 'MANAGER'] },
+)

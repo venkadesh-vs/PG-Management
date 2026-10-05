@@ -1,3 +1,5 @@
+// Must run before any Date math: pins the process to IST.
+import './timezone'
 import { PrismaClient } from '@prisma/client'
 
 // Next.js hot-reloads modules in dev; without the global cache every reload

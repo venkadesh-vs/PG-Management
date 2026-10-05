@@ -29,12 +29,10 @@ export const POST = route(
       data: { status: body.status, notes: body.note ?? undefined },
     })
 
-    // Suspending the account also suspends every owner/manager login so the
-    // restriction is enforced at sign-in, not just in the UI.
-    await prisma.user.updateMany({
-      where: { organizationId: org.id, role: { in: ['OWNER', 'MANAGER'] } },
-      data: { status: body.status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE' },
-    })
+    // Individual logins are left alone: the organization status is checked
+    // on every request (lib/auth isOrgRestricted), so owners can still sign in
+    // to pay, residents/staff see a paused screen, and a user suspended for
+    // their own reasons is never silently re-activated.
 
     await recordActivity({
       organizationId: org.id,

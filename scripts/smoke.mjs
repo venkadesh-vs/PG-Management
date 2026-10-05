@@ -147,12 +147,21 @@ async function main() {
   section('Workflow: check in a resident')
   let newResidentId = null
   if (property) {
-    const roomsRes = await owner.fetch(`/api/rooms?propertyId=${property.id}&available=1`)
-    const { floors } = await roomsRes.json()
-    const bed = floors
-      .flatMap((f) => f.rooms)
-      .flatMap((r) => r.beds)
-      .find((b) => b.status === 'AVAILABLE')
+    // Any PG with a free bed will do; the first one may be full.
+    let bed = null
+    let bedProperty = property
+    for (const candidate of properties) {
+      const roomsRes = await owner.fetch(`/api/rooms?propertyId=${candidate.id}&available=1`)
+      const { floors } = await roomsRes.json()
+      bed = floors
+        .flatMap((f) => f.rooms)
+        .flatMap((r) => r.beds)
+        .find((b) => b.status === 'AVAILABLE')
+      if (bed) {
+        bedProperty = candidate
+        break
+      }
+    }
     log(Boolean(bed), 'found an available bed', bed ? `bed ${bed.label}` : 'none free')
 
     if (bed) {
@@ -161,7 +170,7 @@ async function main() {
         body: JSON.stringify({
           fullName: 'Smoke Test Resident',
           phone: '9876500099',
-          propertyId: property.id,
+          propertyId: bedProperty.id,
           bedId: bed.id,
           joiningDate: new Date().toISOString().slice(0, 10),
           rentAmount: 8500,
@@ -194,7 +203,7 @@ async function main() {
         body: JSON.stringify({
           fullName: 'Second Person',
           phone: '9876500097',
-          propertyId: property.id,
+          propertyId: bedProperty.id,
           bedId: bed.id,
           joiningDate: new Date().toISOString().slice(0, 10),
           rentAmount: 8000,
@@ -232,12 +241,14 @@ async function main() {
   // ------------------------------------------------ complaint workflow ----
   section('Workflow: complaint → worker → resolved')
   let complaintId = null
-  if (property && resident) {
+  // The resident must live in the PG the complaint is raised for.
+  const complaintResident = residents.find((r) => r.property?.id === property?.id) ?? null
+  if (property && complaintResident) {
     const created = await owner.fetch('/api/complaints', {
       method: 'POST',
       body: JSON.stringify({
         propertyId: property.id,
-        residentId: resident.id,
+        residentId: complaintResident.id,
         category: 'PLUMBING',
         priority: 'HIGH',
         title: 'Smoke test — tap leaking',

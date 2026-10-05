@@ -1,10 +1,11 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import type {
   InvoiceLineKind,
   LedgerEntryKind,
   PaymentMethodKind,
-  Prisma,
+  RentInvoice,
   Resident,
 } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -37,28 +38,125 @@ type Tx = Prisma.TransactionClient
 // Numbering
 // --------------------------------------------------------------------------
 
-async function nextSequence(tx: Tx, key: string): Promise<number> {
-  // A row-level counter keeps invoice numbers gapless and race-free.
+async function nextSequence(tx: Tx, key: string, floor = 1): Promise<number> {
+  // A row-level counter keeps numbers gapless and race-free: the upsert locks
+  // the counter row until the transaction commits, so concurrent callers queue.
+  // `floor` lets a caller jump the counter past numbers it did not issue.
   const rows = await tx.$queryRaw<{ value: unknown }[]>`
     INSERT INTO "SystemSetting" ("id", "key", "value", "updatedAt")
-    VALUES (gen_random_uuid()::text, ${key}, '1'::jsonb, NOW())
+    VALUES (gen_random_uuid()::text, ${key}, to_jsonb(${floor}::int), NOW())
     ON CONFLICT ("key")
-    DO UPDATE SET "value" = to_jsonb((("SystemSetting"."value")::text)::int + 1), "updatedAt" = NOW()
+    DO UPDATE SET "value" = to_jsonb(GREATEST((("SystemSetting"."value")::text)::int + 1, ${floor}::int)), "updatedAt" = NOW()
     RETURNING "value"
   `
-  return Number(rows[0]?.value ?? 1)
+  return Number(rows[0]?.value ?? floor)
+}
+
+/**
+ * Issues `<head><0001>` from a per-organization counter. If the counter is
+ * behind numbers that already exist (seeded or imported rows, a reset
+ * counter), it jumps past the highest one in use instead of colliding.
+ */
+export async function nextCounterNumber(
+  tx: Tx,
+  params: {
+    key: string
+    head: string
+    taken: (candidate: string) => Promise<boolean>
+    used: () => Promise<string[]>
+  },
+) {
+  const format = (n: number) => `${params.head}${String(n).padStart(4, '0')}`
+  const first = format(await nextSequence(tx, params.key))
+  if (!(await params.taken(first))) return first
+
+  const max = (await params.used()).reduce((m, value) => {
+    const suffix = value.slice(params.head.length)
+    return /^\d+$/.test(suffix) ? Math.max(m, Number(suffix)) : m
+  }, 0)
+  return format(await nextSequence(tx, params.key, max + 1))
+}
+
+function monthStamp(date: Date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 export async function nextInvoiceNumber(tx: Tx, orgId: string, prefix: string, date: Date) {
-  const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`
-  const n = await nextSequence(tx, `invoice:${orgId}:${stamp}`)
-  return `${prefix}-${stamp}-${String(n).padStart(4, '0')}`
+  const stamp = monthStamp(date)
+  const head = `${prefix}-${stamp}-`
+  return nextCounterNumber(tx, {
+    key: `invoice:${orgId}:${stamp}`,
+    head,
+    taken: async (number) =>
+      Boolean(
+        await tx.rentInvoice.findUnique({
+          where: { organizationId_number: { organizationId: orgId, number } },
+          select: { id: true },
+        }),
+      ),
+    used: async () =>
+      (
+        await tx.rentInvoice.findMany({
+          where: { organizationId: orgId, number: { startsWith: head } },
+          select: { number: true },
+        })
+      ).map((r) => r.number),
+  })
 }
 
 export async function nextReceiptNumber(tx: Tx, orgId: string, prefix: string, date: Date) {
-  const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`
-  const n = await nextSequence(tx, `receipt:${orgId}:${stamp}`)
-  return `${prefix}-${stamp}-${String(n).padStart(4, '0')}`
+  const stamp = monthStamp(date)
+  const head = `${prefix}-${stamp}-`
+  return nextCounterNumber(tx, {
+    key: `receipt:${orgId}:${stamp}`,
+    head,
+    taken: async (receiptNumber) =>
+      Boolean(
+        await tx.rentPayment.findUnique({
+          where: { organizationId_receiptNumber: { organizationId: orgId, receiptNumber } },
+          select: { id: true },
+        }),
+      ),
+    used: async () =>
+      (
+        await tx.rentPayment.findMany({
+          where: { organizationId: orgId, receiptNumber: { startsWith: head } },
+          select: { receiptNumber: true },
+        })
+      ).map((r) => r.receiptNumber),
+  })
+}
+
+/** True when `error` is a unique violation on any of `fields`. */
+export function isUniqueViolation(error: unknown, fields?: string[]) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    return false
+  }
+  if (!fields?.length) return true
+  const target = error.meta?.target
+  // No target reported: assume it is ours rather than skip a safe retry.
+  if (target == null) return true
+  const text = Array.isArray(target) ? target.join(',') : String(target)
+  return fields.some((f) => text.includes(f))
+}
+
+/**
+ * Re-runs a whole transaction when it loses a race on a unique number.
+ * Postgres aborts the transaction on the violation, so the retry must start
+ * a fresh one — retrying inside it would only hit "transaction aborted".
+ */
+export async function retryOnUniqueConflict<T>(
+  fn: () => Promise<T>,
+  fields: string[],
+  attempts = 5,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt >= attempts || !isUniqueViolation(error, fields)) throw error
+    }
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -205,8 +303,23 @@ export async function generateInvoice(params: {
   autoGenerated?: boolean
 }) {
   const periodStart = startOfMonth(params.periodStart)
-  const periodEnd = endOfMonth(periodStart)
+  // Date-only columns hold IST midnight, so the period ends at the start of
+  // its last day (comparisons against startOfDay values stay inclusive).
+  const periodEnd = startOfDay(endOfMonth(periodStart))
 
+  // A clash on the number or on (resident, period) retries the whole thing;
+  // the second case then finds the invoice a concurrent run just created.
+  return retryOnUniqueConflict(() => generateInvoiceOnce(params, periodStart, periodEnd), [
+    'number',
+    'periodStart',
+  ])
+}
+
+async function generateInvoiceOnce(
+  params: { residentId: string; actor?: { id?: string; name?: string }; autoGenerated?: boolean },
+  periodStart: Date,
+  periodEnd: Date,
+) {
   return prisma.$transaction(async (tx) => {
     const resident = await tx.resident.findUnique({
       where: { id: params.residentId },
@@ -229,7 +342,7 @@ export async function generateInvoice(params: {
 
     const settings = resident.organization.settings
     const dueDay = resident.rentDueDay || settings?.rentDueDay || 5
-    const dueDate = dayOfMonth(periodStart.getFullYear(), periodStart.getMonth(), dueDay)
+    const dueDate = startOfDay(dayOfMonth(periodStart.getFullYear(), periodStart.getMonth(), dueDay))
 
     const { lines, subtotal, discount } = buildInvoiceLines(resident, periodStart, periodEnd)
     const total = subtotal - discount
@@ -241,14 +354,14 @@ export async function generateInvoice(params: {
       periodStart,
     )
 
-    const invoice = await tx.rentInvoice.create({
+    const created = await tx.rentInvoice.create({
       data: {
         organizationId: resident.organizationId,
         propertyId: resident.propertyId,
         residentId: resident.id,
         number,
-        periodStart,
-        periodEnd,
+        periodStart: startOfDay(periodStart),
+        periodEnd: startOfDay(periodEnd),
         issueDate: startOfDay(new Date()) < periodStart ? periodStart : startOfDay(new Date()),
         dueDate,
         status: 'PENDING',
@@ -276,10 +389,15 @@ export async function generateInvoice(params: {
       kind: 'CHARGE',
       label: `Invoice ${number} — ${formatMonth(periodStart)}`,
       debit: total,
-      entryDate: invoice.issueDate,
+      entryDate: created.issueDate,
       refType: 'RentInvoice',
-      refId: invoice.id,
+      refId: created.id,
     })
+
+    // Money paid ahead (an overpayment left unallocated) settles the new
+    // invoice straight away. The ledger already carries it as a credit.
+    const invoice = await applyAdvanceToInvoice(tx, created)
+    const advanceApplied = invoice.amountPaid - created.amountPaid
 
     await recordActivity(
       {
@@ -291,18 +409,29 @@ export async function generateInvoice(params: {
         entityType: 'RentInvoice',
         entityId: invoice.id,
         summary: `${invoice.number} for ${resident.fullName} — ${formatMoney(total)}`,
-        meta: { residentId: resident.id, total, period: formatMonth(periodStart) },
+        meta: {
+          residentId: resident.id,
+          total,
+          period: formatMonth(periodStart),
+          advanceApplied,
+        },
       },
       tx,
     )
 
+    const due = dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
     await notifyResident(
       resident.id,
       {
         organizationId: resident.organizationId,
         kind: 'RENT',
         title: `Rent for ${formatMonth(periodStart)}`,
-        body: `${formatMoney(total)} is due on ${dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}.`,
+        body:
+          invoice.balance <= 0
+            ? `${formatMoney(total)} — fully covered by your advance payment.`
+            : advanceApplied > 0
+              ? `${formatMoney(total)} (${formatMoney(advanceApplied)} covered by your advance) — ${formatMoney(invoice.balance)} is due on ${due}.`
+              : `${formatMoney(total)} is due on ${due}.`,
         link: '/tenant/rent',
       },
       tx,
@@ -310,6 +439,55 @@ export async function generateInvoice(params: {
 
     return { invoice, created: true }
   })
+}
+
+/**
+ * Allocates a resident's unallocated rent payments (oldest first) to an
+ * invoice, exactly as recordPayment would have if the invoice had existed.
+ * Deposits are held money and are never used for rent.
+ */
+async function applyAdvanceToInvoice<T extends RentInvoice>(tx: Tx, invoice: T): Promise<T> {
+  if (invoice.balance <= 0) return invoice
+
+  // Lock this resident's payments so two invoices generated at once cannot
+  // both spend the same advance.
+  await tx.$queryRaw`
+    SELECT "id" FROM "RentPayment" WHERE "residentId" = ${invoice.residentId} ORDER BY "id" FOR UPDATE
+  `
+  const payments = await tx.rentPayment.findMany({
+    where: { residentId: invoice.residentId, status: 'SUCCESS', purpose: 'RENT' },
+    orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, amount: true, paidAt: true, allocations: { select: { amount: true } } },
+  })
+
+  let amountPaid = invoice.amountPaid
+  let balance = invoice.balance
+  let lastPaidAt: Date | null = null
+  for (const payment of payments) {
+    if (balance <= 0) break
+    const free = payment.amount - payment.allocations.reduce((s, a) => s + a.amount, 0)
+    if (free <= 0) continue
+    const applied = Math.min(free, balance)
+    await tx.paymentAllocation.create({
+      data: { paymentId: payment.id, invoiceId: invoice.id, amount: applied },
+    })
+    amountPaid += applied
+    balance -= applied
+    lastPaidAt = payment.paidAt
+  }
+  if (amountPaid === invoice.amountPaid) return invoice
+
+  const cleared = balance <= 0
+  const updated = await tx.rentInvoice.update({
+    where: { id: invoice.id },
+    data: {
+      amountPaid,
+      balance: Math.max(0, balance),
+      status: cleared ? 'PAID' : 'PARTIALLY_PAID',
+      paidAt: cleared ? lastPaidAt : null,
+    },
+  })
+  return { ...invoice, ...updated }
 }
 
 /**
@@ -333,6 +511,9 @@ export async function generateMonthlyInvoices(params: {
 
   let created = 0
   let skipped = 0
+  // One resident's failure must not stop the run, but it must not vanish
+  // either — a silently missing invoice is lost rent.
+  const failures: { residentId: string; error: string }[] = []
   for (const resident of residents) {
     try {
       const result = await generateInvoice({
@@ -342,11 +523,18 @@ export async function generateMonthlyInvoices(params: {
       })
       if (result.created) created++
       else skipped++
-    } catch {
-      skipped++
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      failures.push({ residentId: resident.id, error: message })
+      console.error('[billing] invoice generation failed', {
+        organizationId: params.organizationId,
+        residentId: resident.id,
+        month: formatMonth(month),
+        error,
+      })
     }
   }
-  return { created, skipped, total: residents.length, month }
+  return { created, skipped, failed: failures.length, failures, total: residents.length, month }
 }
 
 // --------------------------------------------------------------------------
@@ -382,12 +570,48 @@ export async function recordPayment(input: RecordPaymentInput) {
     throw new ValidationError('Payment amount must be greater than zero')
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  // A receipt-number clash retries with the next number. A clash on the
+  // gateway payment id is NOT retried: that is a duplicate delivery.
+  const result = await retryOnUniqueConflict(() => recordPaymentOnce(input), ['receiptNumber'])
+
+  // Outbound messaging happens after commit: a WhatsApp failure must never
+  // roll back a recorded payment.
+  await sendWhatsApp({
+    organizationId: result.resident.organizationId,
+    toName: result.resident.fullName,
+    toPhone: result.resident.whatsappPhone || result.resident.phone,
+    template: 'payment_receipt',
+    body:
+      `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
+      `We have received your payment of ${formatMoney(result.payment.amount)}.\n` +
+      `Receipt: ${result.payment.receiptNumber}\n` +
+      `PG: ${result.resident.property.name}\n\n` +
+      `Thank you.`,
+    variables: [
+      result.resident.fullName,
+      formatMoney(result.payment.amount),
+      result.payment.receiptNumber,
+    ],
+    refType: 'RentPayment',
+    refId: result.payment.id,
+  }).catch(() => undefined)
+
+  return result
+}
+
+async function recordPaymentOnce(input: RecordPaymentInput) {
+  return prisma.$transaction(async (tx) => {
     const resident = await tx.resident.findUnique({
       where: { id: input.residentId },
       include: { organization: { include: { settings: true } }, property: true },
     })
     if (!resident) throw new NotFoundError('Resident not found')
+
+    // Lock the resident's invoices so concurrent payments (or a late fee
+    // being added) cannot both read the same balance and overwrite each other.
+    await tx.$queryRaw`
+      SELECT "id" FROM "RentInvoice" WHERE "residentId" = ${resident.id} ORDER BY "id" FOR UPDATE
+    `
 
     const paidAt = input.paidAt ?? new Date()
     const receiptNumber = await nextReceiptNumber(
@@ -405,6 +629,9 @@ export async function recordPayment(input: RecordPaymentInput) {
         receiptNumber,
         amount: input.amount,
         method: input.method,
+        // Only rent payments are recorded here, so only they are allocated to
+        // invoices. Deposits are recorded at check-in with purpose DEPOSIT.
+        purpose: 'RENT',
         status: 'SUCCESS',
         paidAt,
         reference: input.reference,
@@ -525,46 +752,29 @@ export async function recordPayment(input: RecordPaymentInput) {
 
     return { payment, resident, allocations: touched, advance: Math.max(0, remaining) }
   })
-
-  // Outbound messaging happens after commit: a WhatsApp failure must never
-  // roll back a recorded payment.
-  await sendWhatsApp({
-    organizationId: result.resident.organizationId,
-    toName: result.resident.fullName,
-    toPhone: result.resident.whatsappPhone || result.resident.phone,
-    template: 'payment_receipt',
-    body:
-      `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
-      `We have received your payment of ${formatMoney(result.payment.amount)}.\n` +
-      `Receipt: ${result.payment.receiptNumber}\n` +
-      `PG: ${result.resident.property.name}\n\n` +
-      `Thank you.`,
-    variables: [
-      result.resident.fullName,
-      formatMoney(result.payment.amount),
-      result.payment.receiptNumber,
-    ],
-    refType: 'RentPayment',
-    refId: result.payment.id,
-  }).catch(() => undefined)
-
-  return result
 }
 
 // --------------------------------------------------------------------------
 // Overdue + late fees
 // --------------------------------------------------------------------------
 
-/** Flags invoices past their due date and applies the configured late fee. */
+/**
+ * Flags unpaid invoices past their due date as OVERDUE and keeps each one's
+ * late fee at the configured amount for today:
+ *   flat + perDay × (days overdue − grace days), once past the grace period.
+ * Only the difference to what is already charged is added, so running this
+ * any number of times on the same day charges the same total.
+ */
 export async function applyOverdueAndLateFees(organizationId?: string) {
   const today = startOfDay(new Date())
   const invoices = await prisma.rentInvoice.findMany({
     where: {
-      status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] },
+      balance: { gt: 0 },
       dueDate: { lt: today },
       ...(organizationId ? { organizationId } : {}),
     },
-    include: { organization: { include: { settings: true } }, resident: true },
+    include: { organization: { include: { settings: true } } },
   })
 
   let flagged = 0
@@ -577,24 +787,45 @@ export async function applyOverdueAndLateFees(organizationId?: string) {
       (today.getTime() - startOfDay(invoice.dueDate).getTime()) / 86400000,
     )
 
-    await prisma.$transaction(async (tx) => {
-      await tx.rentInvoice.update({ where: { id: invoice.id }, data: { status: 'OVERDUE' } })
-      flagged++
+    const outcome = await prisma.$transaction(async (tx) => {
+      // Serialise with recordPayment (which locks the same rows) so the
+      // re-read below sees any payment that landed after the scan.
+      await tx.$queryRaw`SELECT "id" FROM "RentInvoice" WHERE "id" = ${invoice.id} FOR UPDATE`
 
-      const feeDue =
-        (settings?.lateFeeEnabled ?? true) && overdueDays > graceDays && invoice.lateFee === 0
-      if (!feeDue) return
+      // Conditional flip: an invoice paid since the scan stays PAID.
+      const flip = await tx.rentInvoice.updateMany({
+        where: {
+          id: invoice.id,
+          status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+          balance: { gt: 0 },
+        },
+        data: { status: 'OVERDUE' },
+      })
+      const flipped = flip.count === 1
 
-      const flat = settings?.lateFeeAmount ?? 0
-      const perDay = (settings?.lateFeePerDay ?? 0) * (overdueDays - graceDays)
-      const fee = flat + perDay
-      if (fee <= 0) return
+      if (!(settings?.lateFeeEnabled ?? true) || overdueDays <= graceDays) {
+        return { flipped, fee: 0 }
+      }
+
+      const current = await tx.rentInvoice.findUnique({ where: { id: invoice.id } })
+      if (!current || current.status !== 'OVERDUE' || current.balance <= 0) {
+        return { flipped, fee: 0 }
+      }
+
+      const daysPastGrace = overdueDays - graceDays
+      const target =
+        (settings?.lateFeeAmount ?? 0) + (settings?.lateFeePerDay ?? 0) * daysPastGrace
+      const fee = target - current.lateFee
+      if (fee <= 0) return { flipped, fee: 0 }
 
       await tx.invoiceLine.create({
         data: {
           invoiceId: invoice.id,
           kind: 'LATE_FEE',
-          label: `Late fee (${overdueDays - graceDays} days past grace)`,
+          label:
+            current.lateFee === 0
+              ? `Late fee (${daysPastGrace} days past grace)`
+              : `Late fee increase (${daysPastGrace} days past grace)`,
           quantity: 1,
           unitPrice: fee,
           amount: fee,
@@ -603,9 +834,9 @@ export async function applyOverdueAndLateFees(organizationId?: string) {
       await tx.rentInvoice.update({
         where: { id: invoice.id },
         data: {
-          lateFee: fee,
-          total: invoice.total + fee,
-          balance: invoice.balance + fee,
+          lateFee: target,
+          total: current.total + fee,
+          balance: current.balance + fee,
         },
       })
       await appendLedger(tx, {
@@ -625,12 +856,15 @@ export async function applyOverdueAndLateFees(organizationId?: string) {
           event: 'RENT_OVERDUE',
           entityType: 'RentInvoice',
           entityId: invoice.id,
-          summary: `${invoice.number} overdue by ${overdueDays} days — late fee ${formatMoney(fee)}`,
+          summary: `${invoice.number} overdue by ${overdueDays} days — late fee ${formatMoney(fee)} (total ${formatMoney(target)})`,
         },
         tx,
       )
-      feesApplied++
+      return { flipped, fee }
     })
+
+    if (outcome.flipped) flagged++
+    if (outcome.fee > 0) feesApplied++
   }
 
   return { flagged, feesApplied }
@@ -725,6 +959,17 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
     if (invoice.lastReminderAt && startOfDay(invoice.lastReminderAt).getTime() === today.getTime())
       continue
 
+    // Claim today's reminder BEFORE sending: of two overlapping runs only the
+    // one whose conditional update lands sends the message.
+    const claim = await prisma.rentInvoice.updateMany({
+      where: {
+        id: invoice.id,
+        OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: today } }],
+      },
+      data: { reminderCount: { increment: 1 }, lastReminderAt: now },
+    })
+    if (claim.count !== 1) continue
+
     const roomLabel = invoice.resident.room
       ? `${invoice.resident.room.number}${invoice.resident.bed ? ` · Bed ${invoice.resident.bed.label}` : ''}`
       : 'Not allocated'
@@ -750,32 +995,37 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
       upiLink,
     })
 
-    await sendWhatsApp({
-      organizationId: invoice.organizationId,
-      toName: invoice.resident.fullName,
-      toPhone: invoice.resident.whatsappPhone || invoice.resident.phone,
-      template:
-        stage === 'upcoming'
-          ? 'rent_reminder_upcoming'
-          : stage === 'due_today'
-            ? 'rent_reminder_due_today'
-            : 'rent_reminder_overdue',
-      body,
-      variables: [
-        invoice.resident.fullName,
-        formatMoney(invoice.balance),
-        invoice.dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }),
-        invoice.property.name,
-        roomLabel,
-      ],
-      refType: 'RentInvoice',
-      refId: invoice.id,
-    })
-
-    await prisma.rentInvoice.update({
-      where: { id: invoice.id },
-      data: { reminderCount: { increment: 1 }, lastReminderAt: now },
-    })
+    try {
+      await sendWhatsApp({
+        organizationId: invoice.organizationId,
+        toName: invoice.resident.fullName,
+        toPhone: invoice.resident.whatsappPhone || invoice.resident.phone,
+        template:
+          stage === 'upcoming'
+            ? 'rent_reminder_upcoming'
+            : stage === 'due_today'
+              ? 'rent_reminder_due_today'
+              : 'rent_reminder_overdue',
+        body,
+        variables: [
+          invoice.resident.fullName,
+          formatMoney(invoice.balance),
+          invoice.dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }),
+          invoice.property.name,
+          roomLabel,
+        ],
+        refType: 'RentInvoice',
+        refId: invoice.id,
+      })
+    } catch (error) {
+      // Release our claim so a later run today can try again.
+      await prisma.rentInvoice.updateMany({
+        where: { id: invoice.id, lastReminderAt: now },
+        data: { reminderCount: { decrement: 1 }, lastReminderAt: invoice.lastReminderAt },
+      })
+      console.error('[billing] rent reminder failed', { invoiceId: invoice.id, error })
+      continue
+    }
 
     await notifyResident(invoice.residentId, {
       organizationId: invoice.organizationId,

@@ -1,7 +1,22 @@
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
+import {
+  assertFloorInProperty,
+  assertInScope,
+  assertPropertyAccess,
+  assertResidentInProperty,
+  assertRoomInProperty,
+  ForbiddenError,
+  generatePassword,
+  NotFoundError,
+  requirePermission,
+  resolveScope,
+  restrictedPropertyIds,
+  ValidationError,
+  withMaskedId,
+} from '@/lib/tenancy'
 import {
   announcementSchema,
   assetSchema,
@@ -47,25 +62,24 @@ export const POST = route(async ({ user, request }) => {
 
   // Workers only reach the kitchen, stock and their own attendance. Everything
   // else on this endpoint belongs to an owner or manager.
+  // assertPropertyAccess limits a worker to the PG they are assigned to.
   if (user.role === 'WORKER') {
     if (!WORKER_ENTITIES.has(body.entity)) throw new ForbiddenError()
-    if ('propertyId' in body && body.propertyId) {
-      const staff = await prisma.staff.findUnique({
-        where: { id: user.staffId ?? '' },
-        select: { propertyId: true },
-      })
-      if (staff?.propertyId && staff.propertyId !== body.propertyId) {
-        throw new ForbiddenError('That PG is not the one you are assigned to')
-      }
-    }
-  } else if (user.role === 'TENANT') {
+    if ('propertyId' in body && body.propertyId) await assertPropertyAccess(user, body.propertyId)
+  } else if (user.role !== 'OWNER' && user.role !== 'MANAGER') {
     throw new ForbiddenError()
   }
 
   switch (body.entity) {
     // ------------------------------------------------------------ money --
     case 'EXPENSE': {
+      requirePermission(user, 'expense:write')
       await assertPropertyAccess(user, body.propertyId)
+      const category = await prisma.expenseCategory.findFirst({
+        where: { id: body.categoryId, organizationId },
+        select: { id: true },
+      })
+      if (!category) throw new ValidationError('Choose a valid expense category')
       const expense = await prisma.expense.create({
         data: {
           organizationId,
@@ -101,18 +115,29 @@ export const POST = route(async ({ user, request }) => {
 
     // ------------------------------------------------------------ staff --
     case 'STAFF': {
+      requirePermission(user, 'staff:write')
       if (body.propertyId) await assertPropertyAccess(user, body.propertyId)
+      else if (restrictedPropertyIds(user)) {
+        throw new ForbiddenError('Choose one of your PGs for this staff member')
+      }
+      const wantsLogin = Boolean(body.createLogin && body.email)
+      // A login is a credential into the org: owner only.
+      if (wantsLogin) requirePermission(user, 'staff:login')
       const count = await prisma.staff.count({ where: { organizationId } })
 
       let userId: string | undefined
-      if (body.createLogin && body.email) {
+      // Returned exactly once, in this response, so the owner can hand it over.
+      let password: string | undefined
+      if (wantsLogin && body.email) {
+        password = generatePassword()
         const created = await prisma.user.create({
           data: {
             organizationId,
             email: body.email.toLowerCase(),
             name: body.name,
             phone: body.phone,
-            passwordHash: await hashPassword(`Stay@${body.phone.slice(-4)}`),
+            passwordHash: await hashPassword(password),
+            mustChangePassword: true,
             role: 'WORKER',
             status: 'ACTIVE',
           },
@@ -149,8 +174,8 @@ export const POST = route(async ({ user, request }) => {
       })
       return ok(
         {
-          staff,
-          login: userId ? { email: body.email, password: `Stay@${body.phone.slice(-4)}` } : null,
+          staff: withMaskedId(staff, user.role),
+          login: userId && password ? { email: body.email, password } : null,
           message: `${staff.name} added`,
         },
         { status: 201 },
@@ -169,7 +194,15 @@ export const POST = route(async ({ user, request }) => {
         where: { id: staffId, organizationId },
       })
       if (!staff) throw new NotFoundError('Staff member not found')
+      if (user.role !== 'WORKER') {
+        assertInScope(user, staff.propertyId, 'That staff member is not at one of your PGs')
+      }
       const date = startOfDay(new Date(body.date))
+      if (Number.isNaN(date.getTime())) throw new ValidationError('Choose a valid date')
+      // Workers check in for today only; back- or future-dating is a manager's job.
+      if (user.role === 'WORKER' && date.getTime() !== startOfDay(new Date()).getTime()) {
+        throw new ForbiddenError('You can only mark attendance for today')
+      }
       const attendance = await prisma.staffAttendance.upsert({
         where: { staffId_date: { staffId: staff.id, date } },
         create: {
@@ -187,6 +220,9 @@ export const POST = route(async ({ user, request }) => {
     // --------------------------------------------------------- visitors --
     case 'VISITOR': {
       await assertPropertyAccess(user, body.propertyId)
+      if (body.residentId) {
+        await assertResidentInProperty(body.residentId, organizationId, body.propertyId)
+      }
       const visitor = await prisma.visitor.create({
         data: {
           organizationId,
@@ -229,6 +265,7 @@ export const POST = route(async ({ user, request }) => {
         where: { id: body.visitorId, organizationId },
       })
       if (!visitor) throw new NotFoundError('Visitor not found')
+      assertInScope(user, visitor.propertyId)
       await prisma.visitor.update({
         where: { id: visitor.id },
         data: { exitAt: new Date() },
@@ -239,6 +276,7 @@ export const POST = route(async ({ user, request }) => {
     // ----------------------------------------------------------- assets --
     case 'ASSET': {
       await assertPropertyAccess(user, body.propertyId)
+      if (body.roomId) await assertRoomInProperty(body.roomId, body.propertyId)
       const asset = await prisma.asset.create({
         data: {
           organizationId,
@@ -260,13 +298,72 @@ export const POST = route(async ({ user, request }) => {
 
     // ---------------------------------------------------- announcements --
     case 'ANNOUNCEMENT': {
-      if (body.propertyId) await assertPropertyAccess(user, body.propertyId)
+      // Resolve the audience into a resident filter up front. An audience
+      // whose selector is missing is an error, never a fall-through to every
+      // resident in the org.
+      let audienceWhere: Prisma.ResidentWhereInput | null = null
+      let announcementPropertyId: string | null = body.propertyId || null
+      switch (body.audience) {
+        case 'ALL_PROPERTIES': {
+          if (restrictedPropertyIds(user)) {
+            throw new ForbiddenError('You can only announce to the PGs you manage')
+          }
+          announcementPropertyId = null
+          audienceWhere = {}
+          break
+        }
+        case 'PROPERTY': {
+          if (!body.propertyId) throw new ValidationError('Choose a PG for this announcement')
+          await assertPropertyAccess(user, body.propertyId)
+          audienceWhere = { propertyId: body.propertyId }
+          break
+        }
+        case 'FLOOR': {
+          if (!body.floorId) throw new ValidationError('Choose a floor for this announcement')
+          const floor = await prisma.floor.findFirst({
+            where: { id: body.floorId, property: { organizationId } },
+            select: { propertyId: true },
+          })
+          if (!floor) throw new ValidationError('That floor is not in your organization')
+          await assertPropertyAccess(user, floor.propertyId)
+          if (body.propertyId) await assertFloorInProperty(body.floorId, body.propertyId)
+          announcementPropertyId = floor.propertyId
+          audienceWhere = { propertyId: floor.propertyId, room: { floorId: body.floorId } }
+          break
+        }
+        case 'SELECTED_RESIDENTS': {
+          const ids = [...new Set(body.residentIds ?? [])]
+          if (!ids.length) throw new ValidationError('Choose at least one resident')
+          if (body.propertyId) await assertPropertyAccess(user, body.propertyId)
+          const scope = await resolveScope(user, body.propertyId)
+          const inScopeWhere = {
+            id: { in: ids },
+            organizationId,
+            propertyId: scope.propertyId ?? { in: scope.allowedPropertyIds },
+          }
+          const visible = await prisma.resident.count({ where: inScopeWhere })
+          if (visible !== ids.length) {
+            throw new ValidationError('Some of the chosen residents are not in your PGs')
+          }
+          audienceWhere = inScopeWhere
+          break
+        }
+        case 'STAFF': {
+          // A staff notice reaches no residents.
+          if (body.propertyId) await assertPropertyAccess(user, body.propertyId)
+          else if (restrictedPropertyIds(user)) {
+            throw new ForbiddenError('Choose one of your PGs for this announcement')
+          }
+          audienceWhere = null
+          break
+        }
+      }
 
       const announcement = await prisma.announcement.create({
         data: {
           organizationId,
-          propertyId: body.audience === 'ALL_PROPERTIES' ? null : body.propertyId || null,
-          floorId: body.floorId || null,
+          propertyId: announcementPropertyId,
+          floorId: body.audience === 'FLOOR' ? body.floorId || null : null,
           title: body.title,
           body: body.body,
           audience: body.audience,
@@ -277,21 +374,16 @@ export const POST = route(async ({ user, request }) => {
         },
       })
 
-      // Resolve the audience into actual residents, then notify each one.
-      const residents = await prisma.resident.findMany({
-        where: {
-          organizationId,
-          status: { in: ['ACTIVE', 'NOTICE'] },
-          ...(body.audience === 'PROPERTY' && body.propertyId
-            ? { propertyId: body.propertyId }
-            : {}),
-          ...(body.audience === 'FLOOR' && body.floorId ? { room: { floorId: body.floorId } } : {}),
-          ...(body.audience === 'SELECTED_RESIDENTS' && body.residentIds?.length
-            ? { id: { in: body.residentIds } }
-            : {}),
-        },
-        select: { id: true, fullName: true, phone: true, whatsappPhone: true, userId: true },
-      })
+      const residents = audienceWhere
+        ? await prisma.resident.findMany({
+            where: {
+              ...audienceWhere,
+              organizationId,
+              status: { in: ['ACTIVE', 'NOTICE'] },
+            },
+            select: { id: true, fullName: true, phone: true, whatsappPhone: true, userId: true },
+          })
+        : []
 
       if (residents.length) {
         await prisma.announcementTarget.createMany({
@@ -330,7 +422,7 @@ export const POST = route(async ({ user, request }) => {
 
       await recordActivity({
         organizationId,
-        propertyId: body.propertyId || null,
+        propertyId: announcementPropertyId,
         actorId: user.id,
         actorName: user.name,
         actorRole: user.role,
@@ -373,6 +465,8 @@ export const POST = route(async ({ user, request }) => {
         where: { id: body.mealId, organizationId },
       })
       if (!meal) throw new NotFoundError('Meal not found')
+      // Workers: the PG they are assigned to. Managers: their PGs.
+      await assertPropertyAccess(user, meal.propertyId)
       const updated = await markMealServed({
         mealId: meal.id,
         actualCount: body.actualCount,

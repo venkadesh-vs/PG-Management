@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { ConflictError } from '@/lib/tenancy'
+import { ConflictError, requirePermission, resolveScope } from '@/lib/tenancy'
 import { propertySchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 import { createSubscriptionForProperty } from '@/server/services/subscriptions'
@@ -13,6 +13,8 @@ import { formatMoney } from '@/lib/utils'
  */
 export const POST = route(
   async ({ user, request }) => {
+    // Every PG carries its own billed subscription, so only the OWNER adds one.
+    requirePermission(user, 'property:create')
     const body = await parseBody(request, propertySchema)
     const organizationId = user.organizationId!
 
@@ -102,19 +104,23 @@ export const POST = route(
   { roles: ['OWNER', 'MANAGER'] },
 )
 
-export const GET = route(async ({ user }) => {
-  const properties = await prisma.property.findMany({
-    where: {
-      organizationId: user.organizationId!,
-      archivedAt: null,
-      ...(user.propertyIds.length ? { id: { in: user.propertyIds } } : {}),
-    },
-    include: {
-      floors: { orderBy: { level: 'asc' } },
-      foodPlans: { where: { active: true } },
-      _count: { select: { beds: true, residents: true, rooms: true } },
-    },
-    orderBy: { name: 'asc' },
-  })
-  return { properties }
-})
+export const GET = route(
+  async ({ user }) => {
+    const scope = await resolveScope(user)
+    const properties = await prisma.property.findMany({
+      where: {
+        organizationId: scope.organizationId,
+        archivedAt: null,
+        id: { in: scope.allowedPropertyIds },
+      },
+      include: {
+        floors: { orderBy: { level: 'asc' } },
+        foodPlans: { where: { active: true } },
+        _count: { select: { beds: true, residents: true, rooms: true } },
+      },
+      orderBy: { name: 'asc' },
+    })
+    return { properties }
+  },
+  { roles: ['OWNER', 'MANAGER'] },
+)

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { requireOrgUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/app/page-header'
@@ -8,6 +9,8 @@ export const metadata: Metadata = { title: 'Add a PG' }
 
 export default async function NewPropertyPage() {
   const user = await requireOrgUser()
+  // Each PG starts a billed subscription, so only the owner can add one.
+  if (user.role !== 'OWNER') redirect('/app/properties')
 
   // Show the pricing rule so the owner sees the subscription before creating.
   const plan = await prisma.plan.findFirst({

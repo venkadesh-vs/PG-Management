@@ -7,6 +7,8 @@ import {
   runSubscriptionBilling,
 } from '@/server/services/subscriptions'
 import { formatMoney } from '@/lib/utils'
+import { ConflictError } from '@/lib/tenancy'
+import { RazorpayError } from '@/server/integrations/razorpay'
 
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('RUN') }),
@@ -55,10 +57,16 @@ export const POST = route(
       })
     }
 
-    const result = await repriceSubscription(body.subscriptionId)
+    const result = await repriceSubscription(body.subscriptionId).catch((error: unknown) => {
+      // Cancelling the old Razorpay mandate failed: say why instead of a 500.
+      if (error instanceof RazorpayError) throw new ConflictError(error.message)
+      throw error
+    })
     return ok({
       message: result.changed
-        ? `Re-priced to ${formatMoney(result.price.amount)} — ${result.price.explanation}`
+        ? `Re-priced to ${formatMoney(result.price.amount)} — ${result.price.explanation}${
+            result.autopayStopped ? '. Razorpay AutoPay was cancelled; the owner must re-authorise.' : ''
+          }`
         : 'Already at the correct price for its plan',
     })
   },

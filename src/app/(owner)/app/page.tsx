@@ -46,6 +46,7 @@ import {
 import { ActivityTimeline } from '@/components/app/activity-timeline'
 import { OccupancyRing } from '@/components/app/occupancy-ring'
 import { ICONS, type IconName } from '@/lib/icons'
+import { Onboarding } from './onboarding'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
@@ -120,6 +121,7 @@ export default async function OwnerDashboard({
           title={`Welcome, ${user.name.split(' ')[0]}`}
           subtitle="Add your first PG and StayFlow starts connecting everything for you."
         />
+        <Onboarding user={user} />
         <EmptyState
           icon="building"
           title="No PG added yet"
@@ -142,6 +144,8 @@ export default async function OwnerDashboard({
 
   return (
     <div className="space-y-7">
+      <Onboarding user={user} />
+
       {/* --------------------------------------------------- Hero header */}
       <div
         className={cn(

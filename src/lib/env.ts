@@ -63,6 +63,41 @@ export const serverEnv = {
       )
     },
   },
+  /** Absolute base URL for links in emails and WhatsApp messages. */
+  get appUrl() {
+    return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3100').replace(/\/$/, '')
+  },
+  /**
+   * 32-byte key (base64) that encrypts clients' own gateway / WhatsApp secrets
+   * at rest. Required as soon as any client connects an integration.
+   */
+  get dataEncryptionKey() {
+    return process.env.DATA_ENCRYPTION_KEY ?? ''
+  },
+  whatsappWebhook: {
+    /** Token Meta echoes back when the webhook URL is registered. */
+    get verifyToken() {
+      return process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ?? ''
+    },
+    /** Meta App secret, used to verify X-Hub-Signature-256 on webhook calls. */
+    get appSecret() {
+      return process.env.WHATSAPP_APP_SECRET ?? ''
+    },
+  },
+  email: {
+    get provider() {
+      return (process.env.EMAIL_PROVIDER ?? 'demo').toLowerCase()
+    },
+    get apiKey() {
+      return process.env.RESEND_API_KEY ?? ''
+    },
+    get from() {
+      return process.env.EMAIL_FROM ?? 'StayFlow <no-reply@stayflow.app>'
+    },
+    get isLive() {
+      return (process.env.EMAIL_PROVIDER ?? 'demo').toLowerCase() === 'resend' && Boolean(process.env.RESEND_API_KEY)
+    },
+  },
   payment: {
     get provider() {
       return (process.env.PAYMENT_PROVIDER ?? 'demo').toLowerCase()

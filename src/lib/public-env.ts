@@ -13,6 +13,13 @@ export const publicEnv = {
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'hello@stayflow.app',
   contactPhone: process.env.NEXT_PUBLIC_CONTACT_PHONE || '',
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+  // Business identity for legal pages and invoices (Razorpay and the DPDP Act
+  // require a real legal entity, address and grievance contact).
+  legalName: process.env.NEXT_PUBLIC_LEGAL_NAME || '',
+  businessAddress: process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '',
+  jurisdictionCity: process.env.NEXT_PUBLIC_JURISDICTION_CITY || '',
+  grievanceOfficer: process.env.NEXT_PUBLIC_GRIEVANCE_OFFICER || '',
+  grievanceEmail: process.env.NEXT_PUBLIC_GRIEVANCE_EMAIL || '',
   analyticsProvider: process.env.NEXT_PUBLIC_ANALYTICS_PROVIDER || '',
   analyticsDomain: process.env.NEXT_PUBLIC_ANALYTICS_DOMAIN || '',
   analyticsScript: process.env.NEXT_PUBLIC_ANALYTICS_SCRIPT || '',

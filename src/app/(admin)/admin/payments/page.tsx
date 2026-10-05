@@ -168,7 +168,17 @@ export default async function AdminPaymentsPage({
                       const failed = invoice.payments.some((p) => p.status === 'FAILED')
                       return (
                         <TableRow key={invoice.id}>
-                          <TableCell className="font-mono text-sm">{invoice.number}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            <a
+                              href={`/api/documents/subscription-invoice/${invoice.id}.pdf`}
+                              target="_blank"
+                              rel="noopener"
+                              className="hover:text-blue-700 hover:underline"
+                              title="Download tax invoice (PDF)"
+                            >
+                              {invoice.number}
+                            </a>
+                          </TableCell>
                           <TableCell>
                             <Link
                               href={`/admin/organizations/${invoice.subscription.organization.id}`}
@@ -243,7 +253,7 @@ export default async function AdminPaymentsPage({
                       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                         <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
                         <span className="truncate">
-                          {invoice.subscription.property.name} · <span className="font-mono">{invoice.number}</span>
+                          {invoice.subscription.property.name} · <a href={`/api/documents/subscription-invoice/${invoice.id}.pdf`} target="_blank" rel="noopener" className="font-mono underline-offset-2 hover:underline">{invoice.number}</a>
                         </span>
                       </p>
                       {failed && (

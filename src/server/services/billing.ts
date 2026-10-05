@@ -599,6 +599,42 @@ export async function recordPayment(input: RecordPaymentInput) {
   return result
 }
 
+/**
+ * recordPayment for a gateway-confirmed payment, idempotent on the gateway
+ * payment id: the checkout callback and the webhook can both deliver the same
+ * payment (even concurrently) and exactly one RentPayment results. The second
+ * caller gets the existing receipt back with `duplicate: true`.
+ */
+export async function recordGatewayPayment(
+  input: RecordPaymentInput & { gateway: NonNullable<RecordPaymentInput['gateway']> & { paymentId: string } },
+): Promise<{ duplicate: boolean; payment: { id: string; receiptNumber: string; amount: number } }> {
+  const select = { id: true, receiptNumber: true, amount: true } as const
+  const existing = await prisma.rentPayment.findUnique({
+    where: { gatewayPaymentId: input.gateway.paymentId },
+    select,
+  })
+  if (existing) return { duplicate: true, payment: existing }
+  try {
+    const result = await recordPayment(input)
+    return {
+      duplicate: false,
+      payment: {
+        id: result.payment.id,
+        receiptNumber: result.payment.receiptNumber,
+        amount: result.payment.amount,
+      },
+    }
+  } catch (error) {
+    if (!isUniqueViolation(error, ['gatewayPaymentId'])) throw error
+    const winner = await prisma.rentPayment.findUnique({
+      where: { gatewayPaymentId: input.gateway.paymentId },
+      select,
+    })
+    if (!winner) throw error
+    return { duplicate: true, payment: winner }
+  }
+}
+
 async function recordPaymentOnce(input: RecordPaymentInput) {
   return prisma.$transaction(async (tx) => {
     const resident = await tx.resident.findUnique({

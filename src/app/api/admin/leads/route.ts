@@ -1,14 +1,79 @@
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { ok, parseBody, route } from '@/lib/api-helpers'
-import { NotFoundError } from '@/lib/tenancy'
-import { leadUpdateSchema } from '@/lib/validation'
+import { ok, route } from '@/lib/api-helpers'
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { createClientSchema, leadUpdateSchema } from '@/lib/validation'
+import { bootstrapOrganization, sendAccessLink } from '@/server/services/accounts'
 import { recordActivity } from '@/server/events'
 import { LEAD_STATUS_STYLE } from '@/lib/theme'
 
-/** Move a lead through the pipeline and record what was said. */
+const convertSchema = createClientSchema.extend({
+  action: z.literal('CONVERT'),
+  leadId: z.string().min(1),
+})
+
+/**
+ * Move a lead through the pipeline and record what was said, or (action
+ * CONVERT) turn it into a client account.
+ */
 export const POST = route(
   async ({ user, request }) => {
-    const body = await parseBody(request, leadUpdateSchema)
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      throw new ValidationError('Request body must be valid JSON')
+    }
+
+    if ((raw as { action?: string } | null)?.action === 'CONVERT') {
+      const input = convertSchema.parse(raw)
+      const lead = await prisma.lead.findUnique({ where: { id: input.leadId } })
+      if (!lead) throw new NotFoundError('Lead not found')
+      if (lead.convertedOrgId) throw new ConflictError('This lead was already converted')
+
+      const { organization, owner } = await bootstrapOrganization({
+        orgName: input.orgName,
+        ownerName: input.ownerName,
+        email: input.email,
+        phone: input.phone,
+        city: input.city || null,
+        source: 'LEAD',
+        actor: { id: user.id, name: user.name, role: user.role },
+      })
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: 'CONVERTED', convertedOrgId: organization.id, lastContactedAt: new Date() },
+      })
+      await prisma.leadNote.create({
+        data: {
+          leadId: lead.id,
+          authorId: user.id,
+          authorName: user.name,
+          body: `Converted to client account ${organization.name}`,
+          statusTo: 'CONVERTED',
+        },
+      })
+      await recordActivity({
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: user.role,
+        event: 'LEAD_UPDATED',
+        entityType: 'Lead',
+        entityId: lead.id,
+        summary: `${lead.name} converted to client ${organization.name}`,
+      })
+      const access = await sendAccessLink(owner.id)
+      return ok(
+        {
+          organization: { id: organization.id, name: organization.name },
+          ...access,
+          message: `${organization.name} created from this lead`,
+        },
+        { status: 201 },
+      )
+    }
+
+    const body = leadUpdateSchema.parse(raw)
 
     const lead = await prisma.lead.findUnique({ where: { id: body.leadId } })
     if (!lead) throw new NotFoundError('Lead not found')

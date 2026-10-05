@@ -69,8 +69,8 @@ export function SiteHeader() {
               Sign in
             </Link>
             <Button variant="primary" size="sm" asChild className="hidden sm:inline-flex">
-              <a href="#demo">
-                Book a free demo
+              <a href="/signup">
+                Start free trial
                 <ArrowRight className="size-3.5" />
               </a>
             </Button>
@@ -112,8 +112,8 @@ export function SiteHeader() {
                 </Link>
                 <div className="flex gap-2 pt-2">
                   <Button variant="primary" className="flex-1" asChild>
-                    <a href="#demo" onClick={() => setOpen(false)}>
-                      Book a free demo
+                    <a href="/signup" onClick={() => setOpen(false)}>
+                      Start free trial
                     </a>
                   </Button>
                   {wa && (
@@ -134,7 +134,7 @@ export function SiteHeader() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 pb-safe backdrop-blur-lg sm:hidden">
         <div className="flex gap-2">
           <Button variant="primary" className="flex-1" asChild>
-            <a href="#demo">Book a free demo</a>
+            <a href="/signup">Start free trial</a>
           </Button>
           {wa && (
             <Button variant="outline" asChild>
@@ -227,13 +227,18 @@ export function SiteFooter() {
           <p className="text-xs text-slate-500">
             © {year} {publicEnv.appName}. Built around real PG workflows.
           </p>
-          <div className="flex gap-4 text-xs text-slate-500">
-            <Link href="/privacy" className="hover:text-slate-800">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-slate-800">
-              Terms
-            </Link>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500">
+            {[
+              ['/terms', 'Terms'],
+              ['/privacy', 'Privacy'],
+              ['/refund-policy', 'Refunds & cancellation'],
+              ['/shipping-policy', 'Delivery'],
+              ['/contact', 'Contact'],
+            ].map(([href, label]) => (
+              <Link key={href} href={href} className="hover:text-slate-800">
+                {label}
+              </Link>
+            ))}
           </div>
         </div>
       </div>

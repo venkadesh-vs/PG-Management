@@ -184,8 +184,8 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                 </motion.p>
               </div>
               <Button variant="secondary" asChild className="bg-white text-slate-900 hover:bg-white/90">
-                <a href="#demo">
-                  Book a demo
+                <a href="/signup">
+                  Start free trial
                   <ArrowRight className="size-3.5" />
                 </a>
               </Button>

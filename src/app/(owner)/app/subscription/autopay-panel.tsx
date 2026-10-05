@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Check, Repeat, ShieldCheck, X } from 'lucide-react'
+import { Check, ExternalLink, Hourglass, Repeat, ShieldCheck, X } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
 import { cn, formatMoney } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
@@ -19,10 +19,12 @@ import {
 import { Field, Input, Select } from '@/components/ui/input'
 
 /**
- * AutoPay mandate setup. In demo mode the mandate is local and labelled as
- * such; with a live gateway this is where the mandate authorisation redirect
- * would happen. Either way the recurring debit itself runs server-side in the
- * nightly billing job.
+ * AutoPay mandate setup.
+ * Live: creates a Razorpay Subscription and sends the owner to Razorpay's
+ *       hosted page to authorise UPI AutoPay / card / eMandate. The mandate
+ *       turns ACTIVE when Razorpay's webhook confirms it, and Razorpay charges
+ *       each month (the webhook settles the invoice).
+ * Demo: a local, clearly-labelled mandate; the nightly job simulates debits.
  */
 export function AutopayPanel({
   subscriptionId,
@@ -32,6 +34,7 @@ export function AutopayPanel({
   mandateStatus,
   methodLabel,
   demo,
+  authUrl = null,
 }: {
   subscriptionId: string
   propertyName: string
@@ -40,6 +43,8 @@ export function AutopayPanel({
   mandateStatus: string
   methodLabel: string | null
   demo: boolean
+  /** Razorpay hosted authorisation link while the mandate is PENDING. */
+  authUrl?: string | null
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -48,7 +53,30 @@ export function AutopayPanel({
   const [reference, setReference] = React.useState('')
   const [busy, setBusy] = React.useState(false)
 
+  async function setupLive() {
+    setBusy(true)
+    try {
+      const result = await api.post<{ redirectUrl: string | null; message?: string }>(
+        '/api/subscription',
+        { action: 'SETUP_AUTOPAY', subscriptionId },
+      )
+      if (result.redirectUrl) {
+        window.location.href = result.redirectUrl
+        return
+      }
+      router.refresh()
+    } catch (error) {
+      toast.error(
+        'Unable to set up AutoPay',
+        error instanceof ApiError ? error.message : 'Please try again.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function setup() {
+    if (!demo) return setupLive()
     setBusy(true)
     try {
       const label =
@@ -86,7 +114,7 @@ export function AutopayPanel({
     setBusy(true)
     try {
       await api.post('/api/subscription', { action: 'CANCEL_AUTOPAY', subscriptionId })
-      toast.info('AutoPay switched off', 'You will need to pay each invoice manually.')
+      toast.info('AutoPay switched off', 'You will need to pay each invoice with Pay now.')
       router.refresh()
     } catch (error) {
       toast.error(
@@ -99,6 +127,8 @@ export function AutopayPanel({
   }
 
   const active = autopayEnabled && mandateStatus === 'ACTIVE'
+  const pending = !active && mandateStatus === 'PENDING' && Boolean(authUrl)
+  const failed = !active && mandateStatus === 'FAILED'
 
   return (
     <>
@@ -117,16 +147,32 @@ export function AutopayPanel({
                 active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500',
               )}
             >
-              {active ? <ShieldCheck className="size-4" /> : <Repeat className="size-4" />}
+              {active ? (
+                <ShieldCheck className="size-4" />
+              ) : pending ? (
+                <Hourglass className="size-4" />
+              ) : (
+                <Repeat className="size-4" />
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-800">
-                {active ? 'AutoPay is on' : 'AutoPay is not set up'}
+                {active
+                  ? `AutoPay is on${demo ? ' (demo)' : ''}`
+                  : pending
+                    ? 'Waiting for your authorisation'
+                    : failed
+                      ? 'AutoPay stopped'
+                      : 'AutoPay is not set up'}
               </p>
               <p className="text-xs text-slate-500">
                 {active
                   ? (methodLabel ?? 'Recurring mandate active')
-                  : 'Set it up once and the monthly invoice settles itself.'}
+                  : pending
+                    ? 'Approve the mandate on Razorpay to finish. This updates automatically.'
+                    : failed
+                      ? 'Repeated charges failed. Pay any open invoice and set AutoPay up again.'
+                      : 'Set it up once and the monthly invoice settles itself.'}
               </p>
             </div>
           </div>
@@ -135,6 +181,18 @@ export function AutopayPanel({
               <X className="size-3.5" />
               Turn off
             </Button>
+          ) : pending ? (
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <Button variant="primary" size="sm" asChild>
+                <a href={authUrl ?? '#'}>
+                  <ExternalLink className="size-3.5" />
+                  Authorise
+                </a>
+              </Button>
+              <Button variant="ghost" size="sm" loading={busy} onClick={cancel}>
+                Cancel
+              </Button>
+            </div>
           ) : (
             <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
               Set up
@@ -161,6 +219,16 @@ export function AutopayPanel({
             </div>
           )}
 
+          {!demo && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-xs leading-relaxed text-sky-800">
+              You will be taken to Razorpay to approve a monthly mandate of up to{' '}
+              {formatMoney(amount)} by UPI AutoPay, card or bank eMandate. Payments go to StayFlow;
+              you can turn AutoPay off here at any time.
+            </div>
+          )}
+
+          {demo && (
+          <>
           <Field label="Method" required>
             <Select value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="UPI_AUTOPAY">UPI AutoPay</option>
@@ -179,6 +247,8 @@ export function AutopayPanel({
               placeholder={kind === 'UPI_AUTOPAY' ? 'yourpg@okicici' : '••••'}
             />
           </Field>
+          </>
+          )}
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -186,7 +256,7 @@ export function AutopayPanel({
             </Button>
             <Button variant="primary" loading={busy} onClick={setup}>
               <Check className="size-4" />
-              Activate AutoPay
+              {demo ? 'Activate demo AutoPay' : 'Continue to Razorpay'}
             </Button>
           </DialogFooter>
         </DialogContent>

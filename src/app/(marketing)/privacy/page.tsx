@@ -1,104 +1,100 @@
 import type { Metadata } from 'next'
 import { publicEnv } from '@/lib/public-env'
-import { SiteFooter, SiteHeader } from '@/components/marketing/site-chrome'
+import { contactLine, LEGAL_ENTITY, LegalPage, type LegalSection } from '@/components/marketing/legal-page'
 
 export const metadata: Metadata = {
-  title: 'Privacy',
-  description: `How ${publicEnv.appName} handles the information PG owners and their residents put into the product.`,
+  title: 'Privacy Policy',
+  description: `How ${publicEnv.appName} collects, uses and protects personal data.`,
 }
 
-const SECTIONS = [
+const APP = publicEnv.appName
+const GRIEVANCE = publicEnv.grievanceOfficer
+  ? `${publicEnv.grievanceOfficer} (${publicEnv.grievanceEmail || publicEnv.contactEmail})`
+  : publicEnv.grievanceEmail || publicEnv.contactEmail
+
+const SECTIONS: LegalSection[] = [
+  {
+    title: 'Who this covers and our role',
+    body: [
+      `This policy explains how ${LEGAL_ENTITY} handles personal data in ${APP}, in line with India's Digital Personal Data Protection Act, 2023 ("DPDP Act") and the Information Technology Act, 2000.`,
+      'For PG owners and their team members who sign up with us, we decide how your account data is used. For residents, staff and visitors whose details a PG owner enters, the PG owner decides how that data is used and we process it on their behalf, only to run the service.',
+    ],
+  },
   {
     title: 'What we collect',
     body: [
-      'When you enquire through this website we store your name, phone number, email, city and what you tell us about your PG. We use it to contact you about a demo and nothing else.',
-      'When you use the product, the data you enter — residents, rooms, rent, payments, complaints, staff and expenses — is stored so the product can work. It belongs to you.',
+      'Account data: name, email, phone number, business name and city, and a hashed (unreadable) password.',
+      'Data entered by PG owners about residents and staff: name, contact numbers, guardian details, address, occupation, ID type and number, documents uploaded for verification, room and bed, rent, payments, deposits, complaints and visitor entries.',
+      'Payment data: payment amounts, status and gateway reference numbers. Card, UPI and bank details are entered on the payment gateway\'s own page and never reach or are stored by us.',
+      'Technical data: sign-in times, IP address and device type, used for security and to keep the service working.',
     ],
   },
   {
-    title: 'Resident information',
+    title: 'Why we use it',
     body: [
-      'PG owners enter resident details including name, contact number, guardian contact and ID reference. This is used to run the PG: allocating a bed, raising rent, sending reminders and handling complaints.',
-      'ID numbers are shown masked in lists and receipts. Residents can see their own record in the resident app.',
+      'To provide the service: managing rooms, residents, rent, receipts, reminders, complaints, food, staff and reports.',
+      'To send service messages — rent reminders, receipts, complaint updates and login links — by WhatsApp, email or in the app.',
+      'To bill our subscription, keep the service secure, prevent fraud and meet legal obligations such as tax records.',
+      'We do not sell personal data, show advertising, or use residents\' data for any purpose of our own.',
     ],
   },
   {
-    title: 'Who can see what',
+    title: 'Consent and your choices',
     body: [
-      'Each organization is isolated. A PG owner can only ever see their own PGs, residents and records — this is enforced on the server for every request, not just hidden in the interface.',
-      'Within an organization, managers run day-to-day operations, workers see only the tasks assigned to them, and residents see only their own record.',
+      'PG owners are responsible for informing residents and staff and obtaining any consent required before entering their data. Residents\' consent to WhatsApp messages is recorded at check-in.',
+      'Anyone can stop WhatsApp messages by replying STOP, and start again by replying START. You can withdraw consent at any time; this does not affect processing that already happened.',
     ],
   },
   {
-    title: 'Messages',
+    title: 'Who we share it with',
     body: [
-      'Rent reminders, receipts and announcements are sent to the number a PG owner records for each resident. Where a WhatsApp Business account is connected, delivery is handled by WhatsApp under their terms.',
-      'Where no WhatsApp account is connected, messages are stored in the product and clearly marked as not sent. Nothing is delivered without a connected account.',
+      'Only with service providers who help us run the service, under contract and only for that purpose: cloud hosting and database providers, Meta (WhatsApp Business Platform) for messages, our email provider, and Razorpay for payments.',
+      'We disclose data to authorities only when required by law. We never share one customer\'s data with another.',
     ],
   },
   {
-    title: 'Payments',
+    title: 'Security',
     body: [
-      'Where a payment gateway is connected, card and bank details are handled by the gateway. They never reach our servers or our database.',
-      'We store the amount, the reference the gateway gives us, and which invoice it settled.',
+      'Data is encrypted in transit (HTTPS). Passwords are hashed, payment and messaging credentials are encrypted at rest, ID numbers are masked for everyone except the PG owner, and access is limited by role so residents see only their own records.',
+      'If a personal-data breach occurs, we will notify the affected PG owners and the Data Protection Board of India as the DPDP Act requires.',
     ],
   },
   {
-    title: 'Analytics',
+    title: 'How long we keep it',
     body: [
-      'Analytics are optional and off unless configured. When enabled we use a privacy-friendly provider that does not use cookies to follow you between websites.',
+      'We keep data while the account is active. After an account is closed it is deleted within 30 days, except records we must keep by law (for example tax invoices, kept for 8 years).',
+      'PG owners can delete a checked-out resident\'s personal data at any time, subject to their own legal record-keeping duties.',
     ],
   },
   {
-    title: 'Keeping it safe',
+    title: 'Your rights',
     body: [
-      'Passwords are hashed and never stored in a readable form. Sessions are signed and can be revoked immediately. Every change in the product is recorded in an activity log with who made it.',
+      'You may ask to access, correct or erase your personal data, and to nominate someone to exercise these rights for you. Residents and staff should first contact their PG owner, who controls their data; we will help the owner respond.',
+      `To exercise a right or raise a concern, contact our Grievance Officer: ${GRIEVANCE}. We reply within 30 days. If you are not satisfied, you may approach the Data Protection Board of India.`,
     ],
   },
   {
-    title: 'Your choices',
+    title: 'Children',
     body: [
-      'You can ask us to delete your enquiry at any time. If you are a customer, you can export or delete your organization\'s data.',
-      `Write to ${publicEnv.contactEmail} and we will action it.`,
+      'The service is for businesses. Where a resident is under 18, the PG owner must obtain verifiable consent from a parent or guardian before entering their data.',
+    ],
+  },
+  {
+    title: 'Changes and contact',
+    body: [
+      'We will post any change to this policy here and tell account holders about material changes in advance.',
+      `Questions: ${contactLine()}.`,
     ],
   },
 ]
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-dvh bg-white">
-      <SiteHeader />
-      <main className="mx-auto w-full max-w-3xl px-4 pb-20 pt-32 sm:px-6">
-        <h1 className="font-display text-4xl font-bold tracking-tight text-slate-900">Privacy</h1>
-        <p className="mt-3 text-lg text-slate-600">
-          Plain English, because a PG owner should not need a lawyer to understand what happens to
-          their residents&apos; details.
-        </p>
-
-        <div className="mt-12 space-y-10">
-          {SECTIONS.map((section) => (
-            <section key={section.title}>
-              <h2 className="font-display text-xl font-semibold tracking-tight text-slate-900">
-                {section.title}
-              </h2>
-              {section.body.map((paragraph) => (
-                <p key={paragraph} className="mt-3 leading-relaxed text-slate-600">
-                  {paragraph}
-                </p>
-              ))}
-            </section>
-          ))}
-        </div>
-
-        <p className="mt-12 border-t border-slate-200 pt-6 text-sm text-slate-500">
-          Questions about any of this? Email{' '}
-          <a href={`mailto:${publicEnv.contactEmail}`} className="font-medium text-blue-600">
-            {publicEnv.contactEmail}
-          </a>
-          .
-        </p>
-      </main>
-      <SiteFooter />
-    </div>
+    <LegalPage
+      title="Privacy Policy"
+      intro="What personal data we hold, why, and the rights everyone has over it."
+      updated="5 October 2026"
+      sections={SECTIONS}
+    />
   )
 }

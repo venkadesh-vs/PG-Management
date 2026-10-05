@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, SearchInput } from '@/components/app/filters'
-import { QuickForm } from '@/components/app/quick-form'
+import { ResendInviteButton } from '@/components/app/invite-link'
+import { AddStaffButton } from './add-staff-button'
 import { AttendanceGrid } from './attendance-grid'
 
 export const metadata: Metadata = { title: 'Staff' }
@@ -63,7 +64,7 @@ export default async function StaffPage({
       },
       include: {
         property: { select: { name: true, type: true } },
-        user: { select: { email: true } },
+        user: { select: { email: true, mustChangePassword: true, lastLoginAt: true } },
         attendance: {
           where: { date: { gte: addDays(today, -29) } },
           orderBy: { date: 'desc' },
@@ -108,14 +109,7 @@ export default async function StaffPage({
         icon="users"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Staff' }]}
         actions={
-          <QuickForm
-            trigger="Add staff"
-            title="Add a staff member"
-            description="Give them a login and they get the worker app — a simple task list, nothing else."
-            endpoint="/api/operations"
-            payload={{ entity: 'STAFF' }}
-            successTitle="Staff member added"
-            submitLabel="Add staff"
+          <AddStaffButton
             fields={[
               { kind: 'text', name: 'name', label: 'Full name', required: true, half: true },
               {
@@ -128,7 +122,7 @@ export default async function StaffPage({
                 options: ROLE_OPTIONS.map(([value, label]) => ({ value, label })),
               },
               { kind: 'tel', name: 'phone', label: 'Mobile number', required: true, half: true },
-              { kind: 'email', name: 'email', label: 'Email', half: true, hint: 'Needed for a worker login' },
+              { kind: 'email', name: 'email', label: 'Email', half: true, hint: 'Optional — the login link is also emailed' },
               {
                 kind: 'select',
                 name: 'propertyId',
@@ -153,7 +147,7 @@ export default async function StaffPage({
                       kind: 'switch' as const,
                       name: 'createLogin',
                       label: 'Create a worker app login',
-                      hint: 'They can accept, update and complete tasks from their phone.',
+                      hint: 'We send them a link on WhatsApp to set their own password.',
                     },
                   ]
                 : []),
@@ -250,7 +244,21 @@ export default async function StaffPage({
                     <Badge variant="default" size="sm">
                       Since {formatDate(member.joiningDate)}
                     </Badge>
+                    {member.user?.mustChangePassword && !member.user.lastLoginAt && (
+                      <Badge variant="warning" size="sm">
+                        Invite pending
+                      </Badge>
+                    )}
                   </div>
+
+                  {user.role === 'OWNER' && (
+                    <ResendInviteButton
+                      action="RESEND_STAFF_INVITE"
+                      payload={{ staffId: member.id }}
+                      label={member.user ? 'Resend login link' : 'Create worker login'}
+                      variant="ghost"
+                    />
+                  )}
 
                   <div>
                     <div className="mb-1.5 flex items-center justify-between text-xs">

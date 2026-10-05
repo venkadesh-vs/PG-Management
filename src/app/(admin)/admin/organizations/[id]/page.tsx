@@ -28,6 +28,7 @@ import {
 import { OccupancyBar } from '@/components/app/occupancy-ring'
 import { ActivityTimeline } from '@/components/app/activity-timeline'
 import { OrgStatusControl } from './org-status-control'
+import { ResendOwnerInviteButton } from '../create-client-dialog'
 
 export const metadata: Metadata = { title: 'Organization' }
 
@@ -51,7 +52,15 @@ export default async function AdminOrganizationPage({
       },
       users: {
         where: { role: { in: ['OWNER', 'MANAGER'] } },
-        select: { id: true, name: true, email: true, role: true, lastLoginAt: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          lastLoginAt: true,
+          emailVerifiedAt: true,
+        },
       },
       _count: { select: { residents: true, properties: true } },
       subscriptions: {
@@ -101,7 +110,12 @@ export default async function AdminOrganizationPage({
           { label: 'Organizations', href: '/admin/organizations' },
           { label: org.name },
         ]}
-        actions={<OrgStatusControl organizationId={org.id} status={org.status} name={org.name} />}
+        actions={
+          <>
+            <ResendOwnerInviteButton organizationId={org.id} />
+            <OrgStatusControl organizationId={org.id} status={org.status} name={org.name} />
+          </>
+        }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -174,6 +188,11 @@ export default async function AdminOrganizationPage({
                       <span className="hidden text-xs text-slate-400 sm:inline">
                         {formatDateTime(member.lastLoginAt)}
                       </span>
+                    )}
+                    {member.status !== 'ACTIVE' && (
+                      <Badge variant="warning" size="sm">
+                        {member.status === 'INVITED' ? 'invite pending' : member.status.toLowerCase()}
+                      </Badge>
                     )}
                     <Badge variant={member.role === 'OWNER' ? 'blue' : 'outline'} size="sm">
                       {member.role.toLowerCase()}

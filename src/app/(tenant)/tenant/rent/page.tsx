@@ -61,12 +61,12 @@ export default async function TenantRentPage() {
                 Across {open.length} invoice{open.length === 1 ? '' : 's'}
               </p>
               <div className="mt-4">
+                {/* One invoice: pay it. Several: pay the whole outstanding at
+                    once (oldest first); single invoices can be paid below. */}
                 <PayRentButton
-                  invoice={{
-                    id: open[0].id,
-                    number: open[0].number,
-                    balance: open[0].balance,
-                  }}
+                  invoice={open.length === 1 ? { id: open[0].id, number: open[0].number } : null}
+                  amount={outstanding}
+                  label={open.length === 1 ? undefined : `Pay all ${formatMoney(outstanding)}`}
                   propertyType={resident.property.type}
                 />
               </div>
@@ -175,11 +175,8 @@ export default async function TenantRentPage() {
                           {unpaid ? (
                             <PayRentButton
                               size="sm"
-                              invoice={{
-                                id: invoice.id,
-                                number: invoice.number,
-                                balance: invoice.balance,
-                              }}
+                              invoice={{ id: invoice.id, number: invoice.number }}
+                              amount={invoice.balance}
                               propertyType={resident.property.type}
                             />
                           ) : (

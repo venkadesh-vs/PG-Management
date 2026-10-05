@@ -1,0 +1,85 @@
+# Every push and pull request: typecheck, build, then boot the app against a
+# throwaway Postgres, load the demo data and run the end-to-end smoke test
+# (sign-in for every role, permissions, check-in, payments, complaints).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stayflow
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stayflow?schema=public
+      AUTH_SECRET: ci-only-secret-0123456789abcdefghijklmnopqrstuvwxyz
+      CRON_SECRET: ci-only-cron-secret-0123456789
+      DATA_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      SEED_PASSWORD: StayFlow@2026
+      DEMO_MODE: 'true'
+      NEXT_PUBLIC_SITE_URL: http://localhost:3100
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Migrate and seed a fresh database
+        run: |
+          npx prisma migrate deploy
+          npm run db:seed
+
+      - name: Build
+        run: npm run build
+
+      - name: Start the app
+        run: |
+          npm start > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3100/api/health && exit 0
+            sleep 1
+          done
+          echo "Server did not become healthy"; cat server.log; exit 1
+
+      - name: Daily automation runs cleanly
+        run: npm run cron
+
+      - name: End-to-end smoke test
+        run: node scripts/smoke.mjs http://localhost:3100
+
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true

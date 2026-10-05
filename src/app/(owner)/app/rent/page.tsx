@@ -9,6 +9,7 @@ import { INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, startOfMonth } from '@/lib/utils'
 import { collectionBreakdown } from '@/server/services/analytics'
 import { PageHeader } from '@/components/app/page-header'
+import { ExportButton } from '@/components/app/export-button'
 import { StatCard } from '@/components/app/stat-card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
@@ -126,7 +127,14 @@ export default async function RentPage({
         subtitle="Invoices generate on the 1st and reminders go out automatically. This is where you watch the money land."
         icon="wallet"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Rent & Payments' }]}
-        actions={<RentToolbar currentMonth={formatMonth(startOfMonth(new Date()))} />}
+        actions={
+          <>
+            <Suspense fallback={null}>
+              <ExportButton kind="outstanding" label="Export dues" />
+            </Suspense>
+            <RentToolbar currentMonth={formatMonth(startOfMonth(new Date()))} />
+          </>
+        }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">

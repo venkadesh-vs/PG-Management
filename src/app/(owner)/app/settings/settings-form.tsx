@@ -1,35 +1,41 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
+import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  ArrowRight,
   Building2,
   CalendarClock,
   CreditCard,
   MessageCircle,
   Save,
-  ShieldCheck,
-  Users,
 } from 'lucide-react'
 import type { z } from 'zod'
 import { settingsSchema } from '@/lib/validation'
 import { api, ApiError } from '@/lib/client'
-import { cn, formatDateTime, relativeTime } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input, Select } from '@/components/ui/input'
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { Badge } from '@/components/ui/badge'
+import { TeamPanel, type TeamMember } from './team-panel'
 
 type Values = z.infer<typeof settingsSchema>
+
+/** Tabs that belong to the settings form (the others save on their own). */
+const FORM_TABS = ['billing', 'reminders']
 
 export function SettingsForm({
   organization,
   settings,
   team,
+  properties,
+  currentUserId,
   integrations,
   canEdit,
 }: {
@@ -44,14 +50,9 @@ export function SettingsForm({
     status: string
   } | null
   settings: Values | null
-  team: {
-    id: string
-    name: string
-    email: string
-    role: string
-    status: string
-    lastLoginAt: string | null
-  }[]
+  team: TeamMember[]
+  properties: { id: string; name: string }[]
+  currentUserId: string
   integrations: { whatsapp: string; payments: string }
   canEdit: boolean
 }) {
@@ -79,6 +80,7 @@ export function SettingsForm({
   })
 
   const values = form.watch()
+  const [tab, setTab] = React.useState('billing')
 
   async function onSubmit(data: Values) {
     try {
@@ -94,7 +96,7 @@ export function SettingsForm({
   }
 
   return (
-    <Tabs defaultValue="billing">
+    <Tabs value={tab} onValueChange={setTab}>
       <TabsList>
         <TabsTrigger value="billing">Rent & billing</TabsTrigger>
         <TabsTrigger value="reminders">Reminders</TabsTrigger>
@@ -338,68 +340,7 @@ export function SettingsForm({
           </Card>
         </TabsContent>
 
-        {/* --------------------------------------------------------- Team */}
-        <TabsContent value="team">
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Users className="size-4 text-slate-400" />
-                Owners & managers
-              </CardTitle>
-              <p className="text-xs text-slate-500">
-                Managers can run day-to-day operations. Only owners can change settings, delete a
-                PG or manage the subscription.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ul className="divide-y divide-slate-100">
-                {team.map((member) => (
-                  <li key={member.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">{member.name}</p>
-                      <p className="truncate text-xs text-slate-500">{member.email}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {member.lastLoginAt && (
-                        <span
-                          className="text-xs text-slate-400"
-                          title={formatDateTime(member.lastLoginAt)}
-                        >
-                          {relativeTime(member.lastLoginAt)}
-                        </span>
-                      )}
-                      <Badge variant={member.role === 'OWNER' ? 'blue' : 'outline'} size="sm">
-                        {member.role.toLowerCase()}
-                      </Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ------------------------------------------------- Integrations */}
-        <TabsContent value="integrations">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <IntegrationCard
-              icon={MessageCircle}
-              name="WhatsApp Business"
-              mode={integrations.whatsapp}
-              liveCopy="Connected. Rent reminders, receipts and announcements are delivered through approved templates."
-              demoCopy="Not connected. Messages are written to the in-app outbox exactly as a resident would receive them, and clearly marked as not sent. Add WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN to enable delivery."
-            />
-            <IntegrationCard
-              icon={CreditCard}
-              name="Payment gateway"
-              mode={integrations.payments === 'live' ? 'live' : 'demo'}
-              liveCopy="Connected. Online rent payments are confirmed from the verified webhook, never from the browser."
-              demoCopy="Not connected. Online payment runs as a clearly-labelled demo and every record it creates is flagged. Add PAYMENT_KEY_ID and PAYMENT_KEY_SECRET to take real payments."
-            />
-          </div>
-        </TabsContent>
-
-        {canEdit && (
+        {canEdit && FORM_TABS.includes(tab) && (
           <div className="mt-5 flex justify-end">
             <Button type="submit" variant="primary" size="lg" loading={form.formState.isSubmitting}>
               <Save className="size-4" />
@@ -407,12 +348,44 @@ export function SettingsForm({
             </Button>
           </div>
         )}
-        {!canEdit && (
+        {!canEdit && FORM_TABS.includes(tab) && (
           <p className="mt-5 text-sm text-slate-500">
             Only the account owner can change these settings.
           </p>
         )}
       </form>
+
+      {/* --------------------------------------------------------- Team */}
+      <TabsContent value="team">
+        <TeamPanel
+          team={team}
+          properties={properties}
+          currentUserId={currentUserId}
+          canManage={canEdit}
+        />
+      </TabsContent>
+
+      {/* ------------------------------------------------- Integrations */}
+      <TabsContent value="integrations">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <IntegrationLink
+            icon={MessageCircle}
+            name="WhatsApp"
+            href="/app/settings/whatsapp"
+            live={integrations.whatsapp === 'live'}
+            body="Connect your own WhatsApp Business number or use the StayFlow number. See delivery status and message templates."
+            canEdit={canEdit}
+          />
+          <IntegrationLink
+            icon={CreditCard}
+            name="Online rent payments (Razorpay)"
+            href="/app/settings/payments"
+            live={integrations.payments === 'live'}
+            body="Connect your Razorpay account so residents' rent goes straight to your bank account."
+            canEdit={canEdit}
+          />
+        </div>
+      </TabsContent>
     </Tabs>
   )
 }
@@ -434,45 +407,50 @@ function Detail({
   )
 }
 
-function IntegrationCard({
+function IntegrationLink({
   icon: Icon,
   name,
-  mode,
-  liveCopy,
-  demoCopy,
+  href,
+  live,
+  body,
+  canEdit,
 }: {
   icon: React.ElementType
   name: string
-  mode: string
-  liveCopy: string
-  demoCopy: string
+  href: string
+  live: boolean
+  body: string
+  canEdit: boolean
 }) {
-  const live = mode === 'live'
   return (
-    <Card className={cn(live ? 'border-emerald-200' : 'border-amber-200')}>
-      <CardContent className="space-y-3 p-5">
+    <Card className={cn(live ? 'border-emerald-200' : 'border-slate-200')}>
+      <CardContent className="flex h-full flex-col gap-3 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div
               className={cn(
                 'flex size-9 items-center justify-center rounded-xl',
-                live ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600',
+                live ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600',
               )}
             >
               <Icon className="size-4" />
             </div>
             <p className="text-sm font-semibold text-slate-900">{name}</p>
           </div>
-          <Badge variant={live ? 'success' : 'warning'} size="sm">
-            {live ? 'Connected' : 'Demo mode'}
+          <Badge variant={live ? 'success' : 'outline'} size="sm">
+            {live ? 'Connected' : 'Not connected'}
           </Badge>
         </div>
-        <p className="text-sm leading-relaxed text-slate-600">{live ? liveCopy : demoCopy}</p>
-        {live && (
-          <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-            <ShieldCheck className="size-3.5" />
-            Credentials are read server-side only and never reach the browser.
-          </p>
+        <p className="flex-1 text-sm leading-relaxed text-slate-600">{body}</p>
+        {canEdit ? (
+          <Button variant="outline" size="sm" asChild className="self-start">
+            <Link href={href}>
+              {live ? 'Manage' : 'Set up'}
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        ) : (
+          <p className="text-xs text-slate-500">Only the account owner can change this.</p>
         )}
       </CardContent>
     </Card>

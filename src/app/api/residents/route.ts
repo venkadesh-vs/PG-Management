@@ -53,6 +53,7 @@ export const POST = route(
       signatureUrl: body.signatureUrl || undefined,
       depositCollected: body.depositCollected,
       createTenantAccount: body.createTenantAccount,
+      whatsappConsent: body.whatsappConsent,
       documents: body.documents,
       actor: { id: user.id, name: user.name },
     })
@@ -71,8 +72,14 @@ export const POST = route(
         // Check-in succeeded but the first rent invoice did not; the owner
         // can raise it from the Rent page.
         firstInvoiceError: result.firstInvoiceError ?? null,
+        // No password: the resident sets one from the invite link, which the
+        // owner can also copy and share by hand.
         tenantLogin: result.tenantEmail
-          ? { email: result.tenantEmail, password: result.tenantPassword }
+          ? {
+              email: result.tenantEmail,
+              inviteUrl: result.inviteUrl,
+              sentVia: result.inviteSentVia,
+            }
           : null,
       },
       { status: 201 },

@@ -4,7 +4,8 @@ import { MessageCircle, ShieldAlert } from 'lucide-react'
 import { requireOrgUser } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
-import { serverEnv } from '@/lib/env'
+import { resolveWhatsAppChannel } from '@/server/integrations/whatsapp'
+import { templateLabel } from '@/server/integrations/whatsapp-templates'
 import { formatDateTime, relativeTime } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
@@ -12,21 +13,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
+import { RetryButton } from './retry-button'
 
 export const metadata: Metadata = { title: 'WhatsApp Outbox' }
 
 const PAGE_SIZE = 25
 
-const TEMPLATE_LABEL: Record<string, string> = {
-  rent_reminder_upcoming: 'Rent reminder — before due',
-  rent_reminder_due_today: 'Rent reminder — due today',
-  rent_reminder_overdue: 'Rent reminder — overdue',
-  payment_receipt: 'Payment receipt',
-  complaint_update: 'Complaint update',
-  announcement: 'Announcement',
-  welcome_resident: 'Welcome message',
-  checkout_settlement: 'Checkout settlement',
-}
 
 export default async function MessagesPage({
   searchParams,
@@ -75,7 +67,8 @@ export default async function MessagesPage({
     }),
   ])
 
-  const live = serverEnv.whatsapp.isLive
+  const channel = await resolveWhatsAppChannel(user.organizationId)
+  const live = channel.mode !== 'demo'
   const countFor = (status: string) => counts.find((c) => c.status === status)?._count._all ?? 0
   const activeFilters = [q, template].filter(Boolean).length
 
@@ -101,11 +94,15 @@ export default async function MessagesPage({
           </div>
           <div>
             <p className={`text-sm font-semibold ${live ? 'text-emerald-900' : 'text-amber-900'}`}>
-              {live ? 'WhatsApp Business is connected' : 'Running in demo mode — nothing is delivered'}
+              {channel.mode === 'own'
+                ? 'Sending from your own WhatsApp Business number'
+                : channel.mode === 'platform'
+                  ? 'Sending from the StayFlow WhatsApp Business number'
+                  : 'Running in demo mode — nothing is delivered'}
             </p>
             <p className={`mt-1 text-sm leading-relaxed ${live ? 'text-emerald-800/80' : 'text-amber-800/80'}`}>
               {live
-                ? 'Messages are sent through the WhatsApp Business Cloud API using approved templates, and their delivery status is recorded below.'
+                ? 'Messages are sent through the WhatsApp Business Cloud API using approved templates. Ticks show sent (✓), delivered (✓✓) and read (blue ✓✓); failed messages show why and can be retried. Owners can switch numbers under Settings → WhatsApp.'
                 : 'This deployment has no WhatsApp Business credentials, so messages are written here instead of being sent. Each one is stored exactly as a resident would receive it, and marked “not sent”. Add WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN to switch this on.'}
             </p>
           </div>
@@ -116,7 +113,7 @@ export default async function MessagesPage({
         <StatCard label="Messages generated" value={total} icon="messages" tone="blue" />
         <StatCard
           label={live ? 'Sent' : 'Held in demo'}
-          value={live ? countFor('SENT') + countFor('DELIVERED') : countFor('DEMO_NOT_SENT')}
+          value={live ? countFor('SENT') + countFor('DELIVERED') + countFor('READ') : countFor('DEMO_NOT_SENT')}
           icon={live ? 'check' : 'warning'}
           tone={live ? 'emerald' : 'amber'}
         />
@@ -134,7 +131,7 @@ export default async function MessagesPage({
               .filter((t) => t.template)
               .map((t) => ({
                 value: t.template!,
-                label: `${TEMPLATE_LABEL[t.template!] ?? t.template} (${t._count._all})`,
+                label: `${templateLabel(t.template)} (${t._count._all})`,
               }))}
           />
         </FilterBar>
@@ -159,7 +156,7 @@ export default async function MessagesPage({
                       </p>
                       <p className="text-xs text-slate-500">
                         +{message.toAddress} ·{' '}
-                        {message.template ? (TEMPLATE_LABEL[message.template] ?? message.template) : 'Message'}
+                        {message.template ? templateLabel(message.template) : 'Message'}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -167,14 +164,8 @@ export default async function MessagesPage({
                         <Badge variant="warning" size="sm">
                           Demo · not sent
                         </Badge>
-                      ) : message.status === 'FAILED' ? (
-                        <Badge variant="danger" size="sm">
-                          Failed
-                        </Badge>
                       ) : (
-                        <Badge variant="success" size="sm">
-                          {message.status.toLowerCase()}
-                        </Badge>
+                        <DeliveryStatus status={message.status} />
                       )}
                       <span className="text-xs text-slate-400" title={formatDateTime(message.createdAt)}>
                         {relativeTime(message.createdAt)}
@@ -190,8 +181,17 @@ export default async function MessagesPage({
                     </p>
                   </div>
 
-                  {message.error && (
-                    <p className="mt-2 text-xs text-red-600">{message.error}</p>
+                  {message.status === 'FAILED' && !message.isDemo ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <p className="min-w-0 flex-1 text-xs text-red-600">
+                        {message.error ?? 'Not delivered'}
+                        {message.attempts > 0 &&
+                          ` · ${message.attempts} attempt${message.attempts === 1 ? '' : 's'}`}
+                      </p>
+                      {message.variables != null && <RetryButton messageId={message.id} />}
+                    </div>
+                  ) : (
+                    message.error && <p className="mt-2 text-xs text-red-600">{message.error}</p>
                   )}
                 </CardContent>
               </Card>
@@ -204,5 +204,37 @@ export default async function MessagesPage({
         </>
       )}
     </div>
+  )
+}
+
+/** WhatsApp-style ticks: ✓ sent, ✓✓ delivered, blue ✓✓ read. */
+function DeliveryStatus({ status }: { status: string }) {
+  if (status === 'FAILED') {
+    return (
+      <Badge variant="danger" size="sm">
+        Failed
+      </Badge>
+    )
+  }
+  if (status === 'QUEUED') {
+    return (
+      <Badge variant="outline" size="sm">
+        Sending…
+      </Badge>
+    )
+  }
+  const ticks = status === 'SENT' ? '✓' : '✓✓'
+  const label = status === 'READ' ? 'Read' : status === 'DELIVERED' ? 'Delivered' : 'Sent'
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-medium text-slate-500"
+      title={label}
+      aria-label={label}
+    >
+      <span className={status === 'READ' ? 'font-bold tracking-tighter text-sky-500' : 'font-bold tracking-tighter text-slate-400'}>
+        {ticks}
+      </span>
+      {label}
+    </span>
   )
 }

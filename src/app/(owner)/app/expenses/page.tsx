@@ -16,6 +16,7 @@ import {
 } from '@/lib/utils'
 import { expenseBreakdown } from '@/server/services/analytics'
 import { PageHeader } from '@/components/app/page-header'
+import { ExportButton } from '@/components/app/export-button'
 import { StatCard } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -125,6 +126,10 @@ export default async function ExpensesPage({
         icon="receipt"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Expenses' }]}
         actions={
+          <>
+          <Suspense fallback={null}>
+            <ExportButton kind="expenses" />
+          </Suspense>
           <QuickForm
             trigger="Add expense"
             title="Record an expense"
@@ -191,6 +196,7 @@ export default async function ExpensesPage({
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
+          </>
         }
       />
 

@@ -32,6 +32,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox, Progress, Switch } from '@/components/ui/primitives'
 import { EmptyState } from '@/components/ui/feedback'
+import { InviteLinkPanel, type AccessLink } from '@/components/app/invite-link'
 
 type PropertyOption = {
   id: string
@@ -70,7 +71,7 @@ type CheckInResult = {
   resident: { id: string; code: string; fullName: string }
   bed: { label: string; room: string }
   invoice: { number: string; total: number } | null
-  tenantLogin: { email: string; password: string } | null
+  tenantLogin: AccessLink | null
 }
 
 const STEPS = [
@@ -152,6 +153,7 @@ export function CheckInWizard({
       discountNote: '',
       depositCollected: true,
       createTenantAccount: true,
+      whatsappConsent: true,
       notes: '',
     },
   })
@@ -776,8 +778,26 @@ export function CheckInWizard({
                         Create a resident app account
                       </span>
                       <span className="block text-xs text-slate-500">
-                        They can pay rent, raise complaints and see the menu themselves. Login
-                        details are shown after check-in.
+                        They can pay rent, raise complaints and see the menu themselves. We send
+                        them a link to set their own password.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+                    <Checkbox
+                      checked={values.whatsappConsent}
+                      onCheckedChange={(checked) =>
+                        form.setValue('whatsappConsent', checked === true)
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-800">
+                        Resident agrees to receive rent reminders and updates on WhatsApp
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        Ask them first. They can reply STOP at any time to opt out.
                       </span>
                     </span>
                   </label>
@@ -800,7 +820,7 @@ export function CheckInWizard({
                         'Deposit ledger opened',
                         values.foodOptIn ? 'Food plan activated' : 'No food plan',
                         values.createTenantAccount ? 'Resident app account created' : 'No app account',
-                        'Welcome message queued',
+                        values.whatsappConsent ? 'Welcome message queued' : 'No WhatsApp messages',
                       ].map((line) => (
                         <li key={line} className="flex items-start gap-1.5">
                           <CircleCheck className="mt-0.5 size-3.5 shrink-0" />
@@ -951,7 +971,9 @@ function SuccessPanel({
                 : 'Rent schedule started',
               'Deposit ledger opened',
               'Food plan activated',
-              'Welcome message queued to the WhatsApp outbox',
+              result.tenantLogin?.sentVia.length
+                ? 'Welcome and login link sent'
+                : 'Welcome message queued',
             ].map((line) => (
               <li key={line} className="flex items-start gap-2 text-sm text-slate-600">
                 <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-500" />
@@ -961,16 +983,7 @@ function SuccessPanel({
           </ul>
 
           {result.tenantLogin && (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-              <p className="text-sm font-semibold text-blue-900">Resident app login</p>
-              <p className="mt-1 text-xs text-blue-800/80">
-                Share these with the resident. They can change the password after signing in.
-              </p>
-              <div className="mt-2 space-y-1 font-mono text-xs text-blue-900">
-                <p>Email: {result.tenantLogin.email}</p>
-                <p>Password: {result.tenantLogin.password}</p>
-              </div>
-            </div>
+            <InviteLinkPanel link={result.tenantLogin} title="Resident app login" />
           )}
 
           <div className="flex flex-wrap gap-2 pt-1">

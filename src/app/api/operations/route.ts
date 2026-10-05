@@ -9,7 +9,6 @@ import {
   assertResidentInProperty,
   assertRoomInProperty,
   ForbiddenError,
-  generatePassword,
   NotFoundError,
   requirePermission,
   resolveScope,
@@ -31,9 +30,9 @@ import {
 } from '@/lib/validation'
 import { notifyResident, recordActivity } from '@/server/events'
 import { markMealServed, recordPurchase, upsertMeal } from '@/server/services/kitchen'
-import { hashPassword } from '@/lib/password'
 import { formatMoney, startOfDay } from '@/lib/utils'
 import { sendWhatsApp } from '@/server/integrations/whatsapp'
+import { createWorkerLogin, sendAccessLink } from '@/server/services/accounts'
 
 /**
  * Day-to-day operational writes, grouped behind one endpoint so every module
@@ -120,29 +119,28 @@ export const POST = route(async ({ user, request }) => {
       else if (restrictedPropertyIds(user)) {
         throw new ForbiddenError('Choose one of your PGs for this staff member')
       }
-      const wantsLogin = Boolean(body.createLogin && body.email)
+      const wantsLogin = Boolean(body.createLogin)
       // A login is a credential into the org: owner only.
       if (wantsLogin) requirePermission(user, 'staff:login')
       const count = await prisma.staff.count({ where: { organizationId } })
+      const code = `STF-${String(count + 1).padStart(3, '0')}`
 
+      // The login gets an unusable password; the worker sets their own from
+      // an invite link (WhatsApp/email, and shown to the owner to share).
       let userId: string | undefined
-      // Returned exactly once, in this response, so the owner can hand it over.
-      let password: string | undefined
-      if (wantsLogin && body.email) {
-        password = generatePassword()
-        const created = await prisma.user.create({
-          data: {
-            organizationId,
-            email: body.email.toLowerCase(),
-            name: body.name,
-            phone: body.phone,
-            passwordHash: await hashPassword(password),
-            mustChangePassword: true,
-            role: 'WORKER',
-            status: 'ACTIVE',
-          },
+      if (wantsLogin) {
+        const org = await prisma.organization.findUniqueOrThrow({
+          where: { id: organizationId },
+          select: { slug: true },
         })
-        userId = created.id
+        userId = await createWorkerLogin({
+          organizationId,
+          orgSlug: org.slug,
+          code,
+          name: body.name,
+          phone: body.phone,
+          email: body.email || null,
+        })
       }
 
       const staff = await prisma.staff.create({
@@ -150,7 +148,7 @@ export const POST = route(async ({ user, request }) => {
           organizationId,
           propertyId: body.propertyId || null,
           userId,
-          code: `STF-${String(count + 1).padStart(3, '0')}`,
+          code,
           name: body.name,
           role: body.role,
           phone: body.phone,
@@ -172,11 +170,19 @@ export const POST = route(async ({ user, request }) => {
         entityId: staff.id,
         summary: `${staff.name} added as ${staff.role.replace('_', ' ').toLowerCase()}`,
       })
+      const login = userId
+        ? await sendAccessLink(userId, { phone: staff.phone }).catch((error: unknown) => {
+            console.error('[staff] invite failed', error)
+            return null
+          })
+        : null
       return ok(
         {
           staff: withMaskedId(staff, user.role),
-          login: userId && password ? { email: body.email, password } : null,
-          message: `${staff.name} added`,
+          login,
+          message: login
+            ? `${staff.name} added â€” login link ${login.sentVia.length ? 'sent' : 'ready to share'}`
+            : `${staff.name} added`,
         },
         { status: 201 },
       )
@@ -413,7 +419,8 @@ export const POST = route(async ({ user, request }) => {
             toPhone: resident.whatsappPhone || resident.phone,
             template: 'announcement',
             body: `📢 ${body.title}\n\n${body.body}`,
-            variables: [resident.fullName, body.title],
+            // Meta templates take no free text, so the notice itself is {{3}}.
+            variables: [resident.fullName, body.title, body.body],
             refType: 'Announcement',
             refId: announcement.id,
           }).catch(() => undefined)

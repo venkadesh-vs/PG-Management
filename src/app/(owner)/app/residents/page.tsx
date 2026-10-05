@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { RESIDENT_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney, formatPhone, initials } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
+import { ExportButton } from '@/components/app/export-button'
 import { Button } from '@/components/ui/button'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
@@ -115,12 +116,17 @@ export default async function ResidentsPage({
         icon="user"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Residents' }]}
         actions={
+          <>
+          <Suspense fallback={null}>
+            <ExportButton kind="residents" />
+          </Suspense>
           <Button variant="primary" asChild>
             <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
               <UserPlus className="size-4" />
               Check in resident
             </Link>
           </Button>
+          </>
         }
       />
 

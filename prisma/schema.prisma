@@ -292,6 +292,17 @@ enum NotificationKind {
   LEAD
 }
 
+enum AuthTokenKind {
+  INVITE
+  PASSWORD_RESET
+  EMAIL_VERIFY
+}
+
+enum IntegrationKind {
+  RAZORPAY
+  WHATSAPP_META
+}
+
 enum NotificationChannel {
   IN_APP
   WHATSAPP
@@ -399,6 +410,11 @@ model Organization {
   notes            String?
   // Feature flags resolved against the plan; org-level overrides live here.
   featureOverrides Json?
+  /// Where the account came from: SELF_SIGNUP | ADMIN | LEAD
+  signupSource     String?
+  /// GST registration of the client (printed on their subscription invoices).
+  gstin            String?
+  legalName        String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   archivedAt       DateTime?
@@ -428,6 +444,7 @@ model Organization {
   meals             Meal[]
   utilityCharges    UtilityCharge[]
   settings          OrgSetting?
+  integrations      IntegrationCredential[]
 
   @@index([status])
 }
@@ -477,6 +494,7 @@ model User {
   /// Set for generated passwords; the user must pick their own before anything else.
   mustChangePassword Boolean    @default(false)
   passwordChangedAt  DateTime?
+  emailVerifiedAt    DateTime?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   archivedAt         DateTime?
@@ -486,6 +504,7 @@ model User {
   staff    Staff?
 
   sessions       Session[]
+  authTokens     AuthToken[]
   notifications  Notification[]
   activityLogs   ActivityLog[]
   propertyAccess PropertyAccess[]
@@ -701,20 +720,23 @@ model Resident {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  code             String
-  fullName         String
-  photoUrl         String?
-  dateOfBirth      DateTime?
-  gender           String?
-  bloodGroup       String?
-  qualification    String?
-  phone            String
-  whatsappPhone    String?
-  email            String?
-  permanentAddress String?
-  city             String?
-  state            String?
-  pincode          String?
+  code              String
+  fullName          String
+  photoUrl          String?
+  dateOfBirth       DateTime?
+  gender            String?
+  bloodGroup        String?
+  qualification     String?
+  phone             String
+  whatsappPhone     String?
+  /// WhatsApp Business policy: record consent, honour opt-out (STOP).
+  whatsappConsentAt DateTime?
+  whatsappOptOutAt  DateTime?
+  email             String?
+  permanentAddress  String?
+  city              String?
+  state             String?
+  pincode           String?
 
   guardianName     String?
   guardianRelation String?
@@ -1425,10 +1447,17 @@ model OutboundMessage {
   refType           String?
   refId             String?
   sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  attempts          Int                 @default(0)
+  lastAttemptAt     DateTime?
+  /// Template variables, kept so a failed send can be retried exactly.
+  variables         Json?
   createdAt         DateTime            @default(now())
 
   @@index([organizationId, createdAt])
   @@index([channel, status])
+  @@index([providerMessageId])
 }
 
 // ============================ SAAS BILLING =================================
@@ -1499,6 +1528,12 @@ model Subscription {
   mandateRef     String?
   mandateSetupAt DateTime?
 
+  /// Razorpay subscription that owns the recurring mandate (live mode).
+  gatewaySubscriptionId String? @unique
+  gatewayPlanId         String?
+  /// Hosted page where the owner authorises UPI AutoPay / card / eMandate.
+  gatewayAuthUrl        String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1515,19 +1550,21 @@ model SubscriptionInvoice {
   subscriptionId String
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  number      String        @unique
-  periodStart DateTime
-  periodEnd   DateTime
-  issueDate   DateTime
-  dueDate     DateTime
-  amount      Int
-  tax         Int           @default(0)
-  total       Int
-  amountPaid  Int           @default(0)
-  status      InvoiceStatus @default(PENDING)
-  paidAt      DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  number         String        @unique
+  periodStart    DateTime
+  periodEnd      DateTime
+  issueDate      DateTime
+  dueDate        DateTime
+  amount         Int
+  tax            Int           @default(0)
+  total          Int
+  amountPaid     Int           @default(0)
+  status         InvoiceStatus @default(PENDING)
+  paidAt         DateTime?
+  /// One-off "Pay now" order for this invoice.
+  gatewayOrderId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   payments SubscriptionPayment[]
 
@@ -1573,6 +1610,54 @@ model PaymentMethod {
 }
 
 // ============================ GROWTH =======================================
+
+/// Single-use links: invitations, password resets, email verification.
+/// Only the SHA-256 of the token is stored.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, kind])
+}
+
+/// Per-organization connection to a provider (the client's own Razorpay or
+/// WhatsApp Business account). Secrets are AES-256-GCM encrypted with
+/// DATA_ENCRYPTION_KEY; the platform's own accounts come from env vars.
+model IntegrationCredential {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind           IntegrationKind
+  /// Non-secret identifier shown in the UI (Razorpay key id, WA phone number id).
+  publicId       String
+  secretCipher   String
+  active         Boolean         @default(true)
+  verifiedAt     DateTime?
+  lastError      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, kind])
+}
+
+/// Razorpay plans are fixed-amount; one is created per distinct price and reused.
+model GatewayPlan {
+  id            String   @id @default(cuid())
+  provider      String
+  amount        Int
+  period        String
+  interval      Int      @default(1)
+  gatewayPlanId String   @unique
+  createdAt     DateTime @default(now())
+
+  @@unique([provider, amount, period, interval])
+}
 
 /// One row per attempt; counted over a sliding window. Swept by the daily job.
 model RateLimitHit {

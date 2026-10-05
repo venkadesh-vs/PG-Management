@@ -147,8 +147,8 @@ export function ProblemSection() {
             Your PG deserves a better system.
           </p>
           <Button variant="primary" size="lg" asChild>
-            <a href="#demo">
-              Book a free demo
+            <a href="/signup">
+              Start your free trial
               <ArrowRight className="size-4" />
             </a>
           </Button>

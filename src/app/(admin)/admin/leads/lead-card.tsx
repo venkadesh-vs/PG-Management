@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import { Select, Textarea } from '@/components/ui/input'
+import { CreateClientDialog } from '../organizations/create-client-dialog'
 
 type Lead = {
   id: string
@@ -43,6 +44,7 @@ type Lead = {
   createdAt: string
   lastContactedAt: string | null
   demoAt: string | null
+  convertedOrgId: string | null
   notes: { id: string; body: string; authorName: string; createdAt: string }[]
 }
 
@@ -147,6 +149,30 @@ export function LeadCard({ lead }: { lead: Lead }) {
                 Email
               </a>
             </Button>
+          )}
+          {lead.convertedOrgId ? (
+            <Button variant="ghost" size="sm" asChild>
+              <a href={`/admin/organizations/${lead.convertedOrgId}`}>
+                <Building2 className="size-3.5" />
+                Open client
+              </a>
+            </Button>
+          ) : (
+            <CreateClientDialog
+              trigger="Convert to client"
+              triggerVariant="outline"
+              triggerSize="sm"
+              title={`Convert ${lead.name} to a client`}
+              endpoint="/api/admin/leads"
+              payload={{ action: 'CONVERT', leadId: lead.id }}
+              defaults={{
+                orgName: lead.pgName ?? '',
+                ownerName: lead.name,
+                email: lead.email ?? '',
+                phone: lead.whatsapp || lead.phone,
+                city: lead.city ?? '',
+              }}
+            />
           )}
           <Button variant="ghost" size="sm" onClick={() => setExpanded((e) => !e)}>
             Details

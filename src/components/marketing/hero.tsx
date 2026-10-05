@@ -63,15 +63,15 @@ export function Hero() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button variant="primary" size="xl" asChild>
-                <a href="#demo">
-                  Book a free demo
+                <a href="/signup">
+                  Start free trial
                   <ArrowRight className="size-4" />
                 </a>
               </Button>
               <Button variant="outline" size="xl" asChild>
-                <a href="#how">
+                <a href="#demo">
                   <PlayCircle className="size-4" />
-                  See how it works
+                  Book a free demo
                 </a>
               </Button>
             </div>

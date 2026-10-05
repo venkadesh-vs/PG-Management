@@ -6,6 +6,8 @@ import { generateTempPassword, hashPassword } from '@/lib/password'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifyResident, recordActivity } from '../events'
 import { sendWhatsApp } from '../integrations/whatsapp'
+import { issueAuthToken } from '../auth-tokens'
+import { deliverAccountLink, generatedLoginEmail, type DeliveryChannel } from './accounts'
 import {
   addDays,
   daysInMonth,
@@ -109,9 +111,10 @@ export type CheckInInput = {
 
   /** Collect the deposit as part of check-in. */
   depositCollected?: boolean
-  /** Create a tenant login and send the welcome message. */
+  /** Create a tenant login and send them an invite link to set a password. */
   createTenantAccount?: boolean
-  tenantPassword?: string
+  /** Resident agreed to rent reminders and updates on WhatsApp. */
+  whatsappConsent?: boolean
 
   documents?: { kind: string; label: string; fileUrl: string }[]
 
@@ -151,33 +154,65 @@ export async function checkInResident(input: CheckInInput) {
     link: '/tenant',
   })
 
-  // The temporary password is handed over by the owner in person; it is never
-  // sent over WhatsApp.
-  await sendWhatsApp({
-    organizationId: input.organizationId,
-    toName: result.resident.fullName,
-    toPhone: result.resident.whatsappPhone || result.resident.phone,
-    template: 'welcome_resident',
-    body:
-      `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
-      `Welcome to ${result.property.name}!\n\n` +
-      `Room: ${result.bed.room.number} · Bed ${result.bed.label}\n` +
-      `Rent: ${formatMoney(result.resident.rentAmount)} / month\n` +
-      `Joining date: ${formatDate(result.resident.joiningDate)}\n\n` +
-      (result.tenantEmail
-        ? `Your resident app login:\nEmail: ${result.tenantEmail}\nYour PG will give you a temporary password.\n\n`
-        : '') +
-      `You can pay rent, raise complaints and see the food menu from the app.`,
-    variables: [
-      result.resident.fullName,
-      result.property.name,
-      `${result.bed.room.number} / ${result.bed.label}`,
-    ],
-    refType: 'Resident',
-    refId: result.resident.id,
-  }).catch(() => undefined)
+  // WhatsApp only with the resident's consent (recorded at check-in).
+  const whatsappAllowed = Boolean(result.resident.whatsappConsentAt)
+  const whatsappTo = result.resident.whatsappPhone || result.resident.phone
+  if (whatsappAllowed) {
+    await sendWhatsApp({
+      organizationId: input.organizationId,
+      toName: result.resident.fullName,
+      toPhone: whatsappTo,
+      template: 'welcome_resident',
+      body:
+        `Hi ${result.resident.fullName.split(' ')[0]} 👋\n\n` +
+        `Welcome to ${result.property.name}!\n\n` +
+        `Room: ${result.bed.room.number} · Bed ${result.bed.label}\n` +
+        `Rent: ${formatMoney(result.resident.rentAmount)} / month\n` +
+        `Joining date: ${formatDate(result.resident.joiningDate)}\n\n` +
+        (result.tenantUserId
+          ? `We're sending you a separate link to set your resident app password.\n\n`
+          : '') +
+        `You can pay rent, raise complaints and see the food menu from the app.`,
+      variables: [
+        result.resident.fullName,
+        result.property.name,
+        `${result.bed.room.number} / ${result.bed.label}`,
+      ],
+      refType: 'Resident',
+      refId: result.resident.id,
+    }).catch(() => undefined)
+  }
 
-  return { ...result, firstInvoice: first.invoice, firstInvoiceError }
+  // The resident app login is handed over as a single-use invite link, never
+  // a password. The owner also gets the link to share by hand.
+  let inviteUrl: string | null = null
+  let inviteSentVia: DeliveryChannel[] = []
+  if (result.tenantUserId && result.tenantEmail) {
+    try {
+      const { url } = await issueAuthToken(result.tenantUserId, 'INVITE')
+      inviteUrl = url
+      inviteSentVia = await deliverAccountLink({
+        kind: 'INVITE',
+        url,
+        recipient: {
+          id: result.tenantUserId,
+          name: result.resident.fullName,
+          email: result.tenantEmail,
+          phone: whatsappTo,
+        },
+        organizationId: input.organizationId,
+        orgName: result.property.name,
+        whatsapp: whatsappAllowed,
+      })
+    } catch (error) {
+      console.error('[residents] invite after check-in failed', {
+        residentId: result.resident.id,
+        error,
+      })
+    }
+  }
+
+  return { ...result, firstInvoice: first.invoice, firstInvoiceError, inviteUrl, inviteSentVia }
 }
 
 async function checkInOnce(input: CheckInInput) {
@@ -215,6 +250,7 @@ async function checkInOnce(input: CheckInInput) {
           fullName: input.fullName.trim(),
           phone: input.phone.trim(),
           whatsappPhone: input.whatsappPhone?.trim() || input.phone.trim(),
+          whatsappConsentAt: input.whatsappConsent === false ? null : new Date(),
           email: input.email?.trim() || null,
           photoUrl: input.photoUrl,
           dateOfBirth: input.dateOfBirth ?? null,
@@ -342,22 +378,22 @@ async function checkInOnce(input: CheckInInput) {
 
       // --- Tenant login ----------------------------------------------------
       let tenantEmail: string | null = null
-      let tenantPassword: string | null = null
+      let tenantUserId: string | null = null
       if (input.createTenantAccount !== false) {
-        const base = input.email?.trim().toLowerCase() || `${code.toLowerCase()}@${property.organization.slug}.stayflow.app`
+        const generated = generatedLoginEmail(code, property.organization.slug)
+        const base = input.email?.trim().toLowerCase() || generated
         const exists = await tx.user.findUnique({ where: { email: base } })
-        tenantEmail = exists ? `${code.toLowerCase()}@${property.organization.slug}.stayflow.app` : base
-        // Random one-time password, returned once so the owner can hand it
-        // over; the resident must replace it at first sign-in.
-        tenantPassword = input.tenantPassword ?? generateTempPassword(10)
+        tenantEmail = exists ? generated : base
 
+        // Unusable random password: the resident sets their own from the
+        // invite link sent after the transaction commits.
         const user = await tx.user.create({
           data: {
             organizationId: input.organizationId,
             email: tenantEmail,
             phone: resident.phone,
             name: resident.fullName,
-            passwordHash: await hashPassword(tenantPassword),
+            passwordHash: await hashPassword(generateTempPassword(32)),
             role: 'TENANT',
             status: 'ACTIVE',
             mustChangePassword: true,
@@ -365,6 +401,7 @@ async function checkInOnce(input: CheckInInput) {
           },
         })
         await tx.resident.update({ where: { id: resident.id }, data: { userId: user.id } })
+        tenantUserId = user.id
       }
 
       // --- Audit + notifications -------------------------------------------
@@ -412,7 +449,7 @@ async function checkInOnce(input: CheckInInput) {
         tx,
       )
 
-      return { resident, bed, property, deposit, tenantEmail, tenantPassword }
+      return { resident, bed, property, deposit, tenantEmail, tenantUserId }
     },
     { timeout: 20000 },
   )

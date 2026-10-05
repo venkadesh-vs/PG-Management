@@ -16,6 +16,7 @@ import {
   startOfMonth,
 } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
+import { ExportButton } from '@/components/app/export-button'
 import { StatCard } from '@/components/app/stat-card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
@@ -165,6 +166,10 @@ export default async function PaymentsPage({
         icon="card"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Payments' }]}
         actions={
+          <>
+          <Suspense fallback={null}>
+            <ExportButton kind="payments" />
+          </Suspense>
           <RecordPaymentButton
             residents={residents.map((r) => ({
               id: r.id,
@@ -180,6 +185,7 @@ export default async function PaymentsPage({
               })),
             }))}
           />
+          </>
         }
       />
 
@@ -262,7 +268,9 @@ export default async function PaymentsPage({
                     <TableRow key={payment.id}>
                       <TableCell>
                         <p className="font-mono text-sm font-medium text-slate-800">
-                          {payment.receiptNumber}
+                          <a href={`/api/documents/rent-receipt/${payment.id}.pdf`} className="hover:text-blue-700 hover:underline" target="_blank" rel="noopener" title="Download receipt">
+                            {payment.receiptNumber}
+                          </a>
                         </p>
                         <p className="flex items-center gap-1 text-xs text-slate-500">
                           <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
@@ -323,7 +331,9 @@ export default async function PaymentsPage({
                     >
                       {payment.resident.fullName}
                     </Link>
-                    <p className="font-mono text-xs text-slate-500">{payment.receiptNumber}</p>
+                    <a href={`/api/documents/rent-receipt/${payment.id}.pdf`} target="_blank" rel="noopener" className="font-mono text-xs text-slate-500 underline-offset-2 hover:underline">
+                      {payment.receiptNumber}
+                    </a>
                   </div>
                   <span className="shrink-0 font-semibold text-emerald-600 tabular">
                     {formatMoney(payment.amount)}

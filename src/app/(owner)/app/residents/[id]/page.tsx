@@ -46,6 +46,7 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { ResidentActions } from './resident-actions'
+import { ResendInviteButton } from '@/components/app/invite-link'
 import { LedgerTable } from './ledger-table'
 
 export const metadata: Metadata = { title: 'Resident' }
@@ -326,6 +327,14 @@ export default async function ResidentDetailPage({
                   {resident.user?.lastLoginAt && (
                     <Row label="Last signed in" value={formatDateTime(resident.user.lastLoginAt)} />
                   )}
+                  {resident.status !== 'CHECKED_OUT' && (
+                    <ResendInviteButton
+                      action="RESEND_RESIDENT_INVITE"
+                      payload={{ residentId: resident.id }}
+                      label={resident.user ? 'Resend login link' : 'Create app login'}
+                      variant="ghost"
+                    />
+                  )}
                   {resident.noticeDate && (
                     <Row label="Notice given" value={formatDate(resident.noticeDate)} />
                   )}
@@ -383,7 +392,11 @@ export default async function ResidentDetailPage({
                     {resident.invoices.map((invoice) => (
                       <TableRow key={invoice.id}>
                         <TableCell>
-                          <p className="font-medium text-slate-800">{invoice.number}</p>
+                          <p className="font-medium text-slate-800">
+                            <a href={`/api/documents/rent-invoice/${invoice.id}.pdf`} className="hover:text-blue-700 hover:underline" target="_blank" rel="noopener" title="Download PDF">
+                              {invoice.number}
+                            </a>
+                          </p>
                           <p className="text-xs text-slate-500">
                             {invoice.lines.map((l) => l.label.split('—')[0].trim()).join(' · ')}
                           </p>
@@ -426,7 +439,9 @@ export default async function ResidentDetailPage({
                     className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate font-medium text-slate-900">{invoice.number}</p>
+                      <a href={`/api/documents/rent-invoice/${invoice.id}.pdf`} target="_blank" rel="noopener" className="truncate font-medium text-slate-900 hover:text-blue-700 hover:underline">
+                        {invoice.number}
+                      </a>
                       <StatusChip
                         label={INVOICE_STATUS_STYLE[invoice.status].label}
                         chip={INVOICE_STATUS_STYLE[invoice.status].chip}
@@ -469,7 +484,9 @@ export default async function ResidentDetailPage({
                     <li key={payment.id} className="flex items-center justify-between gap-3 py-2.5">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-slate-800">
-                          {payment.receiptNumber}
+                          <a href={`/api/documents/rent-receipt/${payment.id}.pdf`} className="hover:text-blue-700 hover:underline" target="_blank" rel="noopener" title="Download receipt">
+                            {payment.receiptNumber}
+                          </a>
                           {payment.isDemo && (
                             <Badge variant="warning" size="sm" className="ml-2">
                               Demo payment

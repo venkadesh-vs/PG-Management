@@ -130,6 +130,7 @@ export default async function LeadsPage({
                   createdAt: lead.createdAt.toISOString(),
                   lastContactedAt: lead.lastContactedAt?.toISOString() ?? null,
                   demoAt: lead.demoAt?.toISOString() ?? null,
+                  convertedOrgId: lead.convertedOrgId,
                   notes: lead.notes.map((n) => ({
                     id: n.id,
                     body: n.body,

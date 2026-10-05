@@ -101,8 +101,14 @@ export default async function LoginPage() {
           </div>
 
           <p className="mt-8 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{' '}
-            <Link href="/#demo" className="font-semibold text-blue-600 hover:text-blue-700">
+            New here?{' '}
+            <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-700">
+              Create an account
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            Prefer a walkthrough?{' '}
+            <Link href="/#demo" className="font-medium text-slate-600 hover:text-slate-900">
               Book a free demo
             </Link>
           </p>

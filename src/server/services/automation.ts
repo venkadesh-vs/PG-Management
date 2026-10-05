@@ -12,6 +12,7 @@ import {
 import { snapshotOccupancy } from './residents'
 import { enforceGracePeriods, runSubscriptionBilling } from './subscriptions'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
+import { retryFailedWhatsApp } from '../integrations/whatsapp'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -29,6 +30,7 @@ export type AutomationReport = {
   subscriptions: { billed: number; failed: number; suspended: number }
   occupancy: { snapshots: number }
   meals: { refreshed: number }
+  whatsappRetries: { retried: number; sent: number; failed: number }
   errors: string[]
 }
 
@@ -90,6 +92,7 @@ export async function runDailyAutomation(options?: {
     subscriptions: { billed: 0, failed: 0, suspended: 0 },
     occupancy: { snapshots: 0 },
     meals: { refreshed: 0 },
+    whatsappRetries: { retried: 0, sent: 0, failed: 0 },
     errors,
   }
 
@@ -215,6 +218,14 @@ async function runSteps(
     }
   } catch (error) {
     errors.push(`meals: ${(error as Error).message}`)
+  }
+  // 7. Retry WhatsApp messages that failed transiently (network, rate limit,
+  //    expired token since fixed). Small batch; opt-outs and Meta's
+  //    permanent rejections are never retried.
+  try {
+    report.whatsappRetries = await retryFailedWhatsApp({ organizationId: options?.organizationId, now })
+  } catch (error) {
+    errors.push(`whatsapp retries: ${(error as Error).message}`)
   }
 }
 

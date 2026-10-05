@@ -2,7 +2,7 @@
   "name": "stayflow",
   "version": "1.0.0",
   "private": true,
-  "description": "StayFlow \u2014 an automated operating system for PGs. Multi-tenant PG management SaaS.",
+  "description": "StayFlow — an automated operating system for PGs. Multi-tenant PG management SaaS.",
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "prisma generate && next build",
@@ -17,7 +17,8 @@
     "db:studio": "prisma studio",
     "cron": "tsx --conditions=react-server scripts/run-automation.ts",
     "verify": "npm run typecheck && npm run build",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test": "vitest run"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -48,6 +49,7 @@
     "jose": "^5.9.6",
     "lucide-react": "^0.469.0",
     "next": "^16.3.5",
+    "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
@@ -63,11 +65,14 @@
     "@types/react": "^19.0.5",
     "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.5",
     "postcss": "^8.4.49",
     "prisma": "^6.2.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.3"
   },
   "engines": {
     "node": ">=22"

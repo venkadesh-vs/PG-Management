@@ -20,6 +20,9 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
+import { PayInvoiceButton } from './pay-invoice-button'
+
+const PAYABLE = ['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
 
 export const metadata: Metadata = { title: 'Subscription' }
 
@@ -81,9 +84,10 @@ export default async function SubscriptionPage() {
                 Payments are in demo mode on this deployment
               </p>
               <p className="mt-1 text-sm leading-relaxed text-amber-800/80">
-                No payment gateway credentials are configured, so nothing is actually charged. The
-                AutoPay flow below runs as a clearly-labelled simulation so you can see how billing,
-                failures and the grace period behave — every record it creates is flagged as demo.
+                No payment gateway credentials are configured, so nothing is actually charged.
+                AutoPay and Pay now below run as clearly-labelled simulations so you can see how
+                billing, failures and the grace period behave — every record they create is flagged
+                as demo.
               </p>
             </div>
           </CardContent>
@@ -199,6 +203,7 @@ export default async function SubscriptionPage() {
                     mandateStatus={subscription.mandateStatus}
                     methodLabel={subscription.paymentMethods[0]?.label ?? null}
                     demo={demo}
+                    authUrl={subscription.gatewayAuthUrl}
                   />
                 </CardContent>
               </Card>
@@ -224,6 +229,9 @@ export default async function SubscriptionPage() {
                   <TableHead>Due</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">
+                    <span className="sr-only">Action</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -233,7 +241,15 @@ export default async function SubscriptionPage() {
                   return (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-mono text-sm font-medium text-slate-800">
-                        {invoice.number}
+                        <a
+                          href={`/api/documents/subscription-invoice/${invoice.id}.pdf`}
+                          target="_blank"
+                          rel="noopener"
+                          className="hover:text-blue-700 hover:underline"
+                          title="Download tax invoice (PDF)"
+                        >
+                          {invoice.number}
+                        </a>
                       </TableCell>
                       <TableCell>
                         <span className="flex items-center gap-1.5 text-sm text-slate-600">
@@ -266,6 +282,16 @@ export default async function SubscriptionPage() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-right">
+                        {PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
+                          <PayInvoiceButton
+                            invoiceId={invoice.id}
+                            number={invoice.number}
+                            amount={invoice.total - invoice.amountPaid}
+                            demo={demo}
+                          />
+                        )}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -284,9 +310,14 @@ export default async function SubscriptionPage() {
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate font-mono text-sm font-medium text-slate-800">
+                    <a
+                      href={`/api/documents/subscription-invoice/${invoice.id}.pdf`}
+                      target="_blank"
+                      rel="noopener"
+                      className="truncate font-mono text-sm font-medium text-slate-800 underline-offset-2 hover:underline"
+                    >
                       {invoice.number}
-                    </p>
+                    </a>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {payment?.isDemo && (
                         <Badge variant="warning" size="sm">
@@ -312,6 +343,17 @@ export default async function SubscriptionPage() {
                     </span>
                     <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
                   </div>
+                  {PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
+                    <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+                      <PayInvoiceButton
+                        invoiceId={invoice.id}
+                        number={invoice.number}
+                        amount={invoice.total - invoice.amountPaid}
+                        demo={demo}
+                        size="default"
+                      />
+                    </div>
+                  )}
                 </li>
               )
             })}
@@ -332,7 +374,8 @@ export default async function SubscriptionPage() {
               'One subscription per PG — add a second PG and it is billed separately.',
               "Each PG's price is derived from its own standard rent, not a flat tier.",
               'No per-resident or per-feature charges.',
-              'AutoPay debits monthly; a failure moves you into a grace period rather than cutting access instantly.',
+              'AutoPay (UPI AutoPay, card or eMandate via Razorpay) debits monthly; a failure moves you into a grace period rather than cutting access instantly.',
+              'Any open invoice can be paid instantly with Pay now — a suspended account unlocks as soon as it is paid.',
             ].map((line) => (
               <li key={line} className="flex items-start gap-2 text-sm text-slate-600">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />

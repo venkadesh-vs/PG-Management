@@ -79,6 +79,8 @@ export const checkInSchema = z.object({
 
   // Step 6 — finish
   createTenantAccount: z.boolean().default(true),
+  /** WhatsApp Business policy: rent reminders need recorded consent. */
+  whatsappConsent: z.boolean().default(true),
   notes: optionalString,
   signatureUrl: optionalString,
 })
@@ -87,7 +89,7 @@ export type CheckInValues = z.infer<typeof checkInSchema>
 
 export const residentUpdateSchema = checkInSchema
   .partial()
-  .omit({ bedId: true, propertyId: true, joiningDate: true })
+  .omit({ bedId: true, propertyId: true, joiningDate: true, whatsappConsent: true })
   .extend({ kycStatus: z.enum(['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED']).optional() })
 
 export const transferSchema = z.object({
@@ -415,4 +417,15 @@ export const leadUpdateSchema = z.object({
     .optional(),
   note: optionalString,
   demoAt: optionalString,
+})
+
+// ------------------------------------------------------------- accounts ----
+
+/** Platform admin creating a client account (also used to convert a lead). */
+export const createClientSchema = z.object({
+  orgName: z.string().trim().min(2, 'Enter the business / PG name').max(120),
+  ownerName: z.string().trim().min(2, 'Enter the owner name').max(120),
+  email: z.string().trim().email('Enter a valid email'),
+  phone: phoneSchema,
+  city: z.string().trim().max(80).optional().or(z.literal('')),
 })

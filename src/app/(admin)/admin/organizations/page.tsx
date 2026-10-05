@@ -23,6 +23,7 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
+import { CreateClientDialog } from './create-client-dialog'
 
 export const metadata: Metadata = { title: 'Organizations' }
 
@@ -98,6 +99,7 @@ export default async function OrganizationsPage({
         subtitle="Every PG owner account on the platform, with their PGs, residents and subscription."
         icon="building"
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Organizations' }]}
+        actions={<CreateClientDialog />}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -135,7 +137,7 @@ export default async function OrganizationsPage({
         <EmptyState
           icon="building"
           title={activeFilters ? 'Nothing matches these filters' : 'No organizations yet'}
-          description="Accounts created from converted leads appear here."
+          description="Self-signups, accounts you create and converted leads appear here."
         />
       ) : (
         <>

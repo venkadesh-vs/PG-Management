@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Settings' }
 export default async function SettingsPage() {
   const user = await requireOrgUser()
 
-  const [organization, settings, team] = await Promise.all([
+  const [organization, settings, team, properties] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: user.organizationId },
       select: {
@@ -28,8 +28,24 @@ export default async function SettingsPage() {
     prisma.orgSetting.findUnique({ where: { organizationId: user.organizationId } }),
     prisma.user.findMany({
       where: { organizationId: user.organizationId, role: { in: ['OWNER', 'MANAGER'] } },
-      select: { id: true, name: true, email: true, role: true, lastLoginAt: true, status: true },
-      orderBy: { role: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        lastLoginAt: true,
+        status: true,
+        mustChangePassword: true,
+        passwordChangedAt: true,
+        propertyAccess: { select: { property: { select: { name: true } } } },
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    }),
+    prisma.property.findMany({
+      where: { organizationId: user.organizationId, archivedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     }),
   ])
 
@@ -67,10 +83,17 @@ export default async function SettingsPage() {
           id: member.id,
           name: member.name,
           email: member.email,
+          phone: member.phone,
           role: member.role,
           status: member.status,
+          // Invited but never set a password.
+          pending:
+            member.status === 'INVITED' || (member.mustChangePassword && !member.passwordChangedAt),
           lastLoginAt: member.lastLoginAt?.toISOString() ?? null,
+          propertyNames: member.propertyAccess.map((a) => a.property.name),
         }))}
+        properties={properties}
+        currentUserId={user.id}
         integrations={{
           whatsapp: serverEnv.whatsapp.isLive ? 'live' : 'demo',
           payments: paymentMode(),

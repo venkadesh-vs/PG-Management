@@ -4,6 +4,7 @@ import * as React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { friendlyError } from '@/lib/client'
 
 /**
  * Global toast system. Every meaningful action in the product reports back
@@ -31,6 +32,8 @@ type ToastContextValue = {
   error: (title: string, description?: string) => string
   warning: (title: string, description?: string) => string
   info: (title: string, description?: string) => string
+  /** Plain-language toast for any caught error; `action` e.g. "save the expense". */
+  fromError: (error: unknown, action?: string) => string
   dismiss: (id: string) => void
 }
 
@@ -104,6 +107,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       error: (title, description) => toast({ title, description, tone: 'error' }),
       warning: (title, description) => toast({ title, description, tone: 'warning' }),
       info: (title, description) => toast({ title, description, tone: 'info' }),
+      fromError: (error, action) => {
+        const { title, description } = friendlyError(error, action)
+        return toast({ title, description, tone: 'error', duration: 6500 })
+      },
     }),
     [toast, dismiss],
   )
@@ -114,7 +121,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:top-0 sm:bottom-auto sm:items-end sm:p-6"
+        // Top of the screen on phones too: the bottom is the resident/worker tab bar.
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2.5 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:inset-x-auto sm:right-0 sm:items-end sm:p-6"
       >
         <AnimatePresence initial={false}>
           {toasts.map((item) => (
@@ -140,22 +148,35 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.96 }}
+      initial={{ opacity: 0, y: -18, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 24, scale: 0.96, transition: { duration: 0.18 } }}
-      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      exit={{ opacity: 0, x: 40, scale: 0.94, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.6}
+      onDragEnd={(_, info) => {
+        // Swipe it away, like a phone notification.
+        if (Math.abs(info.offset.x) > 80) onDismiss()
+      }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className={cn(
-        'pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-float ring-4',
+        'pointer-events-auto relative w-full max-w-sm cursor-grab overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-float ring-4 backdrop-blur-xl active:cursor-grabbing',
         tone.ring,
       )}
       role="status"
     >
-      <div className="flex gap-3 p-4">
-        <div className={cn('mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl', tone.iconBg)}>
-          <Icon className={cn('size-[18px]', tone.iconColor)} />
-        </div>
+      <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', tone.bar)} />
+      <div className="flex gap-3 p-4 pl-5">
+        <motion.div
+          initial={{ scale: 0.4, rotate: -20 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 18, delay: 0.05 }}
+          className={cn('mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl', tone.iconBg)}
+        >
+          <Icon className={cn('size-5', tone.iconColor)} />
+        </motion.div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-900">{item.title}</p>
           {item.description && (

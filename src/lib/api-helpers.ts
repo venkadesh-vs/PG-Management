@@ -24,7 +24,7 @@ export function fail(message: string, status = 400, details?: unknown) {
 export function handleError(error: unknown) {
   if (error instanceof ZodError) {
     const first = error.issues[0]
-    return fail(first ? `${first.path.join('.')}: ${first.message}` : 'Invalid input', 422, error.issues)
+    return fail(first ? humanizeIssue(first) : 'Please check the form and try again.', 422, error.issues)
   }
   if (
     error instanceof ValidationError ||
@@ -40,7 +40,53 @@ export function handleError(error: unknown) {
     if (error.code === 'P2003') return fail('This record is still linked to something else', 409)
   }
   console.error('[api]', error)
-  return fail('Something went wrong on our side', 500)
+  return fail('Something went wrong on our side. Please try again in a moment.', 500)
+}
+
+/** "fullName" / "guardian.phone" → "Full name" / "Guardian phone". */
+function fieldLabel(path: (string | number)[]) {
+  const key = path.filter((p) => typeof p === 'string').join(' ')
+  if (!key) return 'This field'
+  const words = key
+    .replace(/Id/g, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[._-]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * Turns a validation issue into a sentence a PG owner can act on. Custom
+ * messages written in our schemas ("Enter a valid email address") are kept;
+ * Zod's generic defaults are rewritten.
+ */
+function humanizeIssue(issue: ZodError['issues'][number]) {
+  const label = fieldLabel(issue.path)
+  const generic = /^(Required|Invalid|Expected|String must|Number must|Array must)/.test(issue.message)
+  if (!generic) return issue.message
+  switch (issue.code) {
+    case 'invalid_type':
+      return issue.received === 'undefined' || issue.received === 'null'
+        ? `${label} is required.`
+        : `${label} is not in the right format.`
+    case 'too_small':
+      if (issue.type === 'string') return issue.minimum === 1 ? `${label} is required.` : `${label} is too short.`
+      if (issue.type === 'array') return `Choose at least ${issue.minimum} for ${label.toLowerCase()}.`
+      return `${label} must be at least ${issue.minimum}.`
+    case 'too_big':
+      if (issue.type === 'string') return `${label} is too long.`
+      return `${label} must be ${issue.maximum} or less.`
+    case 'invalid_string':
+      if (issue.validation === 'email') return 'Enter a valid email address.'
+      return `${label} is not in the right format.`
+    case 'invalid_enum_value':
+      return `Choose a valid option for ${label.toLowerCase()}.`
+    case 'invalid_date':
+      return `Enter a valid date for ${label.toLowerCase()}.`
+    default:
+      return `Please check ${label.toLowerCase()}.`
+  }
 }
 
 /** Wraps a handler with auth + error handling. */

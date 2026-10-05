@@ -4,26 +4,29 @@
 
 @layer base {
   :root {
-    --background: 210 40% 99%;
-    --foreground: 222 33% 12%;
+    /* StayFlow: royal blue on a cool, navy-tinted neutral ground. */
+    --background: 220 45% 98.5%;
+    --foreground: 224 38% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 222 33% 12%;
+    --card-foreground: 224 38% 13%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 33% 12%;
-    --primary: 222 47% 15%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 214 32% 95%;
-    --secondary-foreground: 222 33% 18%;
-    --muted: 214 32% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 214 95% 93%;
-    --accent-foreground: 222 47% 20%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 25% 91%;
-    --input: 214 25% 89%;
-    --ring: 221 83% 53%;
-    --radius: 0.75rem;
+    --popover-foreground: 224 38% 13%;
+    --primary: 229 86% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 40% 95.5%;
+    --secondary-foreground: 224 38% 18%;
+    --muted: 220 40% 96%;
+    --muted-foreground: 221 15% 48%;
+    --accent: 223 100% 96%;
+    --accent-foreground: 229 70% 40%;
+    --destructive: 0 74% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 30% 90%;
+    --input: 220 28% 87%;
+    --ring: 229 86% 54%;
+    --radius: 0.875rem;
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   * {
@@ -47,14 +50,109 @@
   }
 
   ::selection {
-    @apply bg-blue-600/15 text-blue-950;
+    @apply bg-blue-600/20 text-blue-950;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  /* Anyone who asks the OS for less motion gets none of the decorative kind. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @layer components {
   /* A single definition for the product's card surface. */
   .surface {
-    @apply rounded-2xl border border-slate-200/80 bg-white shadow-card;
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-soft;
+  }
+
+  /* Cards that respond to the pointer: a short lift and a deeper shadow. */
+  .card-lift {
+    transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out), border-color 0.35s;
+  }
+  .card-lift:hover {
+    transform: translateY(-3px);
+    @apply border-slate-300/80 shadow-lift;
+  }
+
+  .glass {
+    @apply border border-white/60 bg-white/70 backdrop-blur-xl;
+  }
+
+  .glass-dark {
+    @apply border border-white/10 bg-white/[0.06] backdrop-blur-xl;
+  }
+
+  /* Gradient headline text. */
+  .text-gradient {
+    @apply bg-gradient-to-r from-blue-600 via-indigo-500 to-marigold-500 bg-clip-text text-transparent;
+    background-size: 200% 200%;
+  }
+  .text-gradient-animated {
+    @apply text-gradient animate-gradient-x;
+  }
+
+  /* Slow drifting colour field behind heroes and auth screens. */
+  .aurora {
+    position: absolute;
+    inset: -20%;
+    pointer-events: none;
+    background:
+      radial-gradient(38% 42% at 18% 22%, rgb(59 102 251 / 0.28), transparent 70%),
+      radial-gradient(30% 36% at 82% 18%, rgb(245 133 11 / 0.16), transparent 70%),
+      radial-gradient(40% 46% at 70% 86%, rgb(99 102 241 / 0.20), transparent 70%),
+      radial-gradient(28% 30% at 10% 90%, rgb(236 72 153 / 0.10), transparent 70%);
+    filter: blur(20px);
+    @apply animate-aurora;
+  }
+
+  /* Fine film grain so large gradients never band. */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* A sheen that sweeps across a button or card on hover. */
+  .shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .shine::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 40%;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28), transparent);
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  .shine:hover::before {
+    @apply animate-shine;
+  }
+
+  /* Soft brand ring used for focus across inputs and buttons. */
+  .ring-brand {
+    @apply ring-4 ring-blue-500/15;
   }
 
   .surface-muted {
@@ -73,9 +171,9 @@
 
   .mesh-blue {
     background:
-      radial-gradient(60% 60% at 20% 10%, rgb(59 130 246 / 0.18) 0%, transparent 60%),
-      radial-gradient(50% 50% at 90% 20%, rgb(236 72 153 / 0.12) 0%, transparent 60%),
-      radial-gradient(60% 60% at 60% 100%, rgb(14 165 233 / 0.14) 0%, transparent 60%);
+      radial-gradient(60% 60% at 20% 10%, rgb(59 102 251 / 0.22) 0%, transparent 60%),
+      radial-gradient(50% 50% at 90% 20%, rgb(245 133 11 / 0.12) 0%, transparent 60%),
+      radial-gradient(60% 60% at 60% 100%, rgb(99 102 241 / 0.18) 0%, transparent 60%);
   }
 
   .skeleton {

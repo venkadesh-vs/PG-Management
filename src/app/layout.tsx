@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
+import { Figtree, JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import Script from 'next/script'
 import { ToastProvider } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/primitives'
@@ -7,9 +7,16 @@ import { publicEnv } from '@/lib/env'
 import { ServiceWorkerRegistration } from '@/components/pwa/service-worker'
 import './globals.css'
 
-const sans = Inter({
+const sans = Figtree({
   subsets: ['latin'],
   variable: '--font-sans',
+  display: 'swap',
+})
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['500'],
+  variable: '--font-mono',
   display: 'swap',
 })
 
@@ -76,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       data-scroll-behavior="smooth"
-      className={`${sans.variable} ${display.variable}`}
+      className={`${sans.variable} ${display.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-dvh bg-background font-sans">

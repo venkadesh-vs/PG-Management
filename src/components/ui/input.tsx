@@ -2,7 +2,18 @@
 
 import * as React from 'react'
 import * as LabelPrimitive from '@radix-ui/react-label'
+import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/** Shared look for every text control: calm at rest, a soft brand glow on focus. */
+const CONTROL = [
+  'w-full rounded-xl border border-slate-200 bg-white text-[15px] text-slate-900 shadow-[0_1px_2px_0_rgb(20_27_45/0.04)] sm:text-sm',
+  'transition-[border-color,box-shadow,background-color] duration-200',
+  'placeholder:text-slate-400 hover:border-slate-300',
+  'focus-visible:outline-none focus-visible:border-blue-500 focus-visible:ring-4 focus-visible:ring-blue-500/15',
+  'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500',
+  'aria-[invalid=true]:border-red-400 aria-[invalid=true]:bg-red-50/30 aria-[invalid=true]:ring-4 aria-[invalid=true]:ring-red-500/10 aria-[invalid=true]:animate-shake',
+].join(' ')
 
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, type, ...props }, ref) => (
@@ -10,12 +21,9 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
       type={type}
       ref={ref}
       className={cn(
-        'flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors',
-        'placeholder:text-slate-400',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400',
-        'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500',
+        CONTROL,
+        'flex h-11 px-3.5 py-2',
         'file:border-0 file:bg-transparent file:text-sm file:font-medium',
-        'aria-[invalid=true]:border-red-400 aria-[invalid=true]:ring-red-500/20',
         className,
       )}
       {...props}
@@ -31,10 +39,8 @@ const Textarea = React.forwardRef<
   <textarea
     ref={ref}
     className={cn(
-      'flex min-h-[90px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors',
-      'placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400',
-      'disabled:cursor-not-allowed disabled:bg-slate-50',
-      'aria-[invalid=true]:border-red-400',
+      CONTROL,
+      'flex min-h-[96px] px-3.5 py-2.5 leading-relaxed',
       className,
     )}
     {...props}
@@ -49,7 +55,7 @@ const Label = React.forwardRef<
   <LabelPrimitive.Root
     ref={ref}
     className={cn(
-      'text-sm font-medium leading-none text-slate-700 peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
+      'text-[13px] font-semibold leading-none text-slate-700 peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
       className,
     )}
     {...props}
@@ -68,10 +74,9 @@ const Select = React.forwardRef<
   <select
     ref={ref}
     className={cn(
-      'flex h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2 pr-9 text-sm shadow-sm transition-colors',
+      CONTROL,
+      'flex h-11 appearance-none px-3.5 py-2 pr-9',
       'bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 24 24%27 stroke-width=%272%27 stroke=%27%2394a3b8%27%3E%3Cpath stroke-linecap=%27round%27 stroke-linejoin=%27round%27 d=%27m19.5 8.25-7.5 7.5-7.5-7.5%27/%3E%3C/svg%3E")] bg-[length:16px] bg-[right_0.65rem_center] bg-no-repeat',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400',
-      'disabled:cursor-not-allowed disabled:bg-slate-50',
       className,
     )}
     {...props}
@@ -100,7 +105,7 @@ export function Field({
   children: React.ReactNode
 }) {
   return (
-    <div className={cn('space-y-1.5', className)}>
+    <div className={cn('space-y-2', className)}>
       {label && (
         <Label htmlFor={htmlFor} required={required}>
           {label}
@@ -108,7 +113,10 @@ export function Field({
       )}
       {children}
       {error ? (
-        <p className="text-xs font-medium text-red-600">{error}</p>
+        <p role="alert" className="flex animate-fade-up items-start gap-1.5 text-xs font-medium text-red-600">
+          <AlertCircle className="mt-px size-3.5 shrink-0" />
+          {error}
+        </p>
       ) : hint ? (
         <p className="text-xs text-slate-500">{hint}</p>
       ) : null}

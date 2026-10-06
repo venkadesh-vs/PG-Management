@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BedDouble, CalendarClock, ChevronRight, Clock, LogOut, PackageMinus, PhoneCall, Wallet } from 'lucide-react'
+import { BedDouble, CalendarClock, ChevronRight, Clock, LogOut, PackageMinus, PhoneCall, Wallet, Inbox } from 'lucide-react'
 import type { AttentionCounts, AttentionFlags } from '@/server/services/analytics'
 import { LONG_VACANT_DAYS } from '@/server/services/analytics'
 import { cn, formatMoney } from '@/lib/utils'
@@ -84,6 +84,16 @@ function buildItems(c: AttentionCounts, f: AttentionFlags, withProperty: (href: 
       value: c.lowStock,
       text: `${plural(c.lowStock, 'grocery item is', 'grocery items are')} running low`,
       href: withProperty('/app/grocery'),
+    })
+  }
+  if (f.requests && c.pendingRequests > 0) {
+    items.push({
+      key: 'requests',
+      icon: Inbox,
+      severity: 'blue',
+      value: c.pendingRequests,
+      text: `${plural(c.pendingRequests, 'resident request is', 'resident requests are')} waiting for your answer`,
+      href: withProperty('/app/requests'),
     })
   }
   if (f.leads && c.followUpsDue > 0) {

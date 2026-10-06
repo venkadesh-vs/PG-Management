@@ -14,6 +14,7 @@ import { Badge, StatusChip } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { OccupancyBar } from '@/components/app/occupancy-ring'
 import { RoomBuilder } from './room-builder'
+import { PropertyActions } from './property-actions'
 
 export const metadata: Metadata = { title: 'PG settings' }
 
@@ -34,7 +35,25 @@ export default async function PropertyDetailPage({
         include: {
           rooms: {
             orderBy: { number: 'asc' },
-            include: { _count: { select: { beds: true } }, beds: { select: { status: true } } },
+            include: {
+              _count: { select: { beds: true, residents: true, complaints: true, tasks: true } },
+              beds: {
+                orderBy: { label: 'asc' },
+                select: {
+                  id: true,
+                  label: true,
+                  status: true,
+                  rent: true,
+                  resident: { select: { fullName: true } },
+                  _count: { select: { allocations: true, bookings: true } },
+                  bookings: {
+                    where: { status: { in: ['PENDING', 'CONFIRMED'] } },
+                    select: { code: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -46,7 +65,23 @@ export default async function PropertyDetailPage({
   if (!property) notFound()
 
   const theme = themeFor(property.type)
-  const occupancy = await occupancyFor([property.id])
+  const archived = Boolean(property.archivedAt)
+  const canManage = !archived && user.permissions.includes('properties.manage')
+  const canArchive = user.permissions.includes('properties.create')
+  const [occupancy, activeResidents, openBookings] = await Promise.all([
+    occupancyFor([property.id]),
+    prisma.resident.count({
+      where: { propertyId: property.id, status: { in: ['ACTIVE', 'NOTICE', 'PENDING'] } },
+    }),
+    prisma.booking.count({
+      where: { propertyId: property.id, status: { in: ['PENDING', 'CONFIRMED'] } },
+    }),
+  ])
+  const sub = property.subscription
+  const periodEnd =
+    sub && sub.status !== 'CANCELLED' && sub.currentPeriodEnd > new Date()
+      ? formatDate(sub.currentPeriodEnd)
+      : null
 
   return (
     <div className="space-y-6">
@@ -60,14 +95,33 @@ export default async function PropertyDetailPage({
           { label: property.name },
         ]}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={`/app/beds?property=${property.id}`}>
-              <Bed className="size-4" />
-              Open bed map
-            </Link>
-          </Button>
+          <>
+            {!archived && (
+              <Button variant="outline" asChild>
+                <Link href={`/app/beds?property=${property.id}`}>
+                  <Bed className="size-4" />
+                  Open bed map
+                </Link>
+              </Button>
+            )}
+            <PropertyActions
+              property={{ id: property.id, name: property.name, archived }}
+              canEdit={canManage}
+              canArchive={canArchive}
+              activeResidents={activeResidents}
+              openBookings={openBookings}
+              periodEnd={periodEnd}
+            />
+          </>
         }
       />
+
+      {archived && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This PG was archived on {formatDate(property.archivedAt!)}. It is hidden from the
+          dashboard and is not billed. {canArchive ? 'Restore it to edit or use it again.' : 'Ask the owner to restore it.'}
+        </div>
+      )}
 
       <div
         className={cn(
@@ -248,7 +302,7 @@ export default async function PropertyDetailPage({
       </Card>
 
       <RoomBuilder
-        canManage={user.permissions.includes('properties.manage')}
+        canManage={canManage}
         propertyId={property.id}
         propertyType={property.type}
         standardRent={property.standardRent}
@@ -258,13 +312,27 @@ export default async function PropertyDetailPage({
           level: floor.level,
           rooms: floor.rooms.map((room) => ({
             id: room.id,
+            floorId: room.floorId,
             number: room.number,
             type: room.type,
             capacity: room.capacity,
             baseRent: room.baseRent,
             hasAC: room.hasAC,
+            hasBalcony: room.hasBalcony,
+            hasAttachedBath: room.hasAttachedBath,
+            notes: room.notes,
             bedCount: room._count.beds,
             occupied: room.beds.filter((b) => b.status === 'OCCUPIED').length,
+            hasHistory: room._count.residents + room._count.complaints + room._count.tasks > 0,
+            beds: room.beds.map((bed) => ({
+              id: bed.id,
+              label: bed.label,
+              status: bed.status,
+              rent: bed.rent,
+              residentName: bed.resident?.fullName ?? null,
+              bookingCode: bed.bookings[0]?.code ?? null,
+              hasHistory: bed._count.allocations + bed._count.bookings > 0,
+            })),
           })),
         }))}
       />

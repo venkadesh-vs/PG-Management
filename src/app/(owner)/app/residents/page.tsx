@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Bed, Building2, Phone, UserPlus } from 'lucide-react'
+import { Bed, Building2, FileUp, Phone, UserPlus } from 'lucide-react'
 
 import type { Prisma, ResidentStatus } from '@prisma/client'
 import { requireAccess } from '@/lib/auth'
@@ -123,6 +123,14 @@ export default async function ResidentsPage({
             <Suspense fallback={null}>
               <ExportButton kind="residents" />
             </Suspense>
+          )}
+          {canCheckIn && (
+            <Button variant="outline" asChild>
+              <Link href="/app/residents/import">
+                <FileUp className="size-4" />
+                Import
+              </Link>
+            </Button>
           )}
           {canCheckIn && (
             <Button variant="primary" asChild>

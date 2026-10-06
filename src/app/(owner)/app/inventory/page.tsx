@@ -19,7 +19,8 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
-import { QuickForm } from '@/components/app/quick-form'
+import { QuickForm, type QuickField } from '@/components/app/quick-form'
+import { RowActions } from '@/components/app/row-actions'
 
 export const metadata: Metadata = { title: 'Inventory' }
 
@@ -97,6 +98,31 @@ export default async function InventoryPage({
       orderBy: { name: 'asc' },
     }),
   ])
+
+  const canManage = user.permissions.includes('inventory.manage')
+  const actionsFor = (asset: (typeof assets)[number]) =>
+    canManage ? (
+      <RowActions
+        label={asset.name}
+        edit={{
+          title: `Edit ${asset.name}`,
+          description: `${asset.property.name}. To retire an item but keep its record, set its condition to Disposed.`,
+          endpoint: `/api/assets/${asset.id}`,
+          successTitle: 'Item updated',
+          fields: assetEditFields(
+            asset,
+            rooms.filter((r) => r.propertyId === asset.propertyId),
+          ),
+        }}
+        remove={{
+          title: `Delete ${asset.name}?`,
+          description:
+            'Use this for items entered by mistake. To retire a real item and keep its cost on file, edit it and set the condition to Disposed instead.',
+          endpoint: `/api/assets/${asset.id}`,
+          successTitle: 'Item deleted',
+        }}
+      />
+    ) : null
 
   const activeFilters = [q, category, condition].filter(Boolean).length
 
@@ -230,6 +256,7 @@ export default async function InventoryPage({
                   <TableHead>Condition</TableHead>
                   <TableHead className="text-right">Cost</TableHead>
                   <TableHead>Bought</TableHead>
+                  {canManage && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -262,6 +289,7 @@ export default async function InventoryPage({
                       <TableCell className="text-sm text-slate-600">
                         {formatDate(asset.purchaseDate)}
                       </TableCell>
+                      {canManage && <TableCell className="w-10">{actionsFor(asset)}</TableCell>}
                     </TableRow>
                   )
                 })}
@@ -281,9 +309,12 @@ export default async function InventoryPage({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-medium text-slate-900">{asset.name}</p>
-                    <Badge variant={style.variant} size="sm">
-                      {style.label}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Badge variant={style.variant} size="sm">
+                        {style.label}
+                      </Badge>
+                      {actionsFor(asset)}
+                    </div>
                   </div>
                   <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                     <span className={cn('size-1.5 shrink-0 rounded-full', theme.bgSolid)} />
@@ -312,4 +343,55 @@ export default async function InventoryPage({
       )}
     </div>
   )
+}
+
+/** The add-item fields, prefilled from an existing item (PG fixed). */
+function assetEditFields(
+  asset: {
+    roomId: string | null
+    name: string
+    category: string
+    quantity: number
+    condition: string
+    location: string | null
+    purchaseDate: Date | null
+    purchaseCost: number
+    serialNumber: string | null
+    notes: string | null
+  },
+  rooms: { id: string; number: string }[],
+): QuickField[] {
+  return [
+    {
+      kind: 'select',
+      name: 'roomId',
+      label: 'Room',
+      half: true,
+      defaultValue: asset.roomId ?? '',
+      options: rooms.map((r) => ({ value: r.id, label: `Room ${r.number}` })),
+    },
+    { kind: 'text', name: 'location', label: 'Location', half: true, defaultValue: asset.location ?? '' },
+    { kind: 'text', name: 'name', label: 'Item name', required: true, half: true, defaultValue: asset.name },
+    { kind: 'text', name: 'category', label: 'Category', required: true, half: true, defaultValue: asset.category },
+    { kind: 'number', name: 'quantity', label: 'Quantity', required: true, half: true, defaultValue: asset.quantity },
+    {
+      kind: 'select',
+      name: 'condition',
+      label: 'Condition',
+      required: true,
+      half: true,
+      defaultValue: asset.condition,
+      options: Object.entries(CONDITION_STYLE).map(([value, meta]) => ({ value, label: meta.label })),
+    },
+    { kind: 'number', name: 'purchaseCost', label: 'Purchase cost', half: true, defaultValue: asset.purchaseCost },
+    {
+      kind: 'date',
+      name: 'purchaseDate',
+      label: 'Purchase date',
+      half: true,
+      defaultValue: asset.purchaseDate ? toISODate(asset.purchaseDate) : '',
+    },
+    { kind: 'text', name: 'serialNumber', label: 'Serial number', defaultValue: asset.serialNumber ?? '' },
+    { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2, defaultValue: asset.notes ?? '' },
+  ]
 }

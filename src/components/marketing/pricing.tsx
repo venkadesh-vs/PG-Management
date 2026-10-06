@@ -1,12 +1,14 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
-import { ArrowRight, Calculator, Check, Info, Minus, Plus } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { ArrowRight, Calculator, Check, HelpCircle, Info, Minus, Plus, Tag, X } from 'lucide-react'
 import { cn, formatMoney } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SectionHeading } from './sections'
+import { Reveal } from '@/components/motion/reveal'
+import { SectionHeading } from './kit'
+import { FAQS } from './faq-data'
 
 type PricingRule = {
   planName: string
@@ -20,6 +22,21 @@ type PricingRule = {
 }
 
 type PgRow = { id: number; label: string; rent: number; beds: number }
+
+const INCLUDED = [
+  'Unlimited residents and beds',
+  'Live bed map and bookings',
+  'Automatic rent and reminders',
+  'UPI collection and receipts',
+  'Resident app for every tenant',
+  'Worker app for your staff',
+  'Complaints with assignment',
+  'Food planning and meal counts',
+  'Grocery stock and purchases',
+  'Expenses and profit reports',
+  'Enquiries and visitors',
+  'Full activity history',
+]
 
 /**
  * Interactive pricing calculator. It uses the live default plan's rule, so
@@ -64,32 +81,28 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
   }
 
   return (
-    <section id="pricing" className="scroll-mt-20 py-20 sm:py-28">
+    <section id="pricing" aria-labelledby="pricing-title" className="relative scroll-mt-24 overflow-hidden py-20 sm:py-28">
+      <div className="mesh-blue absolute inset-x-0 top-0 -z-10 h-[480px] opacity-60" aria-hidden />
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <SectionHeading
           eyebrow="Pricing"
-          title="Simple pricing. Per PG."
+          icon={Tag}
+          title={<span id="pricing-title">Simple pricing. Per PG.</span>}
           description="One PG costs roughly what one resident pays you in rent. No per-tenant charges, no feature tiers, no surprises."
         />
 
-        <div className="mt-14 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
+        <div className="mt-14 grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:gap-8">
           {/* ------------------------------------------------- Calculator */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5 }}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:p-6"
-          >
-            <div className="flex items-center gap-2">
-              <Calculator className="size-4 text-blue-600" />
-              <h3 className="font-display text-base font-semibold text-slate-900">
-                Calculate my PG&apos;s price
-              </h3>
+          <Reveal className="min-w-0 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-lift sm:p-7">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <Calculator className="size-4" aria-hidden />
+              </span>
+              <div>
+                <h3 className="font-display text-base font-bold text-slate-900">Calculate my PG&apos;s price</h3>
+                <p className="text-sm text-slate-500">Enter what a standard resident pays you each month.</p>
+              </div>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              Enter what a standard resident pays you each month.
-            </p>
 
             <div className="mt-5 space-y-3">
               {rows.map((row) => (
@@ -98,13 +111,13 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                   layout
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl border border-slate-200 p-3"
+                  className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3 sm:p-4"
                 >
                   <div className="flex items-center gap-2">
                     <Input
                       value={row.label}
                       onChange={(e) => update(row.id, { label: e.target.value })}
-                      className="h-9 flex-1 border-0 bg-transparent px-0 text-sm font-medium shadow-none focus-visible:ring-0"
+                      className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
                       aria-label="PG name"
                     />
                     {rows.length > 1 && (
@@ -112,7 +125,7 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                         type="button"
                         onClick={() => removePg(row.id)}
                         aria-label={`Remove ${row.label}`}
-                        className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                       >
                         <Minus className="size-4" />
                       </button>
@@ -120,25 +133,25 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                   </div>
 
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="text-xs text-slate-500">Standard rent</span>
+                    <label className="block min-w-0">
+                      <span className="text-xs font-medium text-slate-500">Standard rent (₹)</span>
                       <Input
                         type="number"
                         inputMode="numeric"
                         value={row.rent}
                         onChange={(e) => update(row.id, { rent: Number(e.target.value) || 0 })}
-                        className="mt-1 h-9"
+                        className="mt-1 h-10 bg-white"
                       />
                     </label>
                     {rule.basis === 'PER_BED' && (
-                      <label className="block">
-                        <span className="text-xs text-slate-500">Number of beds</span>
+                      <label className="block min-w-0">
+                        <span className="text-xs font-medium text-slate-500">Number of beds</span>
                         <Input
                           type="number"
                           inputMode="numeric"
                           value={row.beds}
                           onChange={(e) => update(row.id, { beds: Number(e.target.value) || 0 })}
-                          className="mt-1 h-9"
+                          className="mt-1 h-10 bg-white"
                         />
                       </label>
                     )}
@@ -149,7 +162,7 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                           key={priceFor(row)}
                           initial={{ scale: 0.95, opacity: 0.6 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          className="font-display text-lg font-semibold text-slate-900 tabular"
+                          className="font-display text-xl font-bold text-slate-900 tabular"
                         >
                           {formatMoney(priceFor(row))}
                         </motion.p>
@@ -161,15 +174,16 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
             </div>
 
             <Button variant="outline" size="sm" className="mt-3 w-full" onClick={addPg}>
-              <Plus className="size-3.5" />
+              <Plus className="size-3.5" aria-hidden />
               Add another PG
             </Button>
 
             <motion.div
               layout
-              className="mt-5 flex items-center justify-between rounded-2xl bg-slate-900 p-5 text-white"
+              className="relative mt-5 flex flex-col gap-4 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-5 text-white sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
+              <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-blue-500/30 blur-3xl" aria-hidden />
+              <div className="relative min-w-0">
                 <p className="text-xs uppercase tracking-wide text-white/60">
                   Estimated total for {rows.length} PG{rows.length === 1 ? '' : 's'}
                 </p>
@@ -177,91 +191,68 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
                   key={total}
                   initial={{ scale: 0.96, opacity: 0.7 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="font-display text-3xl font-semibold tabular"
+                  className="font-display text-3xl font-extrabold tabular"
+                  aria-live="polite"
                 >
                   {formatMoney(total)}
                   <span className="text-base font-medium text-white/60">/month</span>
                 </motion.p>
               </div>
-              <Button variant="secondary" asChild className="bg-white text-slate-900 hover:bg-white/90">
+              <Button variant="accent" asChild className="relative">
                 <a href="/signup">
-                  Start free trial
-                  <ArrowRight className="size-3.5" />
+                  Start free
+                  <ArrowRight className="size-3.5" aria-hidden />
                 </a>
               </Button>
             </motion.div>
 
             <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-slate-500">
-              <Info className="mt-0.5 size-3.5 shrink-0" />
-              An example based on our current {rule.planName} plan rules —{' '}
-              {rule.basis === 'STANDARD_RENT'
-                ? `${rule.multiplier}% of each PG's standard rent`
-                : rule.basis === 'PER_BED'
-                  ? `${formatMoney(rule.perBedPrice)} per bed`
-                  : 'a flat monthly fee'}
-              , kept between {formatMoney(rule.minAmount)} and {formatMoney(rule.maxAmount)}. Your
-              final price is confirmed on the demo call.
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                An example based on our current {rule.planName} plan rules —{' '}
+                {rule.basis === 'STANDARD_RENT'
+                  ? `${rule.multiplier}% of each PG's standard rent`
+                  : rule.basis === 'PER_BED'
+                    ? `${formatMoney(rule.perBedPrice)} per bed`
+                    : 'a flat monthly fee'}
+                , kept between {formatMoney(rule.minAmount)} and {formatMoney(rule.maxAmount)}. Your final price is
+                confirmed on the demo call.
+              </span>
             </p>
-          </motion.div>
+          </Reveal>
 
           {/* ---------------------------------------------- What you get */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/80 to-white p-6"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-semibold text-slate-900">
-                Everything, included
-              </h3>
+          <Reveal delay={0.1} className="relative min-w-0 overflow-hidden rounded-3xl border border-blue-200/80 bg-gradient-to-b from-blue-50 via-white to-white p-6 shadow-soft sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-display text-lg font-bold text-slate-900">Everything, included</h3>
               {rule.trialDays > 0 && (
-                <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                <span className="rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-3 py-1 text-xs font-semibold text-white shadow-brand">
                   {rule.trialDays}-day free trial
                 </span>
               )}
             </div>
+            <p className="mt-2 text-sm text-slate-600">No feature gates. Every PG gets the whole product.</p>
 
-            <p className="mt-2 text-sm text-slate-600">
-              No feature gates. Every PG gets the whole product.
-            </p>
-
-            <ul className="mt-5 space-y-2.5">
-              {[
-                'Unlimited residents and beds',
-                'Automatic rent generation and reminders',
-                'WhatsApp reminders and receipts',
-                'Online rent collection with UPI',
-                'Resident app for every tenant',
-                'Worker app for your staff',
-                'Complaints with worker assignment',
-                'Food planning and meal counts',
-                'Grocery stock and purchase lists',
-                'Expenses and profit reports',
-                'Visitors, inventory and announcements',
-                'Full activity history',
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm text-slate-700">
-                  <Check className="mt-0.5 size-4 shrink-0 text-blue-600" strokeWidth={3} />
+            <ul className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {INCLUDED.map((item) => (
+                <li key={item} className="flex min-w-0 items-start gap-2 text-sm text-slate-700">
+                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-blue-600">
+                    <Check className="size-2.5 text-white" strokeWidth={3.5} aria-hidden />
+                  </span>
                   {item}
                 </li>
               ))}
             </ul>
 
-            <div className="mt-6 space-y-2 border-t border-blue-100 pt-5">
-              {[
-                'No per-tenant pricing',
-                'No complicated tiers',
-                'No per-feature charges',
-              ].map((item) => (
-                <p key={item} className="flex items-center gap-2 text-sm text-slate-500">
-                  <Minus className="size-3.5 text-slate-300" />
+            <div className="mt-6 flex flex-wrap gap-2 border-t border-blue-100 pt-5">
+              {['No per-tenant pricing', 'No complicated tiers', 'No setup fee'].map((item) => (
+                <span key={item} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  <X className="size-3 text-slate-400" aria-hidden />
                   {item}
-                </p>
+                </span>
               ))}
             </div>
-          </motion.div>
+          </Reveal>
         </div>
       </div>
     </section>
@@ -270,90 +261,63 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
 
 // ------------------------------------------------------------------- FAQ ----
 
-const FAQS = [
-  {
-    q: 'How long does it take to set up?',
-    a: 'An afternoon. Add your PG, create the floors and rooms — bulk-add handles a whole floor at once — then check residents in. Most owners start with one PG and add the second once they are comfortable.',
-  },
-  {
-    q: 'Do my residents have to install an app?',
-    a: 'No. The resident app runs in any phone browser. You share their login at check-in and they can add it to their home screen if they want to.',
-  },
-  {
-    q: 'What happens to my old records?',
-    a: 'You enter current residents once, with their joining date and rent. From that point the rent schedule, ledger and reports build themselves. You do not need to back-fill years of history.',
-  },
-  {
-    q: 'Can my manager use it without seeing everything?',
-    a: 'Yes. Managers run day-to-day operations but cannot change settings, delete a PG or touch the subscription. Workers only ever see their own task list.',
-  },
-  {
-    q: 'Are the WhatsApp reminders really automatic?',
-    a: 'Yes, once your WhatsApp Business account is connected. Reminders go out before the due date, on it, and after it, using approved templates. Before it is connected, the app shows you exactly what each resident would receive and marks it clearly as not sent.',
-  },
-  {
-    q: 'How do residents pay?',
-    a: 'By UPI from the resident app, or in cash which you record in one tap. Online payments are only marked paid after the payment gateway confirms them, so a receipt always means the money arrived.',
-  },
-  {
-    q: 'What if I run two PGs with different rents?',
-    a: 'Each PG carries its own rent configuration, its own theme and its own subscription. You switch between them from one selector, and can compare them side by side.',
-  },
-  {
-    q: 'Is my data safe?',
-    a: 'It lives in your own PostgreSQL database. Access is checked on the server for every request, each organization is isolated from every other, and every change is recorded in an activity log.',
-  },
-]
-
 export function FaqSection() {
   const [open, setOpen] = React.useState<number | null>(0)
+  const reduce = useReducedMotion()
 
   return (
-    <section id="faq" className="scroll-mt-20 bg-slate-50/70 py-20 sm:py-28">
+    <section id="faq" aria-labelledby="faq-title" className="scroll-mt-24 bg-slate-50/70 py-20 sm:py-28">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-        <SectionHeading eyebrow="FAQ" title="Questions PG owners ask us" />
+        <SectionHeading eyebrow="FAQ" icon={HelpCircle} title={<span id="faq-title">Questions PG owners ask us</span>} />
 
         <div className="mt-12 space-y-3">
           {FAQS.map((faq, i) => {
             const expanded = open === i
+            const panelId = `faq-panel-${i}`
+            const buttonId = `faq-button-${i}`
             return (
-              <motion.div
+              <Reveal
                 key={faq.q}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.35, delay: Math.min(i * 0.05, 0.3) }}
+                delay={Math.min(i * 0.04, 0.24)}
                 className={cn(
-                  'overflow-hidden rounded-2xl border bg-white transition-colors',
-                  expanded ? 'border-blue-200 shadow-elevated' : 'border-slate-200 shadow-card',
+                  'overflow-hidden rounded-2xl border bg-white transition-[border-color,box-shadow] duration-300',
+                  expanded ? 'border-blue-200 shadow-lift' : 'border-slate-200/80 shadow-soft',
                 )}
               >
-                <button
-                  type="button"
-                  onClick={() => setOpen(expanded ? null : i)}
-                  aria-expanded={expanded}
-                  className="flex w-full items-center gap-3 p-5 text-left"
-                >
-                  <span className="flex-1 font-display text-base font-semibold text-slate-900">
-                    {faq.q}
-                  </span>
-                  <span
-                    className={cn(
-                      'flex size-6 shrink-0 items-center justify-center rounded-full transition-all',
-                      expanded ? 'rotate-45 bg-blue-600 text-white' : 'bg-slate-100 text-slate-500',
-                    )}
+                <h3>
+                  <button
+                    id={buttonId}
+                    type="button"
+                    onClick={() => setOpen(expanded ? null : i)}
+                    aria-expanded={expanded}
+                    aria-controls={panelId}
+                    className="flex w-full items-center gap-3 rounded-2xl p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
                   >
-                    <Plus className="size-3.5" />
-                  </span>
-                </button>
+                    <span className="min-w-0 flex-1 font-display text-base font-semibold text-slate-900">{faq.q}</span>
+                    <span
+                      className={cn(
+                        'flex size-7 shrink-0 items-center justify-center rounded-full transition-all duration-300',
+                        expanded ? 'rotate-45 bg-blue-600 text-white' : 'bg-slate-100 text-slate-500',
+                      )}
+                      aria-hidden
+                    >
+                      <Plus className="size-3.5" />
+                    </span>
+                  </button>
+                </h3>
                 <motion.div
+                  id={panelId}
+                  role="region"
+                  aria-labelledby={buttonId}
                   initial={false}
                   animate={{ height: expanded ? 'auto' : 0, opacity: expanded ? 1 : 0 }}
+                  transition={{ duration: reduce ? 0 : 0.3 }}
                   className="overflow-hidden"
+                  hidden={!expanded && reduce ? true : undefined}
                 >
                   <p className="px-5 pb-5 text-sm leading-relaxed text-slate-600">{faq.a}</p>
                 </motion.div>
-              </motion.div>
+              </Reveal>
             )
           })}
         </div>

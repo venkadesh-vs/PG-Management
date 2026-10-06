@@ -110,6 +110,7 @@ export default async function OwnerDashboard({
     bookings: show.leads,
     leads: show.leads,
     residents: show.residents,
+    requests: user.modules.includes('requests') && (user.role === 'OWNER' || user.permissions.includes('requests.view')),
   }
 
   const [

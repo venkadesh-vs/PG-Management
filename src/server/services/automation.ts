@@ -17,6 +17,7 @@ import { orgsWithModuleOff } from './org-modules'
 import { expireBookings } from './bookings'
 import { sendLeadFollowUpReminders } from './leads'
 import { markSlaBreaches } from './complaints'
+import { applyApprovedLeaveToMeals } from './requests'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -219,6 +220,16 @@ async function runSteps(
     await prisma.session.deleteMany({ where: { expiresAt: { lt: addDays(now, -30) } } })
   } catch (error) {
     errors.push(`housekeeping: ${(error as Error).message}`)
+  }
+
+  // Approved leave (Resident requests) pauses meals published after the
+  // approval — today's and tomorrow's rows. Idempotent; runs before the
+  // meal-count refresh below so the counts include it.
+  try {
+    await applyApprovedLeaveToMeals(now, options?.organizationId)
+    await applyApprovedLeaveToMeals(addDays(now, 1), options?.organizationId)
+  } catch (error) {
+    errors.push(`leave meals: ${(error as Error).message}`)
   }
 
   // 6. Refresh today's expected meal counts from live subscriptions —

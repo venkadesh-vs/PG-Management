@@ -22,7 +22,8 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
-import { QuickForm } from '@/components/app/quick-form'
+import { QuickForm, type QuickField } from '@/components/app/quick-form'
+import { RowActions } from '@/components/app/row-actions'
 import { PurchaseButton } from './purchase-button'
 
 export const metadata: Metadata = { title: 'Grocery' }
@@ -74,7 +75,17 @@ export default async function GroceryPage({
     }),
     prisma.groceryItem.findMany({
       where: { propertyId: activeProperty },
-      select: { id: true, name: true, unit: true, lastPurchasePrice: true },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        lastPurchasePrice: true,
+        category: true,
+        minimumStock: true,
+        perResidentPerMeal: true,
+        vendor: true,
+        _count: { select: { purchases: true } },
+      },
       orderBy: { name: 'asc' },
     }),
   ])
@@ -83,6 +94,35 @@ export default async function GroceryPage({
   const needsBuying = plan.filter((item) => item.needsPurchase)
   const estimatedCost = needsBuying.reduce((s, item) => s + item.estimatedCost, 0)
   const mealsPerDay = plan[0]?.mealsPerDay ?? 0
+
+  const canManage = user.permissions.includes('grocery.manage')
+  const itemById = new Map(items.map((i) => [i.id, i]))
+  const actionsFor = (itemId: string) => {
+    const item = itemById.get(itemId)
+    if (!canManage || !item) return null
+    const purchases = item._count.purchases
+    return (
+      <RowActions
+        label={item.name}
+        edit={{
+          title: `Edit ${item.name}`,
+          description:
+            'Stock moves through purchases and meals, so it is not edited here. The unit is fixed once purchases are recorded.',
+          endpoint: `/api/grocery-items/${item.id}`,
+          successTitle: 'Item updated',
+          fields: groceryEditFields(item),
+        }}
+        remove={{
+          title: `Remove ${item.name} from the stock list?`,
+          description: 'It has never been purchased, so no history is lost.',
+          endpoint: `/api/grocery-items/${item.id}`,
+          successTitle: 'Item removed',
+          confirmLabel: 'Remove item',
+          disabledReason: purchases > 0 ? `${purchases} purchase${purchases === 1 ? '' : 's'} on file` : undefined,
+        }}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -232,6 +272,7 @@ export default async function GroceryPage({
                   <TableHead className="text-right">Per resident/meal</TableHead>
                   <TableHead className="text-right">Last price</TableHead>
                   <TableHead>Status</TableHead>
+                  {canManage && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -268,6 +309,7 @@ export default async function GroceryPage({
                           </Badge>
                         )}
                       </TableCell>
+                      {canManage && <TableCell className="w-10">{actionsFor(item.id)}</TableCell>}
                     </TableRow>
                   )
                 })}
@@ -286,15 +328,18 @@ export default async function GroceryPage({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-medium text-slate-900">{item.name}</p>
-                    {low ? (
-                      <Badge variant="danger" size="sm">
-                        Restock
-                      </Badge>
-                    ) : (
-                      <Badge variant="success" size="sm">
-                        OK
-                      </Badge>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {low ? (
+                        <Badge variant="danger" size="sm">
+                          Restock
+                        </Badge>
+                      ) : (
+                        <Badge variant="success" size="sm">
+                          OK
+                        </Badge>
+                      )}
+                      {actionsFor(item.id)}
+                    </div>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {item.category} · min {item.minimumStock} {UNIT_LABEL[item.unit]}
@@ -491,4 +536,51 @@ export default async function GroceryPage({
 
     </div>
   )
+}
+
+const UNIT_OPTIONS = [
+  { value: 'KG', label: 'Kilogram' },
+  { value: 'GRAM', label: 'Gram' },
+  { value: 'LITRE', label: 'Litre' },
+  { value: 'ML', label: 'Millilitre' },
+  { value: 'PIECE', label: 'Piece' },
+  { value: 'PACKET', label: 'Packet' },
+  { value: 'DOZEN', label: 'Dozen' },
+  { value: 'CYLINDER', label: 'Cylinder' },
+]
+
+/** The add-item fields minus PG and stock, prefilled from an existing item. */
+function groceryEditFields(item: {
+  name: string
+  category: string
+  unit: string
+  minimumStock: number
+  perResidentPerMeal: number
+  vendor: string | null
+  _count: { purchases: number }
+}): QuickField[] {
+  const unitLocked = item._count.purchases > 0
+  return [
+    { kind: 'text', name: 'name', label: 'Item name', required: true, half: true, defaultValue: item.name },
+    { kind: 'text', name: 'category', label: 'Category', required: true, half: true, defaultValue: item.category },
+    {
+      kind: 'select',
+      name: 'unit',
+      label: 'Unit',
+      required: true,
+      half: true,
+      defaultValue: item.unit,
+      hint: unitLocked ? 'Fixed — purchases are recorded in this unit' : undefined,
+      options: unitLocked ? UNIT_OPTIONS.filter((u) => u.value === item.unit) : UNIT_OPTIONS,
+    },
+    { kind: 'number', name: 'minimumStock', label: 'Minimum stock', half: true, defaultValue: item.minimumStock },
+    {
+      kind: 'number',
+      name: 'perResidentPerMeal',
+      label: 'Per resident, per meal',
+      hint: 'In grams or millilitres for weight/volume items, pieces otherwise. 0 for items not consumed per meal.',
+      defaultValue: item.perResidentPerMeal,
+    },
+    { kind: 'text', name: 'vendor', label: 'Usual vendor', defaultValue: item.vendor ?? '' },
+  ]
 }

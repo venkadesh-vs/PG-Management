@@ -36,6 +36,18 @@ export default async function PropertiesPage({
     }),
     propertyComparison(scope.organizationId, scope.allowedPropertyIds),
   ])
+  // Archived PGs drop out of every list; whoever can restore them gets a way back.
+  const archived = canCreate
+    ? await prisma.property.findMany({
+        where: {
+          organizationId: scope.organizationId,
+          archivedAt: { not: null },
+          ...(user.propertyIds.length ? { id: { in: user.propertyIds } } : {}),
+        },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      })
+    : []
 
   return (
     <div className="space-y-6">
@@ -177,6 +189,20 @@ export default async function PropertiesPage({
         </div>
       )}
 
+      {archived.length > 0 && (
+        <p className="text-xs text-slate-500">
+          Archived PGs:{' '}
+          {archived.map((p, i) => (
+            <span key={p.id}>
+              {i > 0 && ', '}
+              <Link href={`/app/properties/${p.id}`} className="font-medium text-slate-700 hover:underline">
+                {p.name}
+              </Link>
+            </span>
+          ))}{' '}
+          — open one to restore it.
+        </p>
+      )}
     </div>
   )
 }

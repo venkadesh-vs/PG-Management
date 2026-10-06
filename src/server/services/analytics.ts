@@ -496,6 +496,8 @@ export type AttentionFlags = {
   bookings: boolean
   leads: boolean
   residents: boolean
+  /** Resident requests waiting for a decision (module + requests.view). */
+  requests?: boolean
 }
 
 export type AttentionCounts = Awaited<ReturnType<typeof attentionSummary>>
@@ -629,6 +631,12 @@ export async function attentionSummary(scope: PropertyScope, flags: AttentionFla
       ),
     ])
 
+  const pendingRequests = flags.requests && propertyIds.length
+    ? await prisma.residentRequest.count({
+        where: { organizationId: scope.organizationId, propertyId: { in: propertyIds }, status: 'PENDING' },
+      })
+    : 0
+
   const longVacantBeds = availableBeds.filter((b) => {
     const since = b.allocations[0]?.toDate ?? b.updatedAt
     return since < vacantCutoff
@@ -643,6 +651,7 @@ export async function attentionSummary(scope: PropertyScope, flags: AttentionFla
     expiringBookings,
     followUpsDue: followUps,
     leavingThisWeek: leaving,
+    pendingRequests,
   }
 }
 

@@ -108,7 +108,7 @@ export async function upsertMeal(params: {
   const day = startOfDay(params.date)
   const expected = await expectedMealCount(params.propertyId, params.type, day)
 
-  return prisma.meal.upsert({
+  const meal = await prisma.meal.upsert({
     where: {
       propertyId_date_type: { propertyId: params.propertyId, date: day, type: params.type },
     },
@@ -123,6 +123,11 @@ export async function upsertMeal(params: {
     },
     update: { menu: params.menu, notes: params.notes, expectedCount: expected },
   })
+  // A menu published after the morning run must still respect approved leave.
+  // Imported lazily: requests.ts depends on this module.
+  const { applyApprovedLeaveToMeals } = await import('./requests')
+  await applyApprovedLeaveToMeals(day, params.organizationId)
+  return meal
 }
 
 export async function markMealServed(params: {

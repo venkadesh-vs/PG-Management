@@ -104,6 +104,10 @@ export function ResidentActions({
   const [dialog, setDialog] = React.useState<'payment' | 'transfer' | 'notice' | 'checkout' | null>(
     null,
   )
+  // "Approve & open transfer" on a room-change request links here with ?transfer=1.
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('transfer') === '1') setDialog('transfer')
+  }, [])
   const active = resident.status !== 'CHECKED_OUT'
 
   return (

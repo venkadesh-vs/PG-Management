@@ -1,34 +1,53 @@
 import type { Metadata } from 'next'
-import { CalendarClock } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
 import { publicEnv } from '@/lib/public-env'
 import { SiteFooter, SiteHeader } from '@/components/marketing/site-chrome'
 import { Hero } from '@/components/marketing/hero'
+import { StorySection } from '@/components/marketing/story'
+import { ConnectedSection } from '@/components/marketing/connected'
 import {
-  AutomationSection,
-  MultiPgSection,
-  OperationsSection,
-  ProblemSection,
+  BedsSection,
+  ComplaintsSection,
+  EnquiriesSection,
+  FoodSection,
   RentSection,
   ResidentAppSection,
-  SectionHeading,
-  SolutionSection,
-  TrustSection,
+  ResidentsSection,
+  RevenueSection,
 } from '@/components/marketing/sections'
 import { FaqSection, PricingSection } from '@/components/marketing/pricing'
-import { DemoForm, FinalCta } from '@/components/marketing/demo-form'
+import { DemoSection, FinalCta } from '@/components/marketing/demo-form'
+import { FAQS } from '@/components/marketing/faq-data'
+
+const TITLE = 'StayFlow — The Operating System for PGs'
+const DESCRIPTION =
+  'Your PG. Finally under control. StayFlow helps PG owners manage beds, residents, rent, staff, food, complaints and profit — from one place. Start free.'
 
 export const metadata: Metadata = {
-  title: 'PG Management Software — Run your entire PG from one place',
-  description:
-    'StayFlow replaces notebooks, WhatsApp and phone calls with one automated PG management platform. Residents, rooms and beds, rent collection, WhatsApp reminders, complaints, food, grocery, staff and reports.',
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  keywords: [
+    'PG management software',
+    'paying guest management',
+    'hostel management software',
+    'PG rent collection',
+    'PG bed management',
+    'co-living management',
+  ],
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'StayFlow — Run your entire PG from one place',
+    title: 'StayFlow — Your PG. Finally under control.',
     description:
-      'Automated PG management software for men\'s and women\'s PGs: residents, rooms, rent, complaints, food and staff in one platform.',
+      'The operating system for PG owners: beds, residents, rent, staff, food, complaints and profit in one place.',
     url: publicEnv.siteUrl,
+    siteName: publicEnv.appName,
     type: 'website',
+    locale: 'en_IN',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'StayFlow — Your PG. Finally under control.',
+    description: 'The operating system for PG owners: beds, residents, rent, staff, food, complaints and profit.',
   },
 }
 
@@ -61,65 +80,91 @@ export default async function LandingPage() {
     trialDays: plan?.trialDays ?? 14,
   }
 
-  // Structured data helps the page describe itself to search engines without
-  // keyword stuffing the copy.
+  // Structured data: what the product is, who makes it, and the FAQ — no
+  // ratings or review counts, because the site deliberately has none.
+  const organizationId = `${publicEnv.siteUrl}/#organization`
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: publicEnv.appName,
-    applicationCategory: 'BusinessApplication',
-    operatingSystem: 'Web',
-    description:
-      'PG management software for paying guest and hostel owners: residents, rooms and beds, rent collection, WhatsApp reminders, complaints, food, grocery, staff and reports.',
-    url: publicEnv.siteUrl,
-    offers: {
-      '@type': 'Offer',
-      priceCurrency: 'INR',
-      description: 'Priced per PG, based on one standard resident rent.',
-    },
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': organizationId,
+        name: publicEnv.legalName || publicEnv.appName,
+        alternateName: publicEnv.appName,
+        url: publicEnv.siteUrl,
+        logo: `${publicEnv.siteUrl}/icons/owner-512.png`,
+        email: publicEnv.contactEmail,
+        ...(publicEnv.contactPhone ? { telephone: publicEnv.contactPhone } : {}),
+        contactPoint: {
+          '@type': 'ContactPoint',
+          contactType: 'sales',
+          email: publicEnv.contactEmail,
+          areaServed: 'IN',
+          availableLanguage: ['en'],
+        },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: publicEnv.appName,
+        applicationCategory: 'BusinessApplication',
+        applicationSubCategory: 'PG and hostel management',
+        operatingSystem: 'Web, Android, iOS (browser)',
+        description: DESCRIPTION,
+        url: publicEnv.siteUrl,
+        publisher: { '@id': organizationId },
+        featureList: [
+          'Live bed map',
+          'Resident check-in and KYC',
+          'Automatic rent invoices and reminders',
+          'UPI rent collection',
+          'Enquiries and bookings',
+          'Food planning and meal counts',
+          'Complaints with worker assignment',
+          'Vacancy loss and profit reports',
+          'Resident app and worker app',
+        ],
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'INR',
+          ...(rule.basis === 'FLAT' ? { price: rule.flatPrice } : {}),
+          description: 'Priced per PG per month, with a free trial.',
+        },
+      },
+      {
+        '@type': 'FAQPage',
+        mainEntity: FAQS.map((faq) => ({
+          '@type': 'Question',
+          name: faq.q,
+          acceptedAnswer: { '@type': 'Answer', text: faq.a },
+        })),
+      },
+    ],
   }
 
   return (
     <div className="min-h-dvh bg-white">
       <script
         type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
 
       <SiteHeader />
 
-      <main>
+      <main id="main">
         <Hero />
-        <ProblemSection />
-        <SolutionSection />
-        <AutomationSection />
+        <StorySection />
+        <ConnectedSection />
+        <BedsSection />
+        <ResidentsSection />
         <RentSection />
+        <EnquiriesSection />
+        <FoodSection />
+        <ComplaintsSection />
+        <RevenueSection />
         <ResidentAppSection />
-        <MultiPgSection />
-        <OperationsSection />
-        <TrustSection />
         <PricingSection rule={rule} />
-
-        {/* ------------------------------------------------------- Demo */}
-        <section id="demo" className="scroll-mt-20 bg-slate-50/70 py-20 sm:py-28">
-          <div className="mx-auto w-full max-w-4xl px-4 sm:px-6">
-            <SectionHeading
-              eyebrow="Book a free demo"
-              title="See it with your own PG's numbers."
-              description="Tell us a little about your PG and we will walk you through exactly how it would work for you — not a generic slide deck."
-            />
-            <div className="mt-10">
-              <DemoForm />
-            </div>
-            <p className="mt-6 flex items-center justify-center gap-1.5 text-sm text-slate-500">
-              <CalendarClock className="size-4" />
-              Demos take about 20 minutes, on a call or over WhatsApp.
-            </p>
-          </div>
-        </section>
-
         <FaqSection />
+        <DemoSection />
         <FinalCta />
       </main>
 

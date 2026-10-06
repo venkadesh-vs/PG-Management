@@ -1,301 +1,310 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import {
   ArrowRight,
-  Bed,
+  BedDouble,
   CheckCircle2,
+  IndianRupee,
+  LayoutDashboard,
+  MessageSquareWarning,
   PlayCircle,
-  Sparkles,
-  Utensils,
-  Wallet,
+  Users,
+  UtensilsCrossed,
   Wrench,
 } from 'lucide-react'
-import { cn, formatMoney } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { AnimatedNumber } from '@/components/ui/feedback'
-
-const HERO_STATS = [
-  { label: 'Residents', value: 128, tone: 'blue' as const },
-  { label: 'Occupancy', value: 82, suffix: '%', tone: 'violet' as const },
-  { label: 'Collected', value: 840000, money: true, tone: 'emerald' as const },
-  { label: 'Pending', value: 32000, money: true, tone: 'amber' as const },
-]
+import { EASE_OUT } from '@/components/motion/reveal'
+import { BED_STYLES, BrowserFrame, Pill, Tilt, type BedState } from './kit'
 
 /**
- * The hero, with a live-feeling dashboard preview beside it. The numbers here
- * are illustrative of a mid-size PG and labelled as a preview — they are not
- * presented as customer data.
+ * Hero: the promise on the left, a floating StayFlow dashboard on the right
+ * that drifts with scroll (parallax) and tilts toward the pointer. Figures in
+ * the mock-up are sample data for a 48-bed PG, not customer data.
  */
 export function Hero() {
+  const reduce = useReducedMotion()
+  const ref = React.useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
+  const dashY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 90])
+  const chipY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60])
+
+  const rise = (delay: number) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0, y: 18 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.7, ease: EASE_OUT, delay },
+        }
+
   return (
-    <section className="relative overflow-hidden pt-28 sm:pt-32">
-      <div className="mesh-blue absolute inset-0 -z-10" />
-      <div className="dot-grid absolute inset-0 -z-10 opacity-40" />
-      <div
-        className="absolute inset-x-0 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-blue-300 to-transparent"
-        aria-hidden
-      />
+    <section ref={ref} aria-labelledby="hero-title" className="grain relative isolate overflow-hidden pb-16 pt-28 sm:pb-24 sm:pt-36">
+      <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden>
+        <div className="aurora" />
+        <div className="dot-grid absolute inset-0 opacity-50 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+      </div>
 
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr]">
-          {/* ------------------------------------------------------ Copy */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50/80 px-3 py-1 text-xs font-medium text-blue-700 backdrop-blur">
-              <Sparkles className="size-3" />
-              An automated operating system for PGs
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_1.08fr] lg:gap-10">
+        <div className="min-w-0 text-center lg:text-left">
+          <motion.p {...rise(0)} className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-200/80 bg-white/70 py-1 pl-1 pr-3 text-xs font-semibold text-blue-800 shadow-soft backdrop-blur">
+            <span className="rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
+              StayFlow
             </span>
+            <span className="truncate">The operating system for PGs</span>
+          </motion.p>
 
-            <h1 className="mt-5 font-display text-4xl font-bold leading-[1.08] tracking-tight text-slate-900 text-balance sm:text-5xl lg:text-6xl">
-              Run your entire PG from one place.
-            </h1>
-
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600 text-pretty">
-              Replace notebooks, WhatsApp and phone calls with one platform that manages residents,
-              rooms, rent, payments, complaints, food, staff and daily operations — and keeps them
-              connected to each other.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button variant="primary" size="xl" asChild>
-                <a href="/signup">
-                  Start free trial
-                  <ArrowRight className="size-4" />
-                </a>
-              </Button>
-              <Button variant="outline" size="xl" asChild>
-                <a href="#demo">
-                  <PlayCircle className="size-4" />
-                  Book a free demo
-                </a>
-              </Button>
-            </div>
-
-            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2">
-              {[
-                'Set up in an afternoon',
-                'Works on any phone',
-                'Your data stays yours',
-              ].map((item) => (
-                <li key={item} className="flex items-center gap-1.5 text-sm text-slate-600">
-                  <CheckCircle2 className="size-4 text-emerald-500" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-
-          {/* -------------------------------------------- Dashboard preview */}
-          <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
-            className="relative"
+          <motion.h1
+            id="hero-title"
+            {...rise(0.06)}
+            className="mt-6 font-display text-[2.6rem] font-extrabold leading-[1.02] tracking-tight text-slate-900 sm:text-6xl lg:text-[4.25rem]"
           >
-            <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-blue-500/10 via-transparent to-pink-500/10 blur-2xl" />
+            Your PG.
+            <br />
+            <span className="text-gradient-animated">Finally under control.</span>
+          </motion.h1>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-float">
-              {/* Window chrome */}
-              <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
-                <span className="size-2.5 rounded-full bg-red-400" />
-                <span className="size-2.5 rounded-full bg-amber-400" />
-                <span className="size-2.5 rounded-full bg-emerald-400" />
-                <span className="ml-2 rounded-md bg-white px-2 py-0.5 text-[10px] text-slate-400">
-                  Dashboard preview
-                </span>
-              </div>
+          <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-slate-600 text-pretty lg:mx-0">
+            StayFlow is the operating system that helps PG owners manage beds, residents, rent, staff,
+            food, complaints and profit — from one place.
+          </motion.p>
 
-              <div className="space-y-4 p-4 sm:p-5">
-                {/* PG switcher row */}
-                <div className="flex gap-2">
-                  <PgPill label="Men's PG" tone="blue" active />
-                  <PgPill label="Women's PG" tone="pink" />
-                </div>
-
-                {/* Stat grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {HERO_STATS.map((stat, i) => (
-                    <motion.div
-                      key={stat.label}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + i * 0.08 }}
-                      className="rounded-xl border border-slate-200 bg-white p-3"
-                    >
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                        {stat.label}
-                      </p>
-                      <p
-                        className={cn(
-                          'font-display text-xl font-semibold tabular',
-                          stat.tone === 'blue'
-                            ? 'text-blue-700'
-                            : stat.tone === 'violet'
-                              ? 'text-violet-700'
-                              : stat.tone === 'emerald'
-                                ? 'text-emerald-700'
-                                : 'text-amber-700',
-                        )}
-                      >
-                        <AnimatedNumber
-                          value={stat.value}
-                          format={stat.money ? 'moneyCompact' : 'number'}
-                        />
-                        {stat.suffix}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-
-                {/* Bed map strip */}
-                <div className="rounded-xl border border-slate-200 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                      <Bed className="size-3.5 text-slate-400" />
-                      Room 204
-                    </p>
-                    <span className="text-[10px] text-slate-400">3 of 4 filled</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    {[
-                      { label: 'A', state: 'occupied' },
-                      { label: 'B', state: 'available' },
-                      { label: 'C', state: 'occupied' },
-                      { label: 'D', state: 'maintenance' },
-                    ].map((bed, i) => (
-                      <motion.span
-                        key={bed.label}
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.6 + i * 0.07 }}
-                        className={cn(
-                          'flex size-9 items-center justify-center rounded-lg border text-xs font-semibold',
-                          bed.state === 'occupied'
-                            ? 'border-slate-200 bg-white text-slate-700'
-                            : bed.state === 'available'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : 'border-orange-200 bg-orange-50 text-orange-700',
-                        )}
-                      >
-                        {bed.label}
-                      </motion.span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Ops rows */}
-                <div className="space-y-1.5">
-                  <OpsRow
-                    icon={Wallet}
-                    label="Rent due today"
-                    value="3 residents"
-                    tone="amber"
-                    delay={0.75}
-                  />
-                  <OpsRow
-                    icon={Utensils}
-                    label="Meals to cook"
-                    value="118 / 122 / 120"
-                    tone="slate"
-                    delay={0.82}
-                  />
-                  <OpsRow
-                    icon={Wrench}
-                    label="Open complaints"
-                    value="7"
-                    tone="red"
-                    delay={0.89}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Floating reminder card */}
-            <motion.div
-              initial={{ opacity: 0, x: 20, y: 10 }}
-              animate={{ opacity: 1, x: 0, y: 0 }}
-              transition={{ delay: 1, duration: 0.5 }}
-              className="absolute -bottom-6 -left-4 hidden w-56 rounded-2xl border border-emerald-100 bg-[#dcf8c6] p-3 shadow-float sm:block"
-            >
-              <p className="text-[11px] leading-relaxed text-slate-800">
-                Hi Arun 👋
-                <br />
-                Your PG rent of <strong>{formatMoney(8500)}</strong> is due on 10 October.
-                <br />
-                Room 204 · StayFlow Men&apos;s
-              </p>
-              <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">
-                Sent automatically
-              </p>
-            </motion.div>
+          <motion.div {...rise(0.22)} className="mt-9 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+            <Button variant="primary" size="xl" asChild>
+              <a href="/signup">
+                Start free
+                <ArrowRight className="group-hover/btn:translate-x-0.5" aria-hidden />
+              </a>
+            </Button>
+            <Button variant="outline" size="xl" asChild className="bg-white/80 backdrop-blur">
+              <a href="#demo">
+                <PlayCircle aria-hidden />
+                Book a demo
+              </a>
+            </Button>
           </motion.div>
+
+          <motion.ul {...rise(0.3)} className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
+            {['Free trial, no card', 'Works on any phone', 'Set up in an afternoon'].map((item) => (
+              <li key={item} className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-4 text-emerald-500" aria-hidden />
+                {item}
+              </li>
+            ))}
+          </motion.ul>
         </div>
+
+        <motion.div style={{ y: dashY }} className="relative min-w-0" aria-hidden>
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 40, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 1, ease: EASE_OUT, delay: 0.2 }}
+          className="relative"
+        >
+          <div className="absolute inset-6 -z-10 rounded-full bg-blue-500/25 blur-3xl" />
+          <Tilt max={5}>
+            <HeroDashboard />
+          </Tilt>
+
+          <motion.div style={{ y: chipY }} className="pointer-events-none absolute inset-0">
+            <FloatingChip className="-left-3 top-[18%] sm:-left-8" delay={0.9}>
+              <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                <IndianRupee className="size-3.5" />
+              </span>
+              <span>
+                <span className="block text-[10px] text-slate-500">Room 204 · Arjun</span>
+                <span className="block text-xs font-semibold text-slate-900">₹9,000 paid</span>
+              </span>
+            </FloatingChip>
+            <FloatingChip className="-right-2 top-[46%] sm:-right-6" delay={1.15} slow>
+              <span className="flex size-7 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+                <Wrench className="size-3.5" />
+              </span>
+              <span>
+                <span className="block text-[10px] text-slate-500">Fan not working</span>
+                <span className="block text-xs font-semibold text-emerald-700">Resolved by Ravi</span>
+              </span>
+            </FloatingChip>
+            <FloatingChip className="bottom-[-14px] left-[12%]" delay={1.4}>
+              <span className="flex size-7 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+                <BedDouble className="size-3.5" />
+              </span>
+              <span>
+                <span className="block text-[10px] text-slate-500">Bed 105-B</span>
+                <span className="block text-xs font-semibold text-slate-900">Reserved for 1 Nov</span>
+              </span>
+            </FloatingChip>
+          </motion.div>
+        </motion.div>
+        </motion.div>
       </div>
     </section>
   )
 }
 
-function PgPill({
-  label,
-  tone,
-  active,
+function FloatingChip({
+  children,
+  className,
+  delay,
+  slow,
 }: {
-  label: string
-  tone: 'blue' | 'pink'
-  active?: boolean
+  children: React.ReactNode
+  className?: string
+  delay: number
+  slow?: boolean
 }) {
+  const reduce = useReducedMotion()
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
-        active
-          ? tone === 'blue'
-            ? 'border-blue-200 bg-blue-50 text-blue-700'
-            : 'border-pink-200 bg-pink-50 text-pink-700'
-          : 'border-slate-200 bg-white text-slate-500',
-      )}
+    <motion.div
+      initial={reduce ? false : { opacity: 0, scale: 0.85, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 22, delay }}
+      className={cn('absolute hidden sm:block', className)}
     >
-      <span
-        className={cn('size-1.5 rounded-full', tone === 'blue' ? 'bg-blue-500' : 'bg-pink-500')}
-      />
-      {label}
-    </span>
+      <div className={cn('glass flex items-center gap-2.5 rounded-2xl px-3 py-2 shadow-lift', slow ? 'animate-float-slow' : 'animate-float')}>
+        {children}
+      </div>
+    </motion.div>
   )
 }
 
-function OpsRow({
-  icon: Icon,
-  label,
-  value,
-  tone,
-  delay,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string
-  tone: 'amber' | 'slate' | 'red'
-  delay: number
-}) {
+// ---------------------------------------------------------- Dashboard ----
+
+const NAV = [
+  { icon: LayoutDashboard, label: 'Overview', active: true },
+  { icon: BedDouble, label: 'Beds' },
+  { icon: Users, label: 'Residents' },
+  { icon: IndianRupee, label: 'Rent' },
+  { icon: UtensilsCrossed, label: 'Food' },
+  { icon: MessageSquareWarning, label: 'Complaints' },
+]
+
+const BEDS: BedState[] = [
+  'occupied', 'occupied', 'available', 'occupied', 'reserved', 'occupied',
+  'occupied', 'maintenance', 'occupied', 'occupied', 'available', 'occupied',
+  'occupied', 'occupied', 'blocked', 'occupied', 'occupied', 'reserved',
+]
+
+/** The hero mock-up: a compact StayFlow owner overview. */
+function HeroDashboard() {
+  const reduce = useReducedMotion()
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay }}
-      className="flex items-center gap-2.5 rounded-lg border border-slate-100 px-2.5 py-2"
-    >
-      <Icon
-        className={cn(
-          'size-3.5',
-          tone === 'amber' ? 'text-amber-500' : tone === 'red' ? 'text-red-500' : 'text-slate-400',
-        )}
-      />
-      <span className="flex-1 text-xs text-slate-600">{label}</span>
-      <span className="text-xs font-semibold text-slate-800 tabular">{value}</span>
-    </motion.div>
+    <BrowserFrame title="app.stayflow.in/overview" className="shadow-[0_40px_80px_-30px_rgb(48_44_126/0.45)]">
+      <div className="flex">
+        <div className="hidden w-36 shrink-0 border-r border-slate-100 bg-slate-50/70 p-2.5 sm:block">
+          {NAV.map(({ icon: Icon, label, active }) => (
+            <div
+              key={label}
+              className={cn(
+                'mb-0.5 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-medium',
+                active ? 'bg-white text-blue-700 shadow-soft' : 'text-slate-500',
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div className="min-w-0 flex-1 p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] text-slate-400">Sree Balaji PG · Sample data</p>
+              <p className="truncate font-display text-sm font-bold text-slate-900">Good morning, Lakshmi</p>
+            </div>
+            <Pill tone="green">Live</Pill>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { k: 'Occupancy', v: '87%', s: '42 / 48 beds', c: 'text-violet-700' },
+              { k: 'Collected', v: '₹3.2L', s: 'this month', c: 'text-emerald-700' },
+              { k: 'Due', v: '₹54K', s: '6 residents', c: 'text-amber-700' },
+              { k: 'Complaints', v: '3', s: '1 urgent', c: 'text-red-600' },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.k}
+                initial={reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + i * 0.08, duration: 0.5, ease: EASE_OUT }}
+                className="rounded-xl border border-slate-100 bg-white p-2.5 shadow-soft"
+              >
+                <p className="text-[10px] text-slate-500">{stat.k}</p>
+                <p className={cn('font-display text-base font-bold tabular', stat.c)}>{stat.v}</p>
+                <p className="text-[9px] text-slate-400">{stat.s}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1.25fr_1fr]">
+            <div className="rounded-xl border border-slate-100 p-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-slate-700">Floor 1 · beds</p>
+                <p className="text-[9px] text-slate-400">tap a bed</p>
+              </div>
+              <div className="mt-2 grid grid-cols-6 gap-1">
+                {BEDS.map((state, i) => (
+                  <motion.span
+                    key={i}
+                    initial={reduce ? false : { opacity: 0, scale: 0.6 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.7 + i * 0.025, type: 'spring', stiffness: 400, damping: 22 }}
+                    className={cn('flex h-6 items-center justify-center rounded-md border text-[8px] font-semibold', BED_STYLES[state].tile)}
+                  >
+                    {101 + Math.floor(i / 2)}
+                    {i % 2 ? 'B' : 'A'}
+                  </motion.span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-100 p-2.5">
+              <p className="text-[11px] font-semibold text-slate-700">Rent this month</p>
+              <div className="mt-2 space-y-1.5">
+                {[
+                  { n: 'Arjun · 204A', s: 'Paid', t: 'green' as const },
+                  { n: 'Priya · 108B', s: 'Due', t: 'amber' as const },
+                  { n: 'Karthik · 112A', s: 'Overdue', t: 'red' as const },
+                  { n: 'Meena · 301A', s: 'Paid', t: 'green' as const },
+                ].map((row) => (
+                  <div key={row.n} className="flex items-center justify-between gap-1">
+                    <span className="truncate text-[10px] text-slate-600">{row.n}</span>
+                    <Pill tone={row.t}>{row.s}</Pill>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-100 p-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-slate-700">Collections · last 6 months</p>
+              <p className="text-[10px] font-semibold text-emerald-600">+12%</p>
+            </div>
+            <svg viewBox="0 0 300 54" className="mt-1 h-12 w-full" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="hero-area" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#6863ee" stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="#6863ee" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M0 44 C40 40 60 34 100 32 S160 30 190 22 S250 12 300 6 L300 54 L0 54Z" fill="url(#hero-area)" />
+              <motion.path
+                d="M0 44 C40 40 60 34 100 32 S160 30 190 22 S250 12 300 6"
+                fill="none"
+                stroke="#5248e0"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                initial={reduce ? false : { pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 1.6, delay: 0.8, ease: EASE_OUT }}
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </BrowserFrame>
   )
 }

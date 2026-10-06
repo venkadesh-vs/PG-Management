@@ -33,9 +33,10 @@ export function LegalPage({
   children?: React.ReactNode
 }) {
   return (
-    <div className="min-h-dvh bg-white">
+    <div className="relative min-h-dvh overflow-hidden bg-white">
+      <div className="mesh-blue pointer-events-none absolute inset-x-0 top-0 h-80 opacity-60" aria-hidden />
       <SiteHeader />
-      <main className="mx-auto w-full max-w-3xl px-4 pb-20 pt-28 sm:px-6 sm:pt-32">
+      <main id="main" className="relative mx-auto w-full max-w-3xl px-4 pb-20 pt-28 sm:px-6 sm:pt-32">
         <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{title}</h1>
         <p className="mt-3 text-base text-slate-600 sm:text-lg">{intro}</p>
         <p className="mt-2 text-sm text-slate-400">Last updated: {updated}</p>
@@ -60,7 +61,10 @@ export function LegalPage({
           <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
             {LEGAL_LINKS.map((link) => (
               <li key={link.href}>
-                <Link href={link.href} className="text-slate-500 hover:text-slate-900">
+                <Link
+                  href={link.href}
+                  className="rounded-md text-slate-500 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                >
                   {link.label}
                 </Link>
               </li>

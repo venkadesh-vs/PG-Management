@@ -21,14 +21,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/feedback'
+import { FloorMenu, RoomEditDialog, RoomMenu, type EditableRoom } from './room-editor'
 
-type RoomRow = {
-  id: string
-  number: string
-  type: string
+type RoomRow = EditableRoom & {
   capacity: number
-  baseRent: number | null
-  hasAC: boolean
   bedCount: number
   occupied: number
 }
@@ -44,8 +40,9 @@ const CAPACITY_BY_TYPE: Record<string, number> = {
 }
 
 /**
- * Floor, room and bed setup. Beds are never created by hand — a room's
- * capacity creates them, which is what keeps bed counts honest.
+ * Floor, room and bed setup. A room's capacity creates its beds; after that
+ * beds can be added one at a time, and unused rooms, beds and empty floors
+ * can be removed (see room-editor.tsx).
  */
 export function RoomBuilder({
   propertyId,
@@ -63,6 +60,10 @@ export function RoomBuilder({
 }) {
   const theme = PROPERTY_THEMES[propertyType]
   const [dialog, setDialog] = React.useState<'floor' | 'room' | 'bulk' | null>(null)
+  // Looked up from fresh props, so the dialog follows refreshes (bed added…).
+  const [editingRoomId, setEditingRoomId] = React.useState<string | null>(null)
+  const editingRoom =
+    floors.flatMap((f) => f.rooms).find((r) => r.id === editingRoomId) ?? null
 
   return (
     <Card>
@@ -123,6 +124,7 @@ export function RoomBuilder({
                     {floor.rooms.length} rooms ·{' '}
                     {floor.rooms.reduce((s, r) => s + r.bedCount, 0)} beds
                   </span>
+                  {canManage && <FloorMenu floor={floor} roomCount={floor.rooms.length} />}
                 </div>
 
                 {floor.rooms.length === 0 ? (
@@ -138,11 +140,16 @@ export function RoomBuilder({
                         animate={{ opacity: 1, scale: 1 }}
                         className="rounded-xl border border-slate-200 bg-white p-3"
                       >
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-start justify-between gap-1">
                           <p className="font-display text-sm font-semibold text-slate-900">
                             {room.number}
                           </p>
-                          {room.hasAC && <AirVent className="size-3.5 text-slate-400" />}
+                          <div className="flex items-center gap-1">
+                            {room.hasAC && <AirVent className="size-3.5 text-slate-400" />}
+                            {canManage && (
+                              <RoomMenu room={room} onEdit={() => setEditingRoomId(room.id)} />
+                            )}
+                          </div>
                         </div>
                         <p className="text-[11px] capitalize text-slate-500">
                           {room.type.toLowerCase()} · {room.bedCount} beds
@@ -178,6 +185,13 @@ export function RoomBuilder({
         open={dialog === 'room'}
         onClose={() => setDialog(null)}
         propertyId={propertyId}
+        floors={floors}
+        standardRent={standardRent}
+      />
+      <RoomEditDialog
+        open={Boolean(editingRoom)}
+        onClose={() => setEditingRoomId(null)}
+        room={editingRoom}
         floors={floors}
         standardRent={standardRent}
       />

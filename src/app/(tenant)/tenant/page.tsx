@@ -10,6 +10,7 @@ import {
   Utensils,
   Wallet,
   Wrench,
+  ListChecks,
 } from 'lucide-react'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -30,6 +31,7 @@ export default async function TenantHome() {
     food: user.modules.includes('food'),
     complaints: user.modules.includes('complaints'),
     announcements: user.modules.includes('announcements'),
+    requests: user.modules.includes('requests'),
   }
 
   const resident = await prisma.resident.findUnique({
@@ -271,6 +273,26 @@ export default async function TenantHome() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      {/* ------------------------------------------------------- Requests */}
+      {on.requests && (
+        <Link href="/tenant/requests">
+          <Card className="transition-shadow hover:shadow-elevated">
+            <CardContent className="flex items-center gap-3 p-5">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50">
+                <ListChecks className="size-5 text-violet-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-sm font-semibold text-slate-900">Requests</p>
+                <p className="text-sm text-slate-500">
+                  Going home, expecting a visitor or want a room change? Ask here.
+                </p>
+              </div>
+              <ArrowRight className="size-4 shrink-0 text-slate-300" />
+            </CardContent>
+          </Card>
+        </Link>
       )}
 
       {/* --------------------------------------------------- Announcement */}

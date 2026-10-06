@@ -19,7 +19,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
 
 /**
- * A declarative create-dialog for the simpler modules (expense, visitor,
+ * A declarative create/edit dialog for the simpler modules (expense, visitor,
  * asset, staff, grocery item…). Each module still owns its own field list and
  * copy — this only removes the repeated dialog/submit/toast plumbing.
  */
@@ -71,8 +71,10 @@ export type QuickFormProps = {
   title: string
   description?: string
   fields: QuickField[]
-  /** POST target. */
+  /** Submit target. */
   endpoint: string
+  /** HTTP method; defaults to POST. Use PATCH for edit dialogs. */
+  method?: 'POST' | 'PATCH' | 'PUT'
   /** Merged into the payload — the entity discriminator and any fixed ids. */
   payload?: Record<string, unknown>
   submitLabel?: string
@@ -100,6 +102,7 @@ export function QuickForm({
   description,
   fields,
   endpoint,
+  method = 'POST',
   payload,
   submitLabel,
   successTitle,
@@ -154,7 +157,8 @@ export function QuickForm({
 
     setBusy(true)
     try {
-      const result = await api.post<{ message?: string } & Record<string, unknown>>(endpoint, {
+      const send = method === 'PATCH' ? api.patch : method === 'PUT' ? api.put : api.post
+      const result = await send<{ message?: string } & Record<string, unknown>>(endpoint, {
         ...payload,
         ...values,
       })

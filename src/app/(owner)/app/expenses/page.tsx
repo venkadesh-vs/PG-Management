@@ -32,7 +32,8 @@ import {
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { CategoryBarChart, DonutChart } from '@/components/app/charts'
-import { QuickForm } from '@/components/app/quick-form'
+import { QuickForm, type QuickField } from '@/components/app/quick-form'
+import { RowActions } from '@/components/app/row-actions'
 
 export const metadata: Metadata = { title: 'Expenses' }
 
@@ -115,6 +116,26 @@ export default async function ExpensesPage({
   ])
 
   const spent = sum._sum.amount ?? 0
+  const canManage = user.permissions.includes('expenses.manage')
+  const actionsFor = (expense: (typeof expenses)[number]) =>
+    canManage ? (
+      <RowActions
+        label={expense.title}
+        edit={{
+          title: 'Edit expense',
+          description: `${expense.property.name} · the PG cannot be changed.`,
+          endpoint: `/api/expenses/${expense.id}`,
+          successTitle: 'Expense updated',
+          fields: expenseEditFields(expense, categories),
+        }}
+        remove={{
+          title: `Delete “${expense.title}”?`,
+          description: `${formatMoney(expense.amount)} on ${formatDate(expense.spentOn)} is removed from expenses and the profit estimate. The activity log keeps a record.`,
+          endpoint: `/api/expenses/${expense.id}`,
+          successTitle: 'Expense deleted',
+        }}
+      />
+    ) : null
   const income = collected._sum.amount ?? 0
   const activeFilters = [q, categoryId, params.range].filter(Boolean).length
 
@@ -292,6 +313,7 @@ export default async function ExpensesPage({
                   <TableHead>Paid to</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  {canManage && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -328,6 +350,7 @@ export default async function ExpensesPage({
                       <TableCell className="text-right font-semibold text-slate-900 tabular">
                         {formatMoney(expense.amount)}
                       </TableCell>
+                      {canManage && <TableCell className="w-10">{actionsFor(expense)}</TableCell>}
                     </TableRow>
                   )
                 })}
@@ -348,9 +371,12 @@ export default async function ExpensesPage({
                       {expense.category.name} · {formatDate(expense.spentOn)}
                     </p>
                   </div>
-                  <span className="shrink-0 font-semibold text-slate-900 tabular">
-                    {formatMoney(expense.amount)}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="font-semibold text-slate-900 tabular">
+                      {formatMoney(expense.amount)}
+                    </span>
+                    {actionsFor(expense)}
+                  </div>
                 </div>
               </li>
             ))}
@@ -363,4 +389,60 @@ export default async function ExpensesPage({
       )}
     </div>
   )
+}
+
+const PAYMENT_MODES = [
+  { value: 'CASH', label: 'Cash' },
+  { value: 'UPI', label: 'UPI' },
+  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
+  { value: 'CARD', label: 'Card' },
+  { value: 'CHEQUE', label: 'Cheque' },
+]
+
+/** The add-expense fields, prefilled from an existing expense (PG fixed). */
+function expenseEditFields(
+  expense: {
+    categoryId: string
+    title: string
+    amount: number
+    spentOn: Date
+    paidTo: string | null
+    paymentMode: string
+    reference: string | null
+    notes: string | null
+  },
+  categories: { id: string; name: string }[],
+): QuickField[] {
+  return [
+    {
+      kind: 'select',
+      name: 'categoryId',
+      label: 'Category',
+      required: true,
+      defaultValue: expense.categoryId,
+      options: categories.map((c) => ({ value: c.id, label: c.name })),
+    },
+    { kind: 'text', name: 'title', label: 'What was it for?', required: true, defaultValue: expense.title },
+    { kind: 'number', name: 'amount', label: 'Amount', required: true, half: true, defaultValue: expense.amount },
+    {
+      kind: 'date',
+      name: 'spentOn',
+      label: 'Date',
+      required: true,
+      half: true,
+      defaultValue: toISODate(expense.spentOn),
+    },
+    { kind: 'text', name: 'paidTo', label: 'Paid to', half: true, defaultValue: expense.paidTo ?? '' },
+    {
+      kind: 'select',
+      name: 'paymentMode',
+      label: 'Paid by',
+      required: true,
+      half: true,
+      defaultValue: expense.paymentMode,
+      options: PAYMENT_MODES,
+    },
+    { kind: 'text', name: 'reference', label: 'Reference', defaultValue: expense.reference ?? '' },
+    { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2, defaultValue: expense.notes ?? '' },
+  ]
 }

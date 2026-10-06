@@ -47,19 +47,34 @@ const RULE_SUGGESTIONS = [
   'Keep the common areas clean',
 ]
 
+/** An existing PG, passed in to switch the form into edit mode. */
+export type EditableProperty = Values & { id: string }
+
 /**
  * Creating a PG. The subscription preview updates live from the standard
  * rent, so the owner knows what the PG will cost before they commit.
+ *
+ * With `property` set the same form edits an existing PG: the short code is
+ * locked (it is part of issued invoice numbers) and the save is a PATCH.
  */
-export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCount: number }) {
+export function PropertyForm({
+  plan,
+  existingCount,
+  property,
+}: {
+  plan: Plan
+  existingCount: number
+  property?: EditableProperty
+}) {
   const router = useRouter()
   const toast = useToast()
+  const editing = Boolean(property)
   const [amenityInput, setAmenityInput] = React.useState('')
   const [ruleInput, setRuleInput] = React.useState('')
 
   const form = useForm<Values>({
     resolver: zodResolver(propertySchema),
-    defaultValues: {
+    defaultValues: property ?? {
       name: '',
       code: '',
       type: 'MENS',
@@ -87,7 +102,7 @@ export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCoun
   const theme = PROPERTY_THEMES[values.type]
 
   // Derive the short code from the name until the owner types their own.
-  const [codeTouched, setCodeTouched] = React.useState(false)
+  const [codeTouched, setCodeTouched] = React.useState(editing)
   React.useEffect(() => {
     if (codeTouched || !values.name) return
     const auto = values.name
@@ -134,6 +149,25 @@ export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCoun
   }
 
   async function onSubmit(data: Values) {
+    if (property) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { code, ...changes } = data
+        const result = await api.patch<{ message: string }>(
+          `/api/properties/${property.id}`,
+          changes,
+        )
+        toast.success('PG updated', result.message)
+        router.push(`/app/properties/${property.id}`)
+        router.refresh()
+      } catch (error) {
+        toast.error(
+          'Unable to save this PG',
+          error instanceof ApiError ? error.message : 'Please try again.',
+        )
+      }
+      return
+    }
     try {
       const result = await api.post<{
         property: { id: string; name: string }
@@ -167,12 +201,14 @@ export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCoun
               <Field
                 label="Short code"
                 required
-                hint="Used in invoice numbers"
+                hint={editing ? 'Fixed — used in issued invoice numbers' : 'Used in invoice numbers'}
                 error={form.formState.errors.code?.message}
               >
                 <Input
                   placeholder="SFM"
                   maxLength={8}
+                  readOnly={editing}
+                  className={editing ? 'bg-slate-50 text-slate-500' : undefined}
                   {...form.register('code')}
                   onInput={() => setCodeTouched(true)}
                 />
@@ -381,7 +417,7 @@ export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCoun
               )}
             </div>
 
-            {subscription && plan && (
+            {!editing && subscription && plan && (
               <motion.div
                 layout
                 className="rounded-xl border border-blue-100 bg-blue-50/70 p-4"
@@ -419,10 +455,12 @@ export function PropertyForm({ plan, existingCount }: { plan: Plan; existingCoun
               loading={form.formState.isSubmitting}
             >
               <Building2 className="size-4" />
-              Create this PG
+              {editing ? 'Save changes' : 'Create this PG'}
             </Button>
             <p className="text-center text-[11px] text-slate-400">
-              You can add floors, rooms and beds on the next screen.
+              {editing
+                ? 'Changing the standard rent may change this PG’s subscription price.'
+                : 'You can add floors, rooms and beds on the next screen.'}
             </p>
           </CardContent>
         </Card>

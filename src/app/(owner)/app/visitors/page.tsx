@@ -22,6 +22,8 @@ import {
 import { FilterBar, Pagination, SearchInput } from '@/components/app/filters'
 import { QuickForm } from '@/components/app/quick-form'
 import { SignOutVisitorButton } from './sign-out-button'
+import { SignInExpectedButton } from './expected-visitor-button'
+import { expectedVisitorsToday } from '@/server/services/requests'
 
 export const metadata: Metadata = { title: 'Visitors' }
 
@@ -97,6 +99,14 @@ export default async function VisitorsPage({
     getLookupLabels(scope.organizationId, 'VISITOR_PURPOSE'),
   ])
   const purposeLabel = (value: string) => purposeLabels[value] ?? value
+  // Visitors residents pre-approved through Requests, due today.
+  const expected = user.modules.includes('requests')
+    ? await expectedVisitorsToday(scope.organizationId, propertyIds)
+    : []
+  const expectedPurpose =
+    purposes.find((p) => /family|relative|parent|personal/i.test(`${p.value} ${p.label}`))?.value ??
+    purposes[0]?.value ??
+    'OTHER'
 
   return (
     <div className="space-y-6">
@@ -166,6 +176,36 @@ export default async function VisitorsPage({
         />
         <StatCard label="All records" value={total} icon="clipboard" tone="violet" />
       </div>
+
+      {expected.length > 0 && (
+        <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 shadow-card">
+          <h2 className="font-display text-sm font-semibold text-slate-900">
+            Expected today <span className="font-normal text-slate-500">· pre-approved by the PG</span>
+          </h2>
+          <ul className="mt-3 grid gap-2 md:grid-cols-2">
+            {expected.map((v) => (
+              <li
+                key={v.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {v.visitorName}
+                    {v.visitorCount > 1 ? ` + ${v.visitorCount - 1}` : ''}
+                    {v.relation ? <span className="font-normal text-slate-500"> · {v.relation}</span> : null}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    Visiting {v.residentName}
+                    {v.room ? ` · Room ${v.room}` : ` · ${v.propertyName}`}
+                    {v.fromDate ? ` · from ${formatDateTime(v.fromDate)}` : ''}
+                  </p>
+                </div>
+                {canManage && <SignInExpectedButton visitor={v} purpose={expectedPurpose} />}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={q ? 1 : 0}>

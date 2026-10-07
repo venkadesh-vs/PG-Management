@@ -5,6 +5,7 @@ import { fail, handleError, ok } from '@/lib/api-helpers'
 import { assertResidentAccess, requireModule, requirePermission, withMaskedId } from '@/lib/tenancy'
 import { residentUpdateSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
+import { reviseRent } from '@/server/services/billing'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -51,6 +52,23 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const body = residentUpdateSchema.parse(await request.json())
 
+    // Rent never changes silently: a new amount is a dated rent revision
+    // (history, audit, notes on months already invoiced).
+    if (body.rentAmount !== undefined) {
+      const current = await prisma.resident.findUnique({ where: { id }, select: { rentAmount: true } })
+      if (current && current.rentAmount !== body.rentAmount) {
+        requirePermission(user, 'rent.manage')
+        await reviseRent({
+          organizationId: user.organizationId!,
+          residentId: id,
+          newRent: body.rentAmount,
+          effectiveFrom: new Date(),
+          reason: 'Updated from resident details',
+          actor: { id: user.id, name: user.name },
+        })
+      }
+    }
+
     const resident = await prisma.resident.update({
       where: { id },
       data: {
@@ -76,7 +94,6 @@ export async function PATCH(request: Request, { params }: Params) {
         ...(body.idNumber !== undefined && !body.idNumber?.startsWith('XXXX')
           ? { idNumber: body.idNumber || null }
           : {}),
-        ...(body.rentAmount !== undefined ? { rentAmount: body.rentAmount } : {}),
         ...(body.depositAmount !== undefined ? { depositAmount: body.depositAmount } : {}),
         ...(body.maintenanceFee !== undefined ? { maintenanceFee: body.maintenanceFee } : {}),
         ...(body.foodOptIn !== undefined ? { foodOptIn: body.foodOptIn } : {}),

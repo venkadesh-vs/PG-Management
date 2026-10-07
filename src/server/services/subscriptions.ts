@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { PaymentMethodKind, Plan, Prisma, Property } from '@prisma/client'
+import type { BillingCycle, PaymentMethodKind, Plan, Prisma, Property, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifySuperAdmins, recordActivity } from '../events'
@@ -9,6 +9,8 @@ import { computeGst, financialYear } from '@/lib/gst'
 import { platformEnv } from '@/lib/platform-env'
 import {
   createOrder,
+  getOrgRazorpay,
+  handleOrgWebhook,
   platformRazorpay,
   simulateAutopayDebit,
   paymentMode,
@@ -30,12 +32,24 @@ import {
   type RazorpaySubscription,
   type RazorpayWebhookEvent,
 } from '../integrations/razorpay'
+import { isUniqueViolation, nextCounterNumber, recordGatewayPayment, retryOnUniqueConflict } from './billing'
 import {
-  isUniqueViolation,
-  nextCounterNumber,
-  recordGatewayPayment,
-  retryOnUniqueConflict,
-} from './billing'
+  CANCEL_CATEGORIES,
+  CYCLE_LABEL,
+  RETRY_DAYS,
+  CYCLE_MONTHS,
+  cyclePrice,
+  isStaleFailureEvent,
+  nextRetryAt,
+  nextStatus,
+  prorate,
+  retriesExhausted,
+  type CancelCategory,
+  type SubStatus,
+} from '@/lib/subscription-math'
+import { downgradeBlockers, type PlanLimits } from '@/lib/plan-entitlements'
+import { assertWithinPlan, countUsage } from './plan-limits'
+import { failedWebhooks, finishWebhook, reclaimFailedWebhook } from './webhook-log'
 
 type Tx = Prisma.TransactionClient
 
@@ -113,7 +127,7 @@ export async function createSubscriptionForProperty(params: {
   const now = new Date()
   const trialEndsAt = plan.trialDays > 0 ? addDays(now, plan.trialDays) : null
   const periodStart = now
-  const periodEnd = addMonths(now, 1)
+  const periodEnd = addMonths(now, CYCLE_MONTHS[plan.billingCycle] ?? 1)
 
   const subscription = await db.subscription.create({
     data: {
@@ -169,33 +183,59 @@ export async function repriceSubscription(subscriptionId: string) {
   // explicit consent for the new amount, no silent over-debit. The current
   // period is already paid; the next invoice is raised as usual and can be
   // paid with "Pay now" or a fresh AutoPay set-up.
-  let autopayStopped = false
+  const autopayStopped = await stopMandateForNewAmount(subscription.id)
+  return { changed: true, price, autopayStopped }
+}
+
+/**
+ * Stops a live Razorpay mandate because what each charge should collect has
+ * changed (reprice, plan change, cycle switch), and asks the owner to set up
+ * AutoPay again for the new amount. Returns whether a mandate was stopped.
+ */
+export async function stopMandateForNewAmount(subscriptionId: string): Promise<boolean> {
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: { property: true, plan: true },
+  })
+  if (!subscription) return false
   const creds = platformRazorpay()
   if (
-    creds &&
-    subscription.gatewaySubscriptionId &&
-    (subscription.mandateStatus === 'ACTIVE' || subscription.mandateStatus === 'PENDING')
+    !creds ||
+    !subscription.gatewaySubscriptionId ||
+    (subscription.mandateStatus !== 'ACTIVE' && subscription.mandateStatus !== 'PENDING')
   ) {
-    await cancelGatewaySubscription(creds, subscription.gatewaySubscriptionId)
-    await prisma.$transaction([
-      prisma.subscription.update({
-        where: { id: subscription.id },
-        data: { autopayEnabled: false, mandateStatus: 'REVOKED', gatewayAuthUrl: null },
-      }),
-      prisma.paymentMethod.updateMany({
-        where: { subscriptionId: subscription.id, status: { in: ['ACTIVE', 'PENDING'] } },
-        data: { status: 'REVOKED' },
-      }),
-    ])
-    autopayStopped = true
-    await notifyOrgAdmins(subscription.organizationId, {
-      kind: 'SUBSCRIPTION',
-      title: 'Please re-authorise AutoPay',
-      body: `${subscription.property.name}'s subscription is now ${formatMoney(price.amount)}/month. Your old AutoPay was for ${formatMoney(subscription.amount)}, so it has been stopped — set up AutoPay again to approve the new amount.`,
-      link: '/app/subscription',
-    })
+    return false
   }
-  return { changed: true, price, autopayStopped }
+  await cancelGatewaySubscription(creds, subscription.gatewaySubscriptionId)
+  await prisma.$transaction([
+    prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        autopayEnabled: false,
+        mandateStatus: 'REVOKED',
+        gatewayAuthUrl: null,
+      },
+    }),
+    prisma.paymentMethod.updateMany({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: ['ACTIVE', 'PENDING'] },
+      },
+      data: { status: 'REVOKED' },
+    }),
+  ])
+  const perCycle = cyclePrice(
+    subscription.amount,
+    subscription.billingCycle,
+    subscription.plan.yearlyDiscountPercent,
+  )
+  await notifyOrgAdmins(subscription.organizationId, {
+    kind: 'SUBSCRIPTION',
+    title: 'Please re-authorise AutoPay',
+    body: `${subscription.property.name}'s subscription is now ${formatMoney(perCycle)} ${CYCLE_LABEL[subscription.billingCycle].toLowerCase()}. Your old AutoPay was for a different amount, so it has been stopped — set up AutoPay again to approve the new amount.`,
+    link: '/app/subscription',
+  })
+  return true
 }
 
 /** Cancels a Razorpay subscription unless it is already in a terminal state. */
@@ -205,24 +245,41 @@ async function cancelGatewaySubscription(creds: RazorpayCredentials, gatewaySubs
   return rzpCancelSubscription(creds, gatewaySubscriptionId, { atCycleEnd: false })
 }
 
-/** Finds (or creates and caches) the Razorpay plan for a monthly amount. */
-async function getOrCreateGatewayPlan(creds: RazorpayCredentials, amount: number) {
+/** Razorpay plan period for a billing cycle. */
+function gatewayPeriod(cycle: BillingCycle): {
+  period: 'monthly' | 'yearly'
+  interval: number
+} {
+  return cycle === 'YEARLY'
+    ? { period: 'yearly', interval: 1 }
+    : { period: 'monthly', interval: CYCLE_MONTHS[cycle] }
+}
+
+/** Finds (or creates and caches) the Razorpay plan for an amount per billing cycle. */
+async function getOrCreateGatewayPlan(
+  creds: RazorpayCredentials,
+  amount: number,
+  cycle: BillingCycle = 'MONTHLY',
+) {
   // Plans live in one Razorpay account (and test/live are separate), so the
   // cache is keyed by key id.
   const provider = `razorpay:${creds.keyId}`
-  const where = { provider_amount_period_interval: { provider, amount, period: 'monthly', interval: 1 } }
+  const { period, interval } = gatewayPeriod(cycle)
+  const where = {
+    provider_amount_period_interval: { provider, amount, period, interval },
+  }
   const cached = await prisma.gatewayPlan.findUnique({ where })
   if (cached) return cached.gatewayPlanId
 
   const plan = await rzpCreatePlan(creds, {
-    period: 'monthly',
-    interval: 1,
-    name: `StayFlow PG subscription — ${formatMoney(amount)}/month`,
+    period,
+    interval,
+    name: `StayFlow PG subscription — ${formatMoney(amount)} ${CYCLE_LABEL[cycle].toLowerCase()}`,
     amountPaise: toPaise(amount),
   })
   try {
     await prisma.gatewayPlan.create({
-      data: { provider, amount, period: 'monthly', interval: 1, gatewayPlanId: plan.id },
+      data: { provider, amount, period, interval, gatewayPlanId: plan.id },
     })
     return plan.id
   } catch (error) {
@@ -242,7 +299,7 @@ export async function setupAutopay(params: {
 }) {
   const subscription = await prisma.subscription.findUnique({
     where: { id: params.subscriptionId },
-    include: { property: true },
+    include: { property: true, plan: true },
   })
   if (!subscription) throw new NotFoundError('Subscription not found')
   if (subscription.status === 'CANCELLED') throw new ConflictError('This subscription is cancelled')
@@ -294,15 +351,22 @@ export async function setupAutopay(params: {
  */
 async function setupGatewayAutopay(
   creds: RazorpayCredentials,
-  subscription: Prisma.SubscriptionGetPayload<{ include: { property: true } }>,
+  subscription: Prisma.SubscriptionGetPayload<{
+    include: { property: true; plan: true }
+  }>,
 ) {
   if (subscription.amount < 1) throw new ValidationError('This subscription has no amount to collect')
-  // The mandate collects the invoice total, GST included.
+  // The mandate collects the invoice total for one billing cycle, GST included.
   const organization = await prisma.organization.findUnique({
     where: { id: subscription.organizationId },
     select: { gstin: true, state: true },
   })
-  const gross = subscriptionGst(organization ?? {}, subscription.amount).total
+  const perCycle = cyclePrice(
+    subscription.amount,
+    subscription.billingCycle,
+    subscription.plan.yearlyDiscountPercent,
+  )
+  const gross = subscriptionGst(organization ?? {}, perCycle).total
 
   // Re-use a pending authorisation instead of creating a second subscription.
   if (subscription.gatewaySubscriptionId) {
@@ -330,7 +394,7 @@ async function setupGatewayAutopay(
     }
   }
 
-  const planId = await getOrCreateGatewayPlan(creds, gross)
+  const planId = await getOrCreateGatewayPlan(creds, gross, subscription.billingCycle)
   // First charge on our next billing date (trial end / next cycle). If that is
   // already due, Razorpay charges on authorisation and the webhook settles the
   // open invoice.
@@ -491,7 +555,13 @@ export async function reactivateOrganizationIfClear(tx: Tx, organizationId: stri
       ],
       id: { notIn: withUnpaid },
     },
-    data: { status: 'ACTIVE', graceEndsAt: null },
+    data: {
+      status: 'ACTIVE',
+      graceEndsAt: null,
+      failedAttempts: 0,
+      nextRetryAt: null,
+      lastPaymentError: null,
+    },
   })
 
   if (unpaid.some((i) => i.dueDate < now)) return { reactivated: false }
@@ -606,20 +676,72 @@ async function claimCycleAndInvoice(
   tx: Tx,
   subscription: { id: string; organizationId: string; nextBillingDate: Date; amount: number },
 ) {
+  const current = await tx.subscription.findUnique({
+    where: { id: subscription.id },
+    include: { plan: true, property: true },
+  })
+  if (!current) return null
+
+  // A downgrade or cycle switch the owner scheduled takes effect now, at the
+  // start of the new period.
+  let plan = current.plan
+  let amount = current.amount
+  const cycle = current.pendingBillingCycle ?? current.billingCycle
+  if (current.pendingPlanId && current.pendingPlanId !== current.planId) {
+    const target = await tx.plan.findUnique({
+      where: { id: current.pendingPlanId },
+    })
+    if (target) {
+      plan = target
+      amount = (await priceForProperty(current.property, target)).amount
+    }
+  }
+
   const periodStart = startOfDay(subscription.nextBillingDate)
-  const periodEnd = startOfDay(addMonths(periodStart, 1))
+  const periodEnd = startOfDay(addMonths(periodStart, CYCLE_MONTHS[cycle] ?? 1))
   const claim = await tx.subscription.updateMany({
-    where: { id: subscription.id, nextBillingDate: subscription.nextBillingDate },
-    data: { nextBillingDate: periodEnd },
+    where: {
+      id: subscription.id,
+      nextBillingDate: subscription.nextBillingDate,
+    },
+    data: {
+      nextBillingDate: periodEnd,
+      planId: plan.id,
+      amount,
+      billingCycle: cycle,
+      pendingPlanId: null,
+      pendingBillingCycle: null,
+    },
   })
   if (claim.count !== 1) return null
+  const changed = plan.id !== current.planId || cycle !== current.billingCycle
+  if (changed) {
+    await recordActivity(
+      {
+        organizationId: current.organizationId,
+        propertyId: current.propertyId,
+        actorName: 'Billing',
+        event: 'SUBSCRIPTION_CHANGED',
+        entityType: 'Subscription',
+        entityId: current.id,
+        summary: `${current.property.name}: scheduled change applied — ${plan.name}, ${CYCLE_LABEL[cycle].toLowerCase()} billing`,
+        before: {
+          plan: current.plan.name,
+          billingCycle: current.billingCycle,
+          amount: current.amount,
+        },
+        after: { plan: plan.name, billingCycle: cycle, amount },
+      },
+      tx,
+    )
+  }
   const number = await nextSubInvoiceNumber(tx, periodStart)
   const organization = await tx.organization.findUnique({
     where: { id: subscription.organizationId },
     select: { gstin: true, state: true },
   })
-  // amount = taxable value; tax = 18% GST when the platform is registered.
-  const gst = subscriptionGst(organization ?? {}, subscription.amount)
+  // amount = taxable value for the whole cycle; tax = 18% GST when registered.
+  const gst = subscriptionGst(organization ?? {}, cyclePrice(amount, cycle, plan.yearlyDiscountPercent))
   return tx.subscriptionInvoice.create({
     data: {
       subscriptionId: subscription.id,
@@ -638,8 +760,10 @@ async function claimCycleAndInvoice(
 
 /**
  * Bills every subscription whose next billing date has arrived: raises the
- * invoice, attempts AutoPay where a mandate exists, and moves the
- * subscription into grace/suspension when payment fails.
+ * invoice (applying any scheduled downgrade / cycle switch first), attempts
+ * AutoPay where a mandate exists, and moves the subscription along the
+ * lifecycle when payment fails. A subscription set to cancel at period end
+ * is cancelled here instead of being billed.
  */
 export async function runSubscriptionBilling(params?: { now?: Date; organizationId?: string }) {
   const now = params?.now ?? new Date()
@@ -655,13 +779,21 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
   const results: {
     property: string
     amount: number
-    outcome: 'paid' | 'failed' | 'invoiced'
+    outcome: 'paid' | 'failed' | 'invoiced' | 'cancelled'
     reason?: string
   }[] = []
 
   for (const subscription of due) {
-    const periodStart = startOfDay(subscription.nextBillingDate)
-    const periodEnd = startOfDay(addMonths(periodStart, 1))
+    // Cancel at period end: the paid period is over, so stop here.
+    if (subscription.cancelAtPeriodEnd) {
+      await finaliseCancellation(subscription.id, { name: 'Billing' }, now)
+      results.push({
+        property: subscription.property.name,
+        amount: 0,
+        outcome: 'cancelled',
+      })
+      continue
+    }
 
     // Claim this billing cycle and raise its invoice in one transaction: the
     // conditional update on nextBillingDate lets only one of two overlapping
@@ -671,15 +803,29 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
       ['number'],
     )
     if (!invoice) continue
+    const periodStart = invoice.periodStart
+    const periodEnd = invoice.periodEnd
 
     const demo = paymentMode() === 'demo'
-    const mandateActive = subscription.autopayEnabled && subscription.mandateStatus === 'ACTIVE'
+    let mandateActive = subscription.autopayEnabled && subscription.mandateStatus === 'ACTIVE'
+    const scheduledChange = Boolean(subscription.pendingPlanId || subscription.pendingBillingCycle)
 
-    // Razorpay AutoPay: Razorpay charges on its own schedule and the platform
-    // webhook (subscription.charged) settles this invoice. We never debit
-    // ourselves; if no charge arrives by graceEndsAt, enforceGracePeriods
-    // suspends exactly as for a manual invoice.
+    // A scheduled plan / cycle change alters what each charge collects. A live
+    // Razorpay mandate was authorised for the old amount, so it is stopped and
+    // the owner re-authorises (explicit consent for the new amount); this
+    // invoice is then paid with Pay now.
+    if (!demo && mandateActive && subscription.gatewaySubscriptionId && scheduledChange) {
+      await stopMandateForNewAmount(subscription.id).catch((error) =>
+        console.error('[subscriptions] could not stop mandate after scheduled change', error),
+      )
+      mandateActive = false
+    }
+
     if (!demo && mandateActive && subscription.gatewaySubscriptionId) {
+      // Razorpay AutoPay: Razorpay charges on its own schedule and the platform
+      // webhook (subscription.charged) settles this invoice. We never debit
+      // ourselves; if no charge arrives by graceEndsAt, enforceGracePeriods
+      // suspends exactly as for a manual invoice.
       const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
       await prisma.subscription.update({
         where: { id: subscription.id },
@@ -701,155 +847,282 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
     }
 
     // No usable mandate (or a legacy live "mandate" with no gateway behind
-    // it): the owner pays the invoice with Pay now.
+    // it): the owner pays the invoice with Pay now. PAST_DUE ("payment due")
+    // until the due date, then GRACE until graceEndsAt, then SUSPENDED.
     if (!demo || !mandateActive) {
+      const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: {
-          status: 'PAST_DUE',
+          status: nextStatus(subscription.status as SubStatus, {
+            type: 'INVOICE_UNPAID',
+          }),
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
-          nextBillingDate: periodEnd,
-          graceEndsAt: addDays(periodStart, subscription.plan.graceDays),
+          graceEndsAt,
         },
       })
       await notifyOrgAdmins(subscription.organizationId, {
         kind: 'SUBSCRIPTION',
         title: 'Subscription invoice raised',
-        body: `${invoice.number} · ${formatMoney(invoice.total)} for ${subscription.property.name}. Pay before ${addDays(periodStart, subscription.plan.graceDays).toLocaleDateString('en-IN')}.`,
+        body: `${invoice.number} · ${formatMoney(invoice.total)} for ${subscription.property.name}. Pay before ${graceEndsAt.toLocaleDateString('en-IN')}.`,
         link: '/app/subscription',
-      })
-      results.push({ property: subscription.property.name, amount: invoice.total, outcome: 'invoiced' })
-      continue
-    }
-
-    // Demo AutoPay attempt: a labelled simulation — no money moves and every
-    // row is flagged isDemo.
-    const attempt = simulateAutopayDebit(invoice.id)
-
-    if (attempt.success) {
-      await prisma.$transaction(async (tx) => {
-        await tx.subscriptionPayment.create({
-          data: {
-            subscriptionId: subscription.id,
-            invoiceId: invoice.id,
-            amount: invoice.total,
-            status: 'SUCCESS',
-            method: 'GATEWAY',
-            paidAt: now,
-            gatewayProvider: demo ? 'demo' : 'gateway',
-            isDemo: demo,
-          },
-        })
-        await tx.subscriptionInvoice.update({
-          where: { id: invoice.id },
-          data: { status: 'PAID', amountPaid: invoice.total, paidAt: now },
-        })
-        await tx.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: 'ACTIVE',
-            currentPeriodStart: periodStart,
-            currentPeriodEnd: periodEnd,
-            nextBillingDate: periodEnd,
-            graceEndsAt: null,
-          },
-        })
-        await reactivateOrganizationIfClear(tx, subscription.organizationId, now)
-        await recordActivity(
-          {
-            organizationId: subscription.organizationId,
-            propertyId: subscription.propertyId,
-            actorName: 'AutoPay',
-            event: 'SUBSCRIPTION_PAYMENT_COMPLETED',
-            entityType: 'SubscriptionInvoice',
-            entityId: invoice.id,
-            summary: `${invoice.number} · ${formatMoney(invoice.total)} charged for ${subscription.property.name}`,
-          },
-          tx,
-        )
-      })
-      await notifyOrgAdmins(subscription.organizationId, {
-        kind: 'SUBSCRIPTION',
-        title: 'Subscription charged',
-        body: `${formatMoney(invoice.total)} for ${subscription.property.name}. Invoice ${invoice.number}.`,
-        link: '/app/subscription',
-      })
-      results.push({ property: subscription.property.name, amount: invoice.total, outcome: 'paid' })
-    } else {
-      const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
-      await prisma.$transaction(async (tx) => {
-        await tx.subscriptionPayment.create({
-          data: {
-            subscriptionId: subscription.id,
-            invoiceId: invoice.id,
-            amount: invoice.total,
-            status: 'FAILED',
-            method: 'GATEWAY',
-            failureReason: attempt.reason,
-            gatewayProvider: demo ? 'demo' : 'gateway',
-            isDemo: demo,
-          },
-        })
-        await tx.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: 'GRACE',
-            currentPeriodStart: periodStart,
-            currentPeriodEnd: periodEnd,
-            nextBillingDate: periodEnd,
-            graceEndsAt,
-          },
-        })
-        await tx.organization.update({
-          where: { id: subscription.organizationId },
-          data: { status: 'PAST_DUE' },
-        })
-        await recordActivity(
-          {
-            organizationId: subscription.organizationId,
-            propertyId: subscription.propertyId,
-            actorName: 'AutoPay',
-            event: 'SUBSCRIPTION_PAYMENT_FAILED',
-            entityType: 'SubscriptionInvoice',
-            entityId: invoice.id,
-            summary: `${invoice.number} failed — ${attempt.reason}`,
-          },
-          tx,
-        )
-      })
-      await notifyOrgAdmins(subscription.organizationId, {
-        kind: 'SUBSCRIPTION',
-        title: 'Subscription payment failed',
-        body: `${attempt.reason}. Please update your payment method before ${graceEndsAt.toLocaleDateString('en-IN')}.`,
-        link: '/app/subscription',
-      })
-      await notifySuperAdmins({
-        kind: 'SUBSCRIPTION',
-        title: 'Failed subscription payment',
-        body: `${subscription.organization.name} — ${subscription.property.name}: ${attempt.reason}`,
-        link: '/admin/payments',
       })
       results.push({
         property: subscription.property.name,
         amount: invoice.total,
-        outcome: 'failed',
-        reason: attempt.reason,
+        outcome: 'invoiced',
       })
+      continue
     }
+
+    // Our own debit (demo AutoPay): a labelled simulation — no money moves and
+    // every row is flagged isDemo. Failures follow the retry schedule.
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { currentPeriodStart: periodStart, currentPeriodEnd: periodEnd },
+    })
+    const outcome = await attemptOwnCharge({
+      subscriptionId: subscription.id,
+      invoiceId: invoice.id,
+      attempt: 1,
+      firstFailedAt: now,
+      now,
+    })
+    results.push({
+      property: subscription.property.name,
+      amount: invoice.total,
+      outcome: outcome.success ? 'paid' : 'failed',
+      reason: outcome.reason,
+    })
   }
 
   return results
 }
 
-/** Suspends organizations whose grace period has run out. */
+/**
+ * One charge attempt we make ourselves (demo AutoPay). On failure the
+ * subscription becomes PAST_DUE with a retry 1, 3 and 5 days after the first
+ * failure; once those are used it enters GRACE (plan.graceDays) and
+ * enforceGracePeriods suspends it when that runs out.
+ */
+async function attemptOwnCharge(params: {
+  subscriptionId: string
+  invoiceId: string
+  /** 1 for the first try, 2.. for retries. */
+  attempt: number
+  firstFailedAt: Date
+  now: Date
+}): Promise<{ success: boolean; reason?: string }> {
+  const { now } = params
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: params.subscriptionId },
+    include: { property: true, plan: true, organization: true },
+  })
+  const invoice = await prisma.subscriptionInvoice.findUnique({
+    where: { id: params.invoiceId },
+  })
+  if (!subscription || !invoice) return { success: false, reason: 'missing subscription or invoice' }
+  const due = invoice.total - invoice.amountPaid
+  if (due <= 0 || invoice.status === 'PAID') return { success: true }
+
+  const demo = paymentMode() === 'demo'
+  const attempt = simulateAutopayDebit(params.attempt === 1 ? invoice.id : `${invoice.id}:${params.attempt}`)
+
+  if (attempt.success) {
+    await prisma.$transaction(async (tx) => {
+      await settleSubscriptionInvoice(tx, {
+        invoiceId: invoice.id,
+        amount: due,
+        method: 'GATEWAY',
+        provider: demo ? 'demo' : 'gateway',
+        isDemo: demo,
+        actor: { name: 'AutoPay' },
+        now,
+      })
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          graceEndsAt: null,
+          failedAttempts: 0,
+          nextRetryAt: null,
+          lastPaymentError: null,
+        },
+      })
+    })
+    await notifyOrgAdmins(subscription.organizationId, {
+      kind: 'SUBSCRIPTION',
+      title: 'Subscription charged',
+      body: `${formatMoney(due)} for ${subscription.property.name}. Invoice ${invoice.number}.`,
+      link: '/app/subscription',
+    })
+    return { success: true }
+  }
+
+  const failedAttempts = params.attempt
+  const retryAt = nextRetryAt(params.firstFailedAt, failedAttempts)
+  const exhausted = retriesExhausted(failedAttempts) || !retryAt
+  const status = nextStatus(subscription.status as SubStatus, {
+    type: 'PAYMENT_FAILED',
+    retriesLeft: !exhausted,
+  })
+  const graceEndsAt = exhausted ? addDays(now, subscription.plan.graceDays) : null
+
+  await prisma.$transaction(async (tx) => {
+    await tx.subscriptionPayment.create({
+      data: {
+        subscriptionId: subscription.id,
+        invoiceId: invoice.id,
+        amount: due,
+        status: 'FAILED',
+        method: 'GATEWAY',
+        failureReason: attempt.reason,
+        retryCount: failedAttempts - 1,
+        gatewayProvider: demo ? 'demo' : 'gateway',
+        isDemo: demo,
+      },
+    })
+    await tx.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status,
+        failedAttempts,
+        nextRetryAt: exhausted ? null : retryAt,
+        lastPaymentError: attempt.reason ?? 'Payment failed',
+        graceEndsAt,
+      },
+    })
+    await tx.organization.updateMany({
+      where: {
+        id: subscription.organizationId,
+        status: { in: ['TRIAL', 'ACTIVE'] },
+      },
+      data: { status: 'PAST_DUE' },
+    })
+    await recordActivity(
+      {
+        organizationId: subscription.organizationId,
+        propertyId: subscription.propertyId,
+        actorName: 'AutoPay',
+        event: 'SUBSCRIPTION_PAYMENT_FAILED',
+        entityType: 'SubscriptionInvoice',
+        entityId: invoice.id,
+        summary: `${invoice.number} attempt ${failedAttempts} failed — ${attempt.reason}${
+          exhausted ? ' · retries used, grace period started' : ''
+        }`,
+      },
+      tx,
+    )
+  })
+
+  await notifyOrgAdmins(subscription.organizationId, {
+    kind: 'SUBSCRIPTION',
+    title: exhausted ? 'Subscription payment failed — grace period started' : 'Subscription payment failed',
+    body:
+      exhausted && graceEndsAt
+        ? `${attempt.reason}. Please pay ${invoice.number} before ${graceEndsAt.toLocaleDateString('en-IN')} to keep access.`
+        : `${attempt.reason}. We will try again on ${retryAt?.toLocaleDateString('en-IN')}, or pay now from your subscription page.`,
+    link: '/app/subscription',
+  })
+  if (failedAttempts === 1 || exhausted) {
+    await notifySuperAdmins({
+      kind: 'SUBSCRIPTION',
+      title: 'Failed subscription payment',
+      body: `${subscription.organization.name} — ${subscription.property.name}: ${attempt.reason} (attempt ${failedAttempts})`,
+      link: '/admin/payments',
+    })
+  }
+  return { success: false, reason: attempt.reason }
+}
+
+/** Retries our own failed charges whose retry date has arrived. */
+export async function retryFailedCharges(now = new Date()) {
+  const dueRetries = await prisma.subscription.findMany({
+    where: { status: 'PAST_DUE', nextRetryAt: { lte: now } },
+    select: { id: true, failedAttempts: true, nextRetryAt: true },
+  })
+  let recovered = 0
+  let failed = 0
+  for (const sub of dueRetries) {
+    // Claim the retry so two overlapping runs do not both charge.
+    const claim = await prisma.subscription.updateMany({
+      where: { id: sub.id, nextRetryAt: sub.nextRetryAt },
+      data: { nextRetryAt: null },
+    })
+    if (claim.count !== 1) continue
+    const invoice = await prisma.subscriptionInvoice.findFirst({
+      where: { subscriptionId: sub.id, status: { in: [...UNPAID_INVOICE] } },
+      orderBy: { periodStart: 'asc' },
+    })
+    if (!invoice) {
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: { failedAttempts: 0, lastPaymentError: null },
+      })
+      continue
+    }
+    // Retry offsets count from the first failure; recover it from the schedule.
+    const offsetDays = RETRY_DAYS[sub.failedAttempts - 1] ?? 0
+    const firstFailedAt = addDays(sub.nextRetryAt ?? now, -offsetDays)
+    const outcome = await attemptOwnCharge({
+      subscriptionId: sub.id,
+      invoiceId: invoice.id,
+      attempt: sub.failedAttempts + 1,
+      firstFailedAt,
+      now,
+    })
+    if (outcome.success) recovered++
+    else failed++
+  }
+  return { retried: recovered + failed, recovered, failed }
+}
+
+/**
+ * Moves overdue subscriptions along the lifecycle and suspends those whose
+ * grace period has run out:
+ *  - PAST_DUE with no retry pending and an invoice past its due date → GRACE
+ *  - PAST_DUE / GRACE / ACTIVE (Razorpay AutoPay waiting for a charge) with an
+ *    unpaid invoice and graceEndsAt passed → SUSPENDED (org suspended too).
+ */
 export async function enforceGracePeriods(now = new Date()) {
+  const toGrace = await prisma.subscription.findMany({
+    where: {
+      status: 'PAST_DUE',
+      nextRetryAt: null,
+      invoices: {
+        some: { status: { in: [...UNPAID_INVOICE] }, dueDate: { lt: now } },
+      },
+    },
+    include: { plan: true, property: true },
+  })
+  for (const subscription of toGrace) {
+    const graceEndsAt = subscription.graceEndsAt ?? addDays(now, subscription.plan.graceDays)
+    const moved = await prisma.subscription.updateMany({
+      where: { id: subscription.id, status: 'PAST_DUE' },
+      data: {
+        status: nextStatus('PAST_DUE', { type: 'GRACE_STARTED' }),
+        graceEndsAt,
+      },
+    })
+    if (moved.count === 1 && graceEndsAt > now) {
+      await notifyOrgAdmins(subscription.organizationId, {
+        kind: 'SUBSCRIPTION',
+        title: 'Grace period started',
+        body: `${subscription.property.name}'s StayFlow invoice is overdue. Pay before ${graceEndsAt.toLocaleDateString('en-IN')} to avoid suspension.`,
+        link: '/app/subscription',
+      })
+    }
+  }
+
   const expired = await prisma.subscription.findMany({
     where: {
       // ACTIVE is included for Razorpay AutoPay subscriptions: their invoice is
       // raised with a grace deadline while we wait for the charge webhook.
       status: { in: ['GRACE', 'PAST_DUE', 'ACTIVE'] },
       graceEndsAt: { lt: now },
+      // Never suspend while one of our own retries is still scheduled.
+      nextRetryAt: null,
       invoices: { some: { status: { in: [...UNPAID_INVOICE] } } },
     },
     include: { organization: true, property: true },
@@ -859,7 +1132,11 @@ export async function enforceGracePeriods(now = new Date()) {
     await prisma.$transaction(async (tx) => {
       await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: 'SUSPENDED' },
+        data: {
+          status: nextStatus(subscription.status as SubStatus, {
+            type: 'GRACE_EXPIRED',
+          }),
+        },
       })
       await tx.organization.update({
         where: { id: subscription.organizationId },
@@ -885,7 +1162,7 @@ export async function enforceGracePeriods(now = new Date()) {
       link: '/app/subscription',
     })
   }
-  return { suspended: expired.length }
+  return { suspended: expired.length, graced: toGrace.length }
 }
 
 /** Marks a subscription invoice as paid manually (bank transfer, UPI, cash). */
@@ -1275,20 +1552,56 @@ async function handleSubscriptionCharged(
   return { handled: false, note: 'could not claim a billing cycle' }
 }
 
+/** When the last successful payment of a subscription was recorded. */
+async function lastSuccessfulPaymentAt(subscriptionId: string) {
+  const last = await prisma.subscriptionPayment.findFirst({
+    where: { subscriptionId, status: 'SUCCESS' },
+    orderBy: { paidAt: 'desc' },
+    select: { paidAt: true },
+  })
+  return last?.paidAt ?? null
+}
+
+function eventTime(createdAt?: number) {
+  return typeof createdAt === 'number' && createdAt > 0 ? new Date(createdAt * 1000) : null
+}
+
 async function handleSubscriptionTrouble(
   remote: RazorpaySubscription,
   kind: 'pending' | 'halted',
+  eventCreatedAt: Date | null = null,
 ): Promise<WebhookResult> {
   const found = await subscriptionForRemote(remote)
   if (!found?.current) return { handled: false, note: 'not the current gateway subscription' }
   const { subscription } = found
-  const graceEndsAt = subscription.graceEndsAt ?? addDays(new Date(), subscription.plan.graceDays)
 
+  // Out of order: a charge that succeeded after this failure was reported
+  // already settled things — never move the subscription backwards.
+  if (
+    isStaleFailureEvent({
+      eventCreatedAt,
+      lastSuccessAt: await lastSuccessfulPaymentAt(subscription.id),
+    })
+  ) {
+    return {
+      handled: false,
+      note: `stale subscription.${kind} ignored (paid since)`,
+    }
+  }
+
+  const graceEndsAt = subscription.graceEndsAt ?? addDays(new Date(), subscription.plan.graceDays)
   await prisma.subscription.update({
     where: { id: subscription.id },
     data: {
-      status: ['ACTIVE', 'TRIALING'].includes(subscription.status) ? 'PAST_DUE' : subscription.status,
+      status: nextStatus(subscription.status as SubStatus, {
+        type: 'PAYMENT_FAILED',
+        retriesLeft: kind === 'pending',
+      }),
       graceEndsAt,
+      lastPaymentError:
+        kind === 'halted'
+          ? 'AutoPay stopped after repeated failed charges'
+          : 'AutoPay charge failed; Razorpay will retry',
       ...(kind === 'halted' ? { mandateStatus: 'FAILED' as const, autopayEnabled: false } : {}),
     },
   })
@@ -1405,16 +1718,29 @@ export async function handlePlatformWebhook(event: RazorpayWebhookEvent): Promis
       case 'subscription.activated':
       case 'subscription.resumed': {
         const found = await subscriptionForRemote(remote)
-        if (!found?.current) return { handled: false, note: 'not the current gateway subscription' }
-        await activateMandate(found.subscription.id, remote)
+        if (!found?.current)
+          return {
+            handled: false,
+            note: 'not the current gateway subscription',
+          }
+        // A late activation after the mandate was cancelled must not revive
+        // it: ask Razorpay for the current state first.
+        const fresh = await rzpFetchSubscription(creds, remote.id).catch(() => null)
+        if (fresh && TERMINAL_SUBSCRIPTION_STATES.includes(fresh.status)) {
+          return {
+            handled: false,
+            note: `stale ${name} ignored (gateway subscription is ${fresh.status})`,
+          }
+        }
+        await activateMandate(found.subscription.id, fresh ?? remote)
         return { handled: true, note: 'mandate active' }
       }
       case 'subscription.charged':
         return handleSubscriptionCharged(remote, payment)
       case 'subscription.pending':
-        return handleSubscriptionTrouble(remote, 'pending')
+        return handleSubscriptionTrouble(remote, 'pending', eventTime(event.created_at))
       case 'subscription.halted':
-        return handleSubscriptionTrouble(remote, 'halted')
+        return handleSubscriptionTrouble(remote, 'halted', eventTime(event.created_at))
       case 'subscription.cancelled':
       case 'subscription.completed':
         return handleSubscriptionEnded(remote)
@@ -1446,7 +1772,20 @@ export async function handlePlatformWebhook(event: RazorpayWebhookEvent): Promis
         where: { id: notes.invoiceId },
         include: { subscription: true },
       })
+      // A failure reported after the invoice was paid (out of order) changes nothing.
+      if (invoice && invoice.status === 'PAID') {
+        return {
+          handled: false,
+          note: 'stale payment.failed ignored (invoice already paid)',
+        }
+      }
       if (invoice) {
+        await prisma.subscription.update({
+          where: { id: invoice.subscriptionId },
+          data: {
+            lastPaymentError: payment.error_description?.slice(0, 300) ?? 'Payment failed',
+          },
+        })
         await recordActivity({
           organizationId: invoice.subscription.organizationId,
           propertyId: invoice.subscription.propertyId,
@@ -1469,40 +1808,825 @@ export async function handlePlatformWebhook(event: RazorpayWebhookEvent): Promis
 // --------------------------------------------------------------------------
 
 /**
- * Throws a ConflictError when adding one more property / resident would exceed
- * the organization's plan. The limit is the most generous `maxProperties` /
- * `maxResidents` among the plans of the organization's live subscriptions
- * (null = unlimited); an organization with no subscription yet is held to the
- * default plan. Call before creating the property or checking the resident in.
+ * @deprecated use assertWithinPlan (services/plan-limits). Kept for existing
+ * callers: throws a 402 PlanLimitError when one more property / resident
+ * would exceed the organization's plan.
  */
 export async function assertPlanCapacity(organizationId: string, kind: 'property' | 'resident') {
-  const subscriptions = await prisma.subscription.findMany({
-    where: { organizationId, status: { not: 'CANCELLED' } },
-    select: { plan: { select: { name: true, maxProperties: true, maxResidents: true } } },
+  await assertWithinPlan(organizationId, kind === 'property' ? 'properties' : 'residents')
+}
+
+// --------------------------------------------------------------------------
+// Owner lifecycle: upgrade / downgrade / cycle switch / cancel / resume
+// --------------------------------------------------------------------------
+
+type Actor = { id?: string; name: string; role?: UserRole }
+
+const OWNER_CYCLES: BillingCycle[] = ['MONTHLY', 'YEARLY']
+
+async function loadOwnedSubscription(subscriptionId: string, organizationId?: string) {
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: {
+      plan: true,
+      property: true,
+      organization: {
+        select: { id: true, name: true, gstin: true, state: true },
+      },
+    },
   })
-  const plans = subscriptions.length
-    ? subscriptions.map((s) => s.plan)
-    : await prisma.plan.findMany({
-        where: { active: true },
-        orderBy: { isDefault: 'desc' },
-        take: 1,
-        select: { name: true, maxProperties: true, maxResidents: true },
-      })
-  if (!plans.length) return
+  if (!subscription || (organizationId && subscription.organizationId !== organizationId)) {
+    throw new NotFoundError('Subscription not found')
+  }
+  return subscription
+}
 
-  const limits = plans.map((p) => (kind === 'property' ? p.maxProperties : p.maxResidents))
-  if (limits.some((l) => l == null)) return
-  const limit = Math.max(...(limits as number[]))
+function snapshot(s: {
+  status: string
+  planId: string
+  amount: number
+  billingCycle: string
+  trialEndsAt: Date | null
+  nextBillingDate: Date
+  graceEndsAt: Date | null
+  cancelAtPeriodEnd: boolean
+  pendingPlanId: string | null
+  pendingBillingCycle: string | null
+  cancelledAt: Date | null
+}) {
+  return {
+    status: s.status,
+    planId: s.planId,
+    amount: s.amount,
+    billingCycle: s.billingCycle,
+    trialEndsAt: s.trialEndsAt?.toISOString() ?? null,
+    nextBillingDate: s.nextBillingDate.toISOString(),
+    graceEndsAt: s.graceEndsAt?.toISOString() ?? null,
+    cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+    pendingPlanId: s.pendingPlanId,
+    pendingBillingCycle: s.pendingBillingCycle,
+    cancelledAt: s.cancelledAt?.toISOString() ?? null,
+  }
+}
 
-  const used =
-    kind === 'property'
-      ? await prisma.property.count({ where: { organizationId, archivedAt: null } })
-      : await prisma.resident.count({ where: { organizationId, status: { in: ['ACTIVE', 'NOTICE'] } } })
+export type ChangePreview = {
+  kind: 'upgrade' | 'downgrade' | 'cycle' | 'clear' | 'none'
+  effective: 'now' | 'period_end'
+  currentPlan: { id: string; name: string }
+  targetPlan: { id: string; name: string }
+  currentCycle: BillingCycle
+  targetCycle: BillingCycle
+  targetMonthly: number
+  /** Charged today (prorated upgrade), GST included. */
+  dueNow: {
+    taxable: number
+    tax: number
+    total: number
+    remainingDays: number
+    totalDays: number
+  }
+  /** The next renewal after this change. */
+  nextCharge: { date: string; taxable: number; tax: number; total: number }
+  blockers: string[]
+  notes: string[]
+}
 
-  if (used >= limit) {
-    const what = kind === 'property' ? 'PGs' : 'active residents'
-    throw new ConflictError(
-      `Your ${plans[0].name} plan allows up to ${limit} ${what}. Contact StayFlow support to upgrade your plan.`,
+/**
+ * What a plan and/or cycle change would do, without doing it: upgrades take
+ * effect now with the price difference for the rest of the period invoiced
+ * today; downgrades and cycle switches wait for the period end. A plan whose
+ * limits are below current usage is refused (blockers).
+ */
+export async function previewSubscriptionChange(params: {
+  subscriptionId: string
+  organizationId?: string
+  planId?: string
+  billingCycle?: BillingCycle
+  now?: Date
+}): Promise<ChangePreview> {
+  const now = params.now ?? new Date()
+  const subscription = await loadOwnedSubscription(params.subscriptionId, params.organizationId)
+  if (subscription.status === 'CANCELLED') throw new ConflictError('This subscription is cancelled')
+
+  const targetPlan = params.planId
+    ? await prisma.plan.findUnique({ where: { id: params.planId } })
+    : subscription.plan
+  if (!targetPlan) throw new NotFoundError('Plan not found')
+  if (!targetPlan.active && targetPlan.id !== subscription.planId) {
+    throw new ValidationError('That plan is no longer offered')
+  }
+  const targetCycle = params.billingCycle ?? subscription.pendingBillingCycle ?? subscription.billingCycle
+  if (params.billingCycle && !OWNER_CYCLES.includes(params.billingCycle)) {
+    throw new ValidationError('Choose monthly or yearly billing')
+  }
+
+  const planChange = targetPlan.id !== subscription.planId
+  const cycleChange = targetCycle !== subscription.billingCycle
+  const targetMonthly = planChange
+    ? (await priceForProperty(subscription.property, targetPlan)).amount
+    : subscription.amount
+  const trial = subscription.status === 'TRIALING'
+  const upgrade = planChange && targetMonthly >= subscription.amount
+
+  const blockers: string[] = []
+  const notes: string[] = []
+  if (planChange) {
+    // Limits after the move: the target plan plus the org's other live plans.
+    const others = await prisma.subscription.findMany({
+      where: {
+        organizationId: subscription.organizationId,
+        status: { not: 'CANCELLED' },
+        id: { not: subscription.id },
+      },
+      select: {
+        plan: {
+          select: {
+            name: true,
+            maxProperties: true,
+            maxBeds: true,
+            maxResidents: true,
+            maxStaff: true,
+          },
+        },
+      },
+    })
+    const after: PlanLimits[] = [...others.map((o) => o.plan), targetPlan]
+    const usage = await countUsage(subscription.organizationId)
+    for (const b of downgradeBlockers(usage, after)) blockers.push(b.message)
+  }
+
+  const gst = (taxable: number) => {
+    const g = subscriptionGst(subscription.organization, taxable)
+    return { taxable: g.taxable, tax: g.tax, total: g.total }
+  }
+
+  // Due now: only an upgrade outside the trial is charged immediately.
+  let dueNow = { ...gst(0), remainingDays: 0, totalDays: 0 }
+  if (upgrade && !trial) {
+    const currentPerCycle = cyclePrice(
+      subscription.amount,
+      subscription.billingCycle,
+      subscription.plan.yearlyDiscountPercent,
+    )
+    const targetPerCycle = cyclePrice(
+      targetMonthly,
+      subscription.billingCycle,
+      targetPlan.yearlyDiscountPercent,
+    )
+    const p = prorate({
+      currentCyclePrice: currentPerCycle,
+      targetCyclePrice: targetPerCycle,
+      periodStart: subscription.currentPeriodStart,
+      periodEnd: subscription.currentPeriodEnd,
+      now,
+    })
+    dueNow = {
+      ...gst(p.amount),
+      remainingDays: p.remainingDays,
+      totalDays: p.totalDays,
+    }
+    if (p.amount > 0) {
+      notes.push(
+        `You pay the difference for the ${p.remainingDays} day${p.remainingDays === 1 ? '' : 's'} left in this period today.`,
+      )
+    }
+  }
+
+  // The plan in force at the next renewal: the target, else a downgrade
+  // already scheduled, else the current plan.
+  let nextMonthly = targetMonthly
+  let nextDiscount = targetPlan.yearlyDiscountPercent
+  if (!planChange && subscription.pendingPlanId && params.planId === undefined) {
+    const pending = await prisma.plan.findUnique({
+      where: { id: subscription.pendingPlanId },
+    })
+    if (pending) {
+      nextMonthly = (await priceForProperty(subscription.property, pending)).amount
+      nextDiscount = pending.yearlyDiscountPercent
+    }
+  }
+  const nextTaxable = cyclePrice(nextMonthly, targetCycle, nextDiscount)
+
+  const kind: ChangePreview['kind'] = planChange
+    ? upgrade
+      ? 'upgrade'
+      : 'downgrade'
+    : cycleChange
+      ? 'cycle'
+      : subscription.pendingPlanId || subscription.pendingBillingCycle
+        ? 'clear'
+        : 'none'
+  const effective = trial || kind === 'upgrade' ? 'now' : 'period_end'
+
+  if (trial)
+    notes.push(
+      'You are on a free trial, so the change applies now and nothing is charged until the trial ends.',
+    )
+  if (kind === 'downgrade') notes.push(`${targetPlan.name} starts when your current period ends.`)
+  if (cycleChange && !trial) notes.push(`${CYCLE_LABEL[targetCycle]} billing starts at your next renewal.`)
+  if (kind === 'clear') notes.push('Your scheduled change will be cancelled; you stay as you are.')
+  if (
+    kind !== 'none' &&
+    subscription.mandateStatus === 'ACTIVE' &&
+    subscription.gatewaySubscriptionId &&
+    paymentMode() === 'live'
+  ) {
+    notes.push('AutoPay was authorised for the old amount, so you will be asked to set it up again.')
+  }
+
+  return {
+    kind,
+    effective,
+    currentPlan: { id: subscription.plan.id, name: subscription.plan.name },
+    targetPlan: { id: targetPlan.id, name: targetPlan.name },
+    currentCycle: subscription.billingCycle,
+    targetCycle,
+    targetMonthly,
+    dueNow,
+    nextCharge: {
+      date: subscription.nextBillingDate.toISOString(),
+      ...gst(nextTaxable),
+    },
+    blockers,
+    notes,
+  }
+}
+
+/** Applies a previewed change. Same rules as previewSubscriptionChange. */
+export async function changeSubscription(params: {
+  subscriptionId: string
+  organizationId?: string
+  planId?: string
+  billingCycle?: BillingCycle
+  actor: Actor
+  now?: Date
+}) {
+  const now = params.now ?? new Date()
+  const preview = await previewSubscriptionChange({ ...params, now })
+  if (preview.blockers.length) {
+    throw new ValidationError(
+      `You can't move to ${preview.targetPlan.name} yet. ${preview.blockers.join(' ')} Remove the extra first.`,
     )
   }
+  if (preview.kind === 'none') return { preview, invoice: null, message: 'Nothing to change' }
+
+  const subscription = await loadOwnedSubscription(params.subscriptionId, params.organizationId)
+  const before = snapshot(subscription)
+  const trial = subscription.status === 'TRIALING'
+  const planChange = preview.targetPlan.id !== subscription.planId
+  const cycleChange = preview.targetCycle !== subscription.billingCycle
+
+  const data: Prisma.SubscriptionUpdateInput = {}
+  if (trial) {
+    // Nothing has been paid: everything applies now.
+    data.plan = { connect: { id: preview.targetPlan.id } }
+    data.amount = preview.targetMonthly
+    data.billingCycle = preview.targetCycle
+    data.pendingPlanId = null
+    data.pendingBillingCycle = null
+  } else {
+    if (preview.kind === 'upgrade') {
+      data.plan = { connect: { id: preview.targetPlan.id } }
+      data.amount = preview.targetMonthly
+      data.pendingPlanId = null
+    } else if (preview.kind === 'downgrade') {
+      data.pendingPlanId = preview.targetPlan.id
+    } else if (!planChange) {
+      data.pendingPlanId = null
+    }
+    data.pendingBillingCycle = cycleChange ? preview.targetCycle : null
+  }
+
+  const invoice = await retryOnUniqueConflict(
+    () =>
+      prisma.$transaction(async (tx) => {
+        await tx.subscription.update({ where: { id: subscription.id }, data })
+        let raised = null
+        if (!trial && preview.kind === 'upgrade' && preview.dueNow.taxable > 0) {
+          const number = await nextSubInvoiceNumber(tx, now)
+          raised = await tx.subscriptionInvoice.create({
+            data: {
+              subscriptionId: subscription.id,
+              number,
+              periodStart: now,
+              periodEnd: subscription.currentPeriodEnd,
+              issueDate: now,
+              dueDate: startOfDay(addDays(now, 3)),
+              amount: preview.dueNow.taxable,
+              tax: preview.dueNow.tax,
+              total: preview.dueNow.total,
+              status: 'PENDING',
+            },
+          })
+          // An unpaid upgrade invoice follows the normal grace rules.
+          if (!subscription.graceEndsAt) {
+            await tx.subscription.update({
+              where: { id: subscription.id },
+              data: { graceEndsAt: addDays(now, subscription.plan.graceDays) },
+            })
+          }
+        }
+        const after = await tx.subscription.findUniqueOrThrow({
+          where: { id: subscription.id },
+        })
+        await recordActivity(
+          {
+            organizationId: subscription.organizationId,
+            propertyId: subscription.propertyId,
+            actorId: params.actor.id,
+            actorName: params.actor.name,
+            event: 'SUBSCRIPTION_CHANGED',
+            entityType: 'Subscription',
+            entityId: subscription.id,
+            summary: `${subscription.property.name}: ${describeChange(preview)}${
+              raised ? ` · ${raised.number} ${formatMoney(raised.total)} due now` : ''
+            }`,
+            before,
+            after: snapshot(after),
+          },
+          tx,
+        )
+        return raised
+      }),
+    ['number'],
+  )
+
+  // The amount each charge collects changed now (upgrade / trial switch):
+  // a live mandate for the old amount must be re-authorised.
+  if (data.amount !== undefined || (trial && cycleChange)) {
+    await stopMandateForNewAmount(subscription.id).catch((error) =>
+      console.error('[subscriptions] could not stop mandate after change', error),
+    )
+  }
+
+  return { preview, invoice, message: describeChange(preview) }
+}
+
+function describeChange(p: ChangePreview) {
+  switch (p.kind) {
+    case 'upgrade':
+      return `Upgraded to ${p.targetPlan.name}`
+    case 'downgrade':
+      return p.effective === 'now'
+        ? `Moved to ${p.targetPlan.name}`
+        : `${p.targetPlan.name} scheduled from the next renewal`
+    case 'cycle':
+      return p.effective === 'now'
+        ? `${CYCLE_LABEL[p.targetCycle]} billing set`
+        : `${CYCLE_LABEL[p.targetCycle]} billing scheduled from the next renewal`
+    case 'clear':
+      return 'Scheduled change cancelled'
+    default:
+      return 'No change'
+  }
+}
+
+/** Ends a subscription now: CANCELLED, mandate stopped, org cancelled when nothing live remains. */
+async function finaliseCancellation(subscriptionId: string, actor: Actor, now = new Date()) {
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: { property: true },
+  })
+  if (!subscription || subscription.status === 'CANCELLED') return subscription
+  const before = snapshot(subscription)
+
+  if (subscription.gatewaySubscriptionId || subscription.autopayEnabled) {
+    await cancelAutopay(subscription.id).catch((error) =>
+      console.error('[subscriptions] could not stop AutoPay on cancellation', error),
+    )
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const after = await tx.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: nextStatus(subscription.status as SubStatus, {
+          type: 'CANCELLED',
+        }),
+        cancelledAt: now,
+        cancelAtPeriodEnd: false,
+        pendingPlanId: null,
+        pendingBillingCycle: null,
+        nextRetryAt: null,
+        graceEndsAt: null,
+      },
+    })
+    const live = await tx.subscription.count({
+      where: {
+        organizationId: subscription.organizationId,
+        status: { not: 'CANCELLED' },
+      },
+    })
+    if (live === 0) {
+      await tx.organization.update({
+        where: { id: subscription.organizationId },
+        data: { status: 'CANCELLED' },
+      })
+    }
+    await recordActivity(
+      {
+        organizationId: subscription.organizationId,
+        propertyId: subscription.propertyId,
+        actorId: actor.id,
+        actorName: actor.name,
+        event: 'SUBSCRIPTION_CANCELLED',
+        entityType: 'Subscription',
+        entityId: subscription.id,
+        summary: `${subscription.property.name}: subscription cancelled${
+          subscription.cancelCategory ? ` (${categoryLabel(subscription.cancelCategory)})` : ''
+        }`,
+        meta: {
+          category: subscription.cancelCategory,
+          reason: subscription.cancelReason,
+        },
+        before,
+        after: snapshot(after),
+      },
+      tx,
+    )
+    return after
+  })
+  await notifyOrgAdmins(subscription.organizationId, {
+    kind: 'SUBSCRIPTION',
+    title: 'Subscription cancelled',
+    body: `${subscription.property.name}'s StayFlow subscription has ended. You can reactivate it any time from the subscription page.`,
+    link: '/app/subscription',
+  })
+  return updated
+}
+
+function categoryLabel(value: string) {
+  return CANCEL_CATEGORIES.find((c) => c.value === value)?.label ?? value
+}
+
+/** Owner cancel: now, or at the end of the paid period (with reason + category). */
+export async function cancelSubscription(params: {
+  subscriptionId: string
+  organizationId?: string
+  when: 'now' | 'period_end'
+  category: CancelCategory
+  reason?: string
+  actor: Actor
+}) {
+  const subscription = await loadOwnedSubscription(params.subscriptionId, params.organizationId)
+  if (subscription.status === 'CANCELLED') throw new ConflictError('This subscription is already cancelled')
+
+  await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: {
+      cancelCategory: params.category,
+      cancelReason: params.reason?.slice(0, 500) || null,
+    },
+  })
+
+  if (params.when === 'now') {
+    await finaliseCancellation(subscription.id, params.actor)
+    return {
+      message: `${subscription.property.name}'s subscription is cancelled`,
+    }
+  }
+
+  const before = snapshot(subscription)
+  const after = await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: {
+      cancelAtPeriodEnd: true,
+      pendingPlanId: null,
+      pendingBillingCycle: null,
+    },
+  })
+  await recordActivity({
+    organizationId: subscription.organizationId,
+    propertyId: subscription.propertyId,
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    event: 'SUBSCRIPTION_CANCELLED',
+    entityType: 'Subscription',
+    entityId: subscription.id,
+    summary: `${subscription.property.name}: cancellation scheduled for ${after.nextBillingDate.toLocaleDateString('en-IN')} (${categoryLabel(params.category)})`,
+    meta: {
+      category: params.category,
+      reason: params.reason ?? null,
+      atPeriodEnd: true,
+    },
+    before,
+    after: snapshot(after),
+  })
+  return {
+    message: `${subscription.property.name} stays active until ${after.nextBillingDate.toLocaleDateString('en-IN')}, then ends`,
+  }
+}
+
+/** Undo a scheduled cancellation before the period ends. */
+export async function resumeSubscription(params: {
+  subscriptionId: string
+  organizationId?: string
+  actor: Actor
+}) {
+  const subscription = await loadOwnedSubscription(params.subscriptionId, params.organizationId)
+  if (subscription.status === 'CANCELLED') {
+    throw new ConflictError('This subscription has already ended — ask StayFlow support to reactivate it')
+  }
+  if (!subscription.cancelAtPeriodEnd) throw new ConflictError('No cancellation is scheduled')
+  const before = snapshot(subscription)
+  const after = await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: {
+      cancelAtPeriodEnd: false,
+      cancelCategory: null,
+      cancelReason: null,
+    },
+  })
+  await recordActivity({
+    organizationId: subscription.organizationId,
+    propertyId: subscription.propertyId,
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    event: 'SUBSCRIPTION_CHANGED',
+    entityType: 'Subscription',
+    entityId: subscription.id,
+    summary: `${subscription.property.name}: scheduled cancellation withdrawn`,
+    before,
+    after: snapshot(after),
+  })
+  return { message: `${subscription.property.name} will keep renewing` }
+}
+
+// --------------------------------------------------------------------------
+// Super Admin actions — every one audited (ADMIN_ACTION, before/after)
+// --------------------------------------------------------------------------
+
+export type AdminSubscriptionAction =
+  | { action: 'EXTEND_TRIAL'; days: number }
+  | { action: 'APPLY_CREDIT'; amount: number; note?: string }
+  | { action: 'CANCEL'; reason?: string }
+  | { action: 'REACTIVATE' }
+
+export async function adminSubscriptionAction(params: {
+  subscriptionId: string
+  input: AdminSubscriptionAction
+  actor: Actor
+  now?: Date
+}): Promise<{ message: string }> {
+  const now = params.now ?? new Date()
+  const subscription = await loadOwnedSubscription(params.subscriptionId)
+  const before = snapshot(subscription)
+  const input = params.input
+  let message = ''
+
+  if (input.action === 'EXTEND_TRIAL') {
+    const paidBefore = await prisma.subscriptionInvoice.count({
+      where: { subscriptionId: subscription.id, status: 'PAID' },
+    })
+    if (subscription.status !== 'TRIALING' && paidBefore > 0) {
+      throw new ConflictError('This PG has already paid — apply a credit instead of extending the trial')
+    }
+    if (subscription.status === 'CANCELLED') throw new ConflictError('Reactivate the subscription first')
+    const base = subscription.trialEndsAt && subscription.trialEndsAt > now ? subscription.trialEndsAt : now
+    const trialEndsAt = addDays(base, input.days)
+    await prisma.$transaction(async (tx) => {
+      // A trial that lapsed unpaid: its open invoices are withdrawn.
+      await tx.subscriptionInvoice.updateMany({
+        where: {
+          subscriptionId: subscription.id,
+          status: { in: [...UNPAID_INVOICE] },
+          amountPaid: 0,
+        },
+        data: { status: 'CANCELLED' },
+      })
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: nextStatus(subscription.status as SubStatus, {
+            type: 'TRIAL_EXTENDED',
+          }),
+          trialEndsAt,
+          nextBillingDate: trialEndsAt,
+          graceEndsAt: null,
+          failedAttempts: 0,
+          nextRetryAt: null,
+          lastPaymentError: null,
+        },
+      })
+      await reactivateOrganizationIfClear(tx, subscription.organizationId, now)
+    })
+    message = `Trial extended to ${trialEndsAt.toLocaleDateString('en-IN')}`
+  } else if (input.action === 'APPLY_CREDIT') {
+    const open = await prisma.subscriptionInvoice.findMany({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: [...UNPAID_INVOICE] },
+      },
+      orderBy: { periodStart: 'asc' },
+    })
+    const outstanding = open.reduce((sum, i) => sum + (i.total - i.amountPaid), 0)
+    if (!open.length) throw new ConflictError('There is no open invoice to apply a credit to')
+    if (input.amount > outstanding) {
+      throw new ValidationError(`The credit is more than what is owed (${formatMoney(outstanding)})`)
+    }
+    let left = input.amount
+    await prisma.$transaction(async (tx) => {
+      for (const invoice of open) {
+        if (left <= 0) break
+        const portion = Math.min(left, invoice.total - invoice.amountPaid)
+        await settleSubscriptionInvoice(tx, {
+          invoiceId: invoice.id,
+          amount: portion,
+          method: 'ADJUSTMENT',
+          provider: `credit${input.note ? `:${input.note.slice(0, 60)}` : ''}`,
+          isDemo: false,
+          actor: params.actor,
+          now,
+        })
+        left -= portion
+      }
+    })
+    message = `${formatMoney(input.amount)} credit applied`
+  } else if (input.action === 'CANCEL') {
+    if (subscription.status === 'CANCELLED') throw new ConflictError('Already cancelled')
+    if (input.reason) {
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          cancelReason: input.reason.slice(0, 500),
+          cancelCategory: 'OTHER',
+        },
+      })
+    }
+    await finaliseCancellation(subscription.id, params.actor, now)
+    message = 'Subscription cancelled'
+  } else {
+    if (
+      subscription.status !== 'CANCELLED' &&
+      subscription.status !== 'SUSPENDED' &&
+      !subscription.cancelAtPeriodEnd
+    ) {
+      throw new ConflictError('This subscription is already live')
+    }
+    const unpaid = await prisma.subscriptionInvoice.count({
+      where: {
+        subscriptionId: subscription.id,
+        status: { in: [...UNPAID_INVOICE] },
+      },
+    })
+    if (subscription.status !== 'CANCELLED' && subscription.status !== 'SUSPENDED') {
+      // Only a scheduled cancellation to withdraw.
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          cancelAtPeriodEnd: false,
+          cancelCategory: null,
+          cancelReason: null,
+        },
+      })
+    } else {
+      const status =
+        subscription.status === 'SUSPENDED'
+          ? // An admin override: access back now with a fresh grace period.
+            'GRACE'
+          : nextStatus(subscription.status as SubStatus, {
+              type: 'REACTIVATED',
+              paidUp: unpaid === 0,
+            })
+      await prisma.$transaction(async (tx) => {
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status,
+            cancelledAt: null,
+            cancelAtPeriodEnd: false,
+            cancelCategory: null,
+            cancelReason: null,
+            graceEndsAt: status === 'ACTIVE' ? null : addDays(now, subscription.plan.graceDays),
+            // A period that ended while cancelled is billed afresh from today.
+            ...(subscription.nextBillingDate < now ? { nextBillingDate: now } : {}),
+          },
+        })
+        await tx.organization.updateMany({
+          where: {
+            id: subscription.organizationId,
+            status: { in: ['CANCELLED', 'SUSPENDED'] },
+          },
+          data: { status: status === 'ACTIVE' ? 'ACTIVE' : 'PAST_DUE' },
+        })
+      })
+    }
+    message = 'Subscription reactivated'
+  }
+
+  const after = await prisma.subscription.findUniqueOrThrow({
+    where: { id: subscription.id },
+  })
+  await recordActivity({
+    organizationId: subscription.organizationId,
+    propertyId: subscription.propertyId,
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    actorRole: params.actor.role ?? 'SUPER_ADMIN',
+    event: 'ADMIN_ACTION',
+    entityType: 'Subscription',
+    entityId: subscription.id,
+    summary: `${subscription.organization.name} — ${subscription.property.name}: ${message}`,
+    meta: {
+      action: input.action,
+      ...('days' in input ? { days: input.days } : {}),
+      ...('amount' in input ? { amount: input.amount } : {}),
+    },
+    before,
+    after: snapshot(after),
+  })
+  if (input.action !== 'CANCEL') {
+    await notifyOrgAdmins(subscription.organizationId, {
+      kind: 'SUBSCRIPTION',
+      title: 'Your StayFlow subscription was updated',
+      body: `${subscription.property.name}: ${message}.`,
+      link: '/app/subscription',
+    })
+  }
+  return { message }
+}
+
+/** Audit wrapper for the admin "mark invoice paid" action. */
+export async function adminMarkInvoicePaid(params: {
+  invoiceId: string
+  method?: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CARD'
+  reference?: string
+  actor: Actor
+}) {
+  const before = await prisma.subscriptionInvoice.findUnique({
+    where: { id: params.invoiceId },
+    include: {
+      subscription: {
+        select: { organizationId: true, propertyId: true, status: true },
+      },
+    },
+  })
+  if (!before) throw new NotFoundError('Invoice not found')
+  const invoice = await markSubscriptionInvoicePaid(params)
+  const sub = await prisma.subscription.findUnique({
+    where: { id: before.subscriptionId },
+    select: { status: true },
+  })
+  await recordActivity({
+    organizationId: before.subscription.organizationId,
+    propertyId: before.subscription.propertyId,
+    actorId: params.actor.id,
+    actorName: params.actor.name,
+    actorRole: params.actor.role ?? 'SUPER_ADMIN',
+    event: 'ADMIN_ACTION',
+    entityType: 'SubscriptionInvoice',
+    entityId: before.id,
+    summary: `${before.number} marked paid by StayFlow (${params.method ?? 'BANK_TRANSFER'}${params.reference ? ` · ${params.reference}` : ''})`,
+    meta: { action: 'MARK_PAID' },
+    before: {
+      invoiceStatus: before.status,
+      amountPaid: before.amountPaid,
+      subscriptionStatus: before.subscription.status,
+    },
+    after: {
+      invoiceStatus: 'PAID',
+      amountPaid: invoice.total,
+      subscriptionStatus: sub?.status ?? null,
+    },
+  })
+  return invoice
+}
+
+// --------------------------------------------------------------------------
+// Webhook replay (nightly): FAILED Razorpay events get another go
+// --------------------------------------------------------------------------
+
+export async function replayFailedWebhooks() {
+  const rows = await failedWebhooks('razorpay')
+  let processed = 0
+  let failed = 0
+  for (const row of rows) {
+    if (!(await reclaimFailedWebhook(row.id))) continue
+    const payload = (row.payload ?? {}) as RazorpayWebhookEvent & {
+      _stayflowOrgId?: string
+    }
+    try {
+      let result: WebhookResult
+      if (payload._stayflowOrgId) {
+        const creds = await getOrgRazorpay(payload._stayflowOrgId)
+        result = creds
+          ? await handleOrgWebhook(payload._stayflowOrgId, creds, payload)
+          : { handled: false, note: 'Razorpay no longer connected' }
+      } else {
+        result = await handlePlatformWebhook(payload)
+      }
+      await finishWebhook(row.id, {
+        status: result.handled ? 'PROCESSED' : 'IGNORED',
+        error: result.handled ? null : result.note,
+      })
+      processed++
+    } catch (error) {
+      await finishWebhook(row.id, {
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : String(error),
+      })
+      failed++
+    }
+  }
+  return { processed, failed }
 }

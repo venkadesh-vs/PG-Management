@@ -5,18 +5,19 @@ import { fail, route } from '@/lib/api-helpers'
 import { maskIdNumber, requireModule, requirePermission, resolveScope, scopeWhere } from '@/lib/tenancy'
 import type { ModuleKey } from '@/lib/modules'
 import { endOfDay, startOfDay, toISODate } from '@/lib/utils'
+import { dailyCollectionReport } from '@/server/services/billing'
 
 /**
  * GET /api/exports/<kind>.csv?property=&from=YYYY-MM-DD&to=YYYY-MM-DD
  *
  * CSV downloads for owners and managers, limited to the PGs they can see.
  * Written with a UTF-8 BOM so Excel shows ₹ and Indian names correctly.
- * kinds: residents, invoices, payments, expenses, outstanding
+ * kinds: residents, invoices, payments, expenses, outstanding, daily-collection (?date=YYYY-MM-DD)
  */
 
 type Row = (string | number | null | undefined)[]
 
-const KINDS = ['residents', 'invoices', 'payments', 'expenses', 'outstanding'] as const
+const KINDS = ['residents', 'invoices', 'payments', 'expenses', 'outstanding', 'daily-collection'] as const
 type Kind = (typeof KINDS)[number]
 
 /** The module each export reads from, and the view permission it needs. */
@@ -25,6 +26,7 @@ const KIND_ACCESS: Record<Kind, { module: ModuleKey; permission: string }> = {
   invoices: { module: 'rent', permission: 'rent.view' },
   payments: { module: 'rent', permission: 'rent.view' },
   outstanding: { module: 'rent', permission: 'rent.view' },
+  'daily-collection': { module: 'rent', permission: 'rent.view' },
   expenses: { module: 'expenses', permission: 'expenses.view' },
 }
 
@@ -105,10 +107,10 @@ export const GET = route(
         include: { resident: { select: { code: true, fullName: true } }, property: { select: { name: true } } },
         orderBy: { paidAt: 'desc' },
       })
-      header = ['Receipt', 'Date', 'Resident code', 'Resident', 'PG', 'Purpose', 'Method', 'Status', 'Amount', 'Reference', 'Gateway payment id', 'Demo', 'Recorded by']
+      header = ['Receipt', 'Date', 'Resident code', 'Resident', 'PG', 'Purpose', 'Method', 'Status', 'Amount', 'Refunded', 'Reference', 'UTR', 'Gateway payment id', 'Demo', 'Recorded by', 'Reversal reason']
       rows = payments.map((p) => [
         p.receiptNumber, d(p.paidAt), p.resident.code, p.resident.fullName, p.property.name, p.purpose, p.method, p.status,
-        p.amount, p.reference, p.gatewayPaymentId, p.isDemo ? 'yes' : '', p.recordedBy,
+        p.amount, p.refundedAmount, p.reference, p.utr, p.gatewayPaymentId, p.isDemo ? 'yes' : '', p.recordedBy, p.reversalReason,
       ])
     }
 
@@ -124,7 +126,33 @@ export const GET = route(
       ])
     }
 
-    const filename = `stayflow-${kind}-${toISODate(new Date())}.csv`
+    if (kind === 'daily-collection') {
+      const m = url.searchParams.get('date')?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+      const day = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date()
+      const report = await dailyCollectionReport({
+        organizationId: scope.organizationId,
+        propertyIds: scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds,
+        date: day,
+      })
+      header = ['Section', 'Time', 'Resident code', 'Resident', 'PG', 'Entry', 'Method', 'Reference', 'Amount']
+      const t = (at: Date) => at.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      const section = (name: string, list: typeof report.lists.invoiced, amount: (r: (typeof list)[number]) => number): Row[] =>
+        list.map((r) => [name, t(r.at), r.code, r.resident, r.property, r.label, r.method, r.reference, amount(r)])
+      rows = [
+        ['Summary', toISODate(day), '', '', '', 'Opening outstanding', '', '', report.opening],
+        ['Summary', '', '', '', '', 'Invoiced today (+)', '', '', report.invoiced],
+        ['Summary', '', '', '', '', 'Collected today (-)', '', '', report.collected],
+        ['Summary', '', '', '', '', 'Adjustments (+/-)', '', '', report.adjustments],
+        ['Summary', '', '', '', '', 'Closing outstanding', '', '', report.closing],
+        ...Object.entries(report.byMethod).map(([method, amount]): Row => ['Collected by method', '', '', '', '', method, method, '', amount]),
+        ...section('Invoiced', report.lists.invoiced, (r) => r.debit),
+        ...section('Collected', report.lists.collected, (r) => r.credit),
+        ...section('Adjustment', report.lists.adjustments, (r) => r.debit - r.credit),
+        ...report.openingByResident.map((r): Row => ['Opening by resident', '', r.code, r.resident, r.property, 'Opening balance', '', '', r.balance]),
+      ]
+    }
+
+    const filename = `stayflow-${kind}-${kind === 'daily-collection' ? (/^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') ?? '') ? url.searchParams.get('date') : toISODate(new Date())) : toISODate(new Date())}.csv`
     return new NextResponse(toCsv(header, rows), {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',

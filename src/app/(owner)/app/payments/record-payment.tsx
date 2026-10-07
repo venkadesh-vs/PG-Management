@@ -4,8 +4,8 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Check, Receipt, Search, Wallet } from 'lucide-react'
-import { api, ApiError } from '@/lib/client'
-import { cn, formatDate, formatMoney } from '@/lib/utils'
+import { api } from '@/lib/client'
+import { cn, formatMoney, toISODate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { InvoicePicker, ProofUpload } from './payment-fields'
 
 type ResidentOption = {
   id: string
@@ -40,7 +41,12 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
   const [amount, setAmount] = React.useState('')
   const [method, setMethod] = React.useState('UPI')
   const [reference, setReference] = React.useState('')
+  const [utr, setUtr] = React.useState('')
   const [notes, setNotes] = React.useState('')
+  const [proof, setProof] = React.useState('')
+  const [uploading, setUploading] = React.useState(false)
+  const [invoiceIds, setInvoiceIds] = React.useState<string[]>([])
+  const [paidAt, setPaidAt] = React.useState(() => toISODate(new Date()))
   const [busy, setBusy] = React.useState(false)
   const [receipt, setReceipt] = React.useState<{ receiptNumber: string; amount: number } | null>(null)
 
@@ -60,12 +66,17 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
     setQuery('')
     setAmount('')
     setReference('')
+    setUtr('')
     setNotes('')
+    setProof('')
+    setInvoiceIds([])
+    setPaidAt(toISODate(new Date()))
     setReceipt(null)
   }
 
   function choose(resident: ResidentOption) {
     setSelected(resident)
+    setInvoiceIds([])
     setAmount(String(resident.outstanding || resident.rentAmount))
   }
 
@@ -87,6 +98,10 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
         amount: value,
         method,
         reference: reference || undefined,
+        utr: utr || undefined,
+        attachmentUrl: proof || undefined,
+        paidAt: paidAt !== toISODate(new Date()) ? paidAt : undefined,
+        invoiceIds: invoiceIds.length ? invoiceIds : undefined,
         notes: notes || undefined,
       })
       setReceipt(result)
@@ -96,10 +111,7 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
       )
       router.refresh()
     } catch (error) {
-      toast.error(
-        'Unable to record payment',
-        error instanceof ApiError ? error.message : 'Please try again.',
-      )
+      toast.fromError(error, 'record the payment')
     } finally {
       setBusy(false)
     }
@@ -228,26 +240,12 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
                     </Button>
                   </div>
 
-                  {selected.invoices.length > 0 && (
-                    <div className="rounded-xl border border-slate-200 p-3">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Open invoices
-                      </p>
-                      <ul className="space-y-1 text-sm">
-                        {selected.invoices.map((invoice) => (
-                          <li key={invoice.id} className="flex items-center justify-between gap-3">
-                            <span className="truncate text-slate-700">{invoice.number}</span>
-                            <span className="text-xs text-slate-400">
-                              due {formatDate(invoice.dueDate)}
-                            </span>
-                            <span className="font-medium text-slate-800 tabular">
-                              {formatMoney(invoice.balance)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <InvoicePicker
+                    invoices={selected.invoices}
+                    value={invoiceIds}
+                    onChange={setInvoiceIds}
+                    amount={Number(amount) || 0}
+                  />
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Amount" required>
@@ -269,13 +267,22 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
                       </Select>
                     </Field>
                   </div>
-                  <Field label="Reference">
-                    <Input
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
-                      placeholder="UPI reference or cheque number"
-                    />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="UTR / transaction ID" hint="From the UPI app or bank SMS">
+                      <Input value={utr} onChange={(e) => setUtr(e.target.value)} placeholder="e.g. 427812345678" />
+                    </Field>
+                    <Field label="Reference">
+                      <Input
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        placeholder="Cheque no. or other ref"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Received on" required>
+                    <Input type="date" value={paidAt} max={toISODate(new Date())} onChange={(e) => setPaidAt(e.target.value)} />
                   </Field>
+                  <ProofUpload value={proof} onChange={setProof} residentId={selected.id} onBusyChange={setUploading} />
                   <Field label="Notes">
                     <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
                   </Field>
@@ -290,7 +297,7 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
                   variant="primary"
                   loading={busy}
                   onClick={submit}
-                  disabled={!selected || !Number(amount)}
+                  disabled={!selected || !Number(amount) || uploading}
                 >
                   Record {Number(amount) ? formatMoney(Number(amount)) : 'payment'}
                 </Button>

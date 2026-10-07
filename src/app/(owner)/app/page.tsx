@@ -52,6 +52,7 @@ import { ActivityTimeline } from '@/components/app/activity-timeline'
 import { OccupancyRing } from '@/components/app/occupancy-ring'
 import { ICONS, type IconName } from '@/lib/icons'
 import { Onboarding } from './onboarding'
+import { shouldStartSetup } from '@/server/services/onboarding'
 import { AttentionPanel } from './attention-panel'
 import { VacancyCard } from './vacancy-card'
 
@@ -63,6 +64,8 @@ export default async function OwnerDashboard({
   searchParams: Promise<{ property?: string }>
 }) {
   const user = await requireOrgUser()
+  // A brand-new owner starts in the setup wizard (first visit only).
+  if (await shouldStartSetup(user)) redirect('/app/setup')
   const has = (p: string) => user.permissions.includes(p)
   const on = (m: string) => (user.modules as string[]).includes(m)
 

@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
-import {
-  getOrgRazorpay,
-  logRentPaymentFailure,
-  recordRentGatewayPayment,
-} from '@/server/integrations/payments'
+import { getOrgRazorpay, handleOrgWebhook } from '@/server/integrations/payments'
 import { parseWebhookEvent, verifyWebhookSignature } from '@/server/integrations/razorpay'
+import { runLoggedWebhook, webhookEventKey } from '@/server/services/webhook-log'
 
 /**
  * Per-organization Razorpay webhook — rent paid into the PG owner's own
@@ -12,9 +9,12 @@ import { parseWebhookEvent, verifyWebhookSignature } from '@/server/integrations
  * their Razorpay dashboard with their own webhook secret.
  *
  * Public — no session. Raw body first, then the signature against THIS org's
- * webhook secret, then the payment is matched to the order StayFlow created
- * (notes + amount, fetched from Razorpay). Duplicates and unknown events get
- * 200 so Razorpay stops retrying.
+ * webhook secret (bad signature → 400), then the payment is matched to the
+ * order StayFlow created (notes + amount, fetched from Razorpay).
+ *
+ * Idempotent: recorded as a WebhookEvent keyed by Razorpay's event id before
+ * processing; redeliveries of a processed event answer 200 "already
+ * processed". Failures are stored as FAILED and answered 200.
  *
  * Events: payment.captured (records the payment unless the checkout callback
  * already did), payment.failed (logged).
@@ -29,32 +29,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ org
     return NextResponse.json({ error: 'Razorpay is not connected for this account' }, { status: 404 })
   }
   if (!verifyWebhookSignature(raw, signature, creds.webhookSecret)) {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
   const event = parseWebhookEvent(raw)
-  const payment = event?.payload?.payment?.entity
-  if (!event || !payment?.id) {
-    return NextResponse.json({ received: true, handled: false, note: 'ignored' })
-  }
+  if (!event) return NextResponse.json({ received: true, handled: false, note: 'not JSON' })
 
-  try {
-    if (event.event === 'payment.captured') {
-      const outcome = await recordRentGatewayPayment({
-        organizationId: orgId,
-        creds,
-        payment,
-        source: 'webhook',
-      })
-      return NextResponse.json({ received: true, ...outcome })
-    }
-    if (event.event === 'payment.failed') {
-      await logRentPaymentFailure(orgId, payment)
-      return NextResponse.json({ received: true, handled: true, note: 'failure logged' })
-    }
-    return NextResponse.json({ received: true, handled: false, note: `ignored ${event.event}` })
-  } catch (error) {
-    console.error('[webhooks/razorpay/org]', orgId, event.event, error)
-    return NextResponse.json({ error: 'Processing failed; please retry' }, { status: 500 })
+  const outcome = await runLoggedWebhook({
+    provider: 'razorpay',
+    eventId: webhookEventKey({
+      headerId: request.headers.get('x-razorpay-event-id'),
+      rawBody: raw,
+      parsed: event as { id?: unknown },
+    }),
+    type: event.event ?? 'unknown',
+    // The org id travels with the stored payload so a FAILED event can be replayed.
+    payload: { ...event, _stayflowOrgId: orgId },
+    handler: () => handleOrgWebhook(orgId, creds, event),
+  })
+  if (outcome.duplicate) {
+    return NextResponse.json({ received: true, duplicate: true, note: 'already processed' })
   }
+  return NextResponse.json({ received: true, ...outcome })
 }

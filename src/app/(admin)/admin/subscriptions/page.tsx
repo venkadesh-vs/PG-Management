@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, SearchInput } from '@/components/app/filters'
 import { RunBillingButton } from './run-billing-button'
+import { SubscriptionAdminActions } from './subscription-actions'
+import { CYCLE_LABEL, STATUS_WORDS, type SubStatus } from '@/lib/subscription-math'
 
 export const metadata: Metadata = { title: 'Subscriptions' }
 
@@ -33,11 +35,16 @@ export default async function AdminSubscriptionsPage({
   const params = await searchParams
   const q = params.q?.trim() ?? ''
   const status = params.status
+  const planFilter = params.plan
+  const cycle = params.cycle
+  const CYCLES = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY'] as const
 
-  const [subscriptions, metrics] = await Promise.all([
+  const [subscriptions, metrics, plans] = await Promise.all([
     prisma.subscription.findMany({
       where: {
         ...(status ? { status: status as never } : {}),
+        ...(planFilter ? { planId: planFilter } : {}),
+        ...(cycle && (CYCLES as readonly string[]).includes(cycle) ? { billingCycle: cycle as (typeof CYCLES)[number] } : {}),
         ...(q
           ? {
               OR: [
@@ -51,15 +58,33 @@ export default async function AdminSubscriptionsPage({
         organization: { select: { id: true, name: true } },
         property: { select: { name: true, type: true, standardRent: true } },
         plan: { select: { name: true, pricingBasis: true, multiplier: true } },
-        invoices: { where: { status: { not: 'PAID' } }, select: { total: true, amountPaid: true } },
+        invoices: {
+          where: { status: { in: ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'] } },
+          select: { id: true, number: true, total: true, amountPaid: true },
+          orderBy: { periodStart: 'asc' },
+        },
       },
       orderBy: [{ status: 'asc' }, { nextBillingDate: 'asc' }],
       take: 100,
     }),
     platformMetrics(),
+    prisma.plan.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { id: true, name: true } }),
   ])
 
-  const activeFilters = [q, status].filter(Boolean).length
+  const activeFilters = [q, status, planFilter, cycle].filter(Boolean).length
+  const actionsFor = (sub: (typeof subscriptions)[number]) => {
+    const open = sub.invoices[0]
+    return (
+      <SubscriptionAdminActions
+        subscriptionId={sub.id}
+        label={`${sub.organization.name} — ${sub.property.name}`}
+        status={sub.status}
+        cancelAtPeriodEnd={sub.cancelAtPeriodEnd}
+        openInvoice={open ? { id: open.id, number: open.number, due: open.total - open.amountPaid } : null}
+        owed={sub.invoices.reduce((s, i) => s + (i.total - i.amountPaid), 0)}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -87,11 +112,21 @@ export default async function AdminSubscriptionsPage({
             options={[
               { value: 'ACTIVE', label: 'Active' },
               { value: 'TRIALING', label: 'Trial' },
-              { value: 'PAST_DUE', label: 'Past due' },
+              { value: 'PAST_DUE', label: 'Payment due' },
               { value: 'GRACE', label: 'Grace period' },
               { value: 'SUSPENDED', label: 'Suspended' },
               { value: 'CANCELLED', label: 'Cancelled' },
             ]}
+          />
+          <FilterSelect
+            paramKey="plan"
+            placeholder="All plans"
+            options={plans.map((p) => ({ value: p.id, label: p.name }))}
+          />
+          <FilterSelect
+            paramKey="cycle"
+            placeholder="All cycles"
+            options={CYCLES.map((c) => ({ value: c, label: CYCLE_LABEL[c] }))}
           />
         </FilterBar>
       </Suspense>
@@ -116,6 +151,9 @@ export default async function AdminSubscriptionsPage({
                   <TableHead>Next billing</TableHead>
                   <TableHead>AutoPay</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,7 +178,9 @@ export default async function AdminSubscriptionsPage({
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <p className="text-sm text-slate-700">{sub.plan.name}</p>
+                        <p className="text-sm text-slate-700">
+                          {sub.plan.name} · {CYCLE_LABEL[sub.billingCycle].toLowerCase()}
+                        </p>
                         <p className="text-xs text-slate-500">
                           {sub.plan.pricingBasis === 'STANDARD_RENT'
                             ? `${sub.plan.multiplier}% of ${formatMoney(sub.property.standardRent)} rent`
@@ -175,8 +215,17 @@ export default async function AdminSubscriptionsPage({
                         )}
                       </TableCell>
                       <TableCell>
-                        <StatusChip label={style.label} chip={style.chip} />
+                        <StatusChip label={STATUS_WORDS[sub.status as SubStatus]?.label ?? style.label} chip={style.chip} />
+                        {sub.cancelAtPeriodEnd && sub.status !== 'CANCELLED' && (
+                          <span className="block text-[11px] text-red-600">cancels at period end</span>
+                        )}
+                        {sub.lastPaymentError && ['PAST_DUE', 'GRACE', 'SUSPENDED'].includes(sub.status) && (
+                          <span className="block max-w-[180px] truncate text-[11px] text-red-600" title={sub.lastPaymentError}>
+                            {sub.lastPaymentError}
+                          </span>
+                        )}
                       </TableCell>
+                      <TableCell className="text-right">{actionsFor(sub)}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -192,7 +241,7 @@ export default async function AdminSubscriptionsPage({
               const owed = sub.invoices.reduce((s, i) => s + (i.total - i.amountPaid), 0)
               const autopayOn = sub.autopayEnabled && sub.mandateStatus === 'ACTIVE'
               return (
-                <li key={sub.id}>
+                <li key={sub.id} className="space-y-1">
                   <Link
                     href={`/admin/organizations/${sub.organization.id}`}
                     className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
@@ -231,6 +280,7 @@ export default async function AdminSubscriptionsPage({
                       </span>
                     </div>
                   </Link>
+                  <div className="flex justify-end">{actionsFor(sub)}</div>
                 </li>
               )
             })}

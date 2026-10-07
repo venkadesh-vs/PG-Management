@@ -13,8 +13,13 @@ export function resolveAccess(input: {
   disabledModules: string[]
   /** FeatureFlag keys switched off for this org (globally or by override). */
   flagsOff: string[]
+  /** Optional module keys the org's plan does not include (lib/plan-entitlements). */
+  planOff?: string[]
 }): { modules: ModuleKey[]; permissions: string[] } {
-  const platformOff = MODULES.filter((m) => m.flag && input.flagsOff.includes(m.flag)).map((m) => m.key)
+  const platformOff = [
+    ...MODULES.filter((m) => m.flag && input.flagsOff.includes(m.flag)).map((m) => m.key),
+    ...(input.planOff ?? []),
+  ]
   const modules = enabledModules(input.disabledModules, platformOff)
 
   let granted: string[]

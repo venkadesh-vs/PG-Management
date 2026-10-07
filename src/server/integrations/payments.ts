@@ -312,3 +312,30 @@ export async function logRentPaymentFailure(organizationId: string, payment: Raz
     meta: { residentId: notes.residentId ?? null, orderId: payment.order_id },
   }).catch(() => undefined)
 }
+
+/**
+ * Dispatches an ORG webhook whose signature the route already verified.
+ * Returns handled:false for anything irrelevant (logged as IGNORED);
+ * throws only for genuine processing failures (logged as FAILED).
+ */
+export async function handleOrgWebhook(
+  organizationId: string,
+  creds: OrgRazorpay,
+  event: { event?: string; payload?: { payment?: { entity?: RazorpayPayment } } },
+): Promise<{ handled: boolean; note: string }> {
+  const payment = event.payload?.payment?.entity
+  if (!payment?.id) return { handled: false, note: 'no payment entity' }
+  if (event.event === 'payment.captured') {
+    const outcome = await recordRentGatewayPayment({ organizationId, creds, payment, source: 'webhook' })
+    if (outcome.status === 'ignored') return { handled: false, note: outcome.reason }
+    return {
+      handled: true,
+      note: outcome.duplicate ? 'duplicate' : `receipt ${outcome.receiptNumber}`,
+    }
+  }
+  if (event.event === 'payment.failed') {
+    await logRentPaymentFailure(organizationId, payment)
+    return { handled: true, note: 'failure logged' }
+  }
+  return { handled: false, note: `ignored ${event.event ?? 'unknown event'}` }
+}

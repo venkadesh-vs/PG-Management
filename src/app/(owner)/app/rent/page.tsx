@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { RentToolbar } from './rent-toolbar'
+import { InvoiceActions } from './invoice-actions'
 
 export const metadata: Metadata = { title: 'Rent & Payments' }
 
@@ -119,6 +120,18 @@ export default async function RentPage({
 
   const today = startOfDay(new Date())
   const activeFilters = [q, status, month].filter(Boolean).length
+
+  const invoiceCan = {
+    credit: user.permissions.includes('invoices.waive'),
+    debit: user.permissions.includes('rent.manage'),
+  }
+  const invoiceRow = (i: (typeof invoices)[number]) => ({
+    id: i.id,
+    number: i.number,
+    status: i.status,
+    total: i.total,
+    balance: i.balance,
+  })
 
   return (
     <div className="space-y-6">
@@ -216,6 +229,7 @@ export default async function RentPage({
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -283,6 +297,9 @@ export default async function RentPage({
                           </p>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <InvoiceActions invoice={invoiceRow(invoice)} can={invoiceCan} />
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -292,10 +309,13 @@ export default async function RentPage({
 
           <ul className="space-y-2 md:hidden">
             {invoices.map((invoice) => (
-              <li key={invoice.id}>
+              <li key={invoice.id} className="relative">
+                <div className="absolute right-2 top-2 z-10">
+                  <InvoiceActions invoice={invoiceRow(invoice)} can={invoiceCan} />
+                </div>
                 <Link
                   href={`/app/residents/${invoice.resident.id}`}
-                  className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="block rounded-2xl border border-slate-200 bg-white p-4 pr-11 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">

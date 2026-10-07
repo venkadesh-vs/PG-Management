@@ -16,6 +16,7 @@ import { notifyOrgAdmins, notifyResident, recordActivity } from '../events'
 import { sendWhatsApp } from '../integrations/whatsapp'
 import { issueAuthToken } from '../auth-tokens'
 import { deliverAccountLink, generatedLoginEmail, type DeliveryChannel } from './accounts'
+import { assertWithinPlan } from './plan-limits'
 import {
   addDays,
   daysInMonth,
@@ -139,6 +140,7 @@ export type CheckInInput = {
 
 export async function checkInResident(input: CheckInInput) {
   if (input.rentAmount <= 0) throw new ValidationError('Rent must be greater than zero')
+  await assertWithinPlan(input.organizationId, 'residents')
 
   // A clash on the resident code or receipt number re-runs the whole check-in.
   const result = await retryOnUniqueConflict(() => checkInOnce(input), ['code', 'receiptNumber'])

@@ -21,6 +21,25 @@ import {
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
 import { PayInvoiceButton } from './pay-invoice-button'
+import {
+  CancelSubscriptionButton,
+  ChangePlanButton,
+  ResumeSubscriptionButton,
+  type PlanOption,
+} from './plan-actions'
+import { priceForProperty, subscriptionGst } from '@/server/services/subscriptions'
+import { usageForOrg } from '@/server/services/plan-limits'
+import {
+  CANCEL_CATEGORIES,
+  CYCLE_LABEL,
+  CYCLE_SUFFIX,
+  cyclePrice,
+  describeStatus,
+  STATUS_WORDS,
+  type SubStatus,
+} from '@/lib/subscription-math'
+import { isModuleEntitlementList, LIMIT_NOUN } from '@/lib/plan-entitlements'
+import { OPTIONAL_MODULES } from '@/lib/modules'
 
 const PAYABLE = ['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
 
@@ -29,7 +48,7 @@ export const metadata: Metadata = { title: 'Subscription' }
 export default async function SubscriptionPage() {
   const user = await requireAccess({ module: 'settings', permission: 'billing.manage' })
 
-  const [subscriptions, organization, invoices] = await Promise.all([
+  const [subscriptions, organization, invoices, plans, usage] = await Promise.all([
     prisma.subscription.findMany({
       where: { organizationId: user.organizationId },
       include: {
@@ -52,11 +71,43 @@ export default async function SubscriptionPage() {
       orderBy: { issueDate: 'desc' },
       take: 24,
     }),
+    prisma.plan.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+    usageForOrg(user.organizationId),
   ])
+  const orgTax = await prisma.organization.findUnique({
+    where: { id: user.organizationId },
+    select: { gstin: true, state: true },
+  })
+  const now = new Date()
+  const planNames = new Map(plans.map((p) => [p.id, p.name]))
+
+  // What each PG would pay on each plan (prices derive from the PG itself).
+  const optionsBySub = new Map<string, PlanOption[]>()
+  for (const s of subscriptions) {
+    const list = plans.some((p) => p.id === s.planId) ? plans : [s.plan, ...plans]
+    optionsBySub.set(
+      s.id,
+      await Promise.all(
+        list.map(async (plan) => ({
+          id: plan.id,
+          name: plan.name,
+          tagline: plan.tagline,
+          monthly: plan.id === s.planId ? s.amount : (await priceForProperty(s.property, plan)).amount,
+          yearlyDiscountPercent: plan.yearlyDiscountPercent,
+          highlighted: plan.highlighted,
+        })),
+      ),
+    )
+  }
 
   const monthlyTotal = subscriptions
     .filter((s) => s.status === 'ACTIVE' || s.status === 'TRIALING')
     .reduce((sum, s) => sum + s.amount, 0)
+  const pendingPlanIds = subscriptions.map((s) => s.pendingPlanId).filter(Boolean) as string[]
+  const pendingPlans = pendingPlanIds.length
+    ? await prisma.plan.findMany({ where: { id: { in: pendingPlanIds } }, select: { id: true, name: true } })
+    : []
+  for (const p of pendingPlans) planNames.set(p.id, p.name)
   const outstanding = invoices
     .filter((i) => i.status !== 'PAID')
     .reduce((sum, i) => sum + (i.total - i.amountPaid), 0)
@@ -151,6 +202,33 @@ export default async function SubscriptionPage() {
           {subscriptions.map((subscription) => {
             const theme = themeFor(subscription.property.type)
             const style = SUBSCRIPTION_STATUS_STYLE[subscription.status]
+            const words = STATUS_WORDS[subscription.status as SubStatus]
+            const statusLine = describeStatus({
+              status: subscription.status as SubStatus,
+              now,
+              trialEndsAt: subscription.trialEndsAt,
+              graceEndsAt: subscription.graceEndsAt,
+              currentPeriodEnd: subscription.nextBillingDate,
+              cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+              nextRetryAt: subscription.nextRetryAt,
+            })
+            const perCycle = cyclePrice(
+              subscription.amount,
+              subscription.billingCycle,
+              subscription.plan.yearlyDiscountPercent,
+            )
+            // The next renewal, after any scheduled change.
+            const nextCycle = subscription.pendingBillingCycle ?? subscription.billingCycle
+            const nextOption = optionsBySub
+              .get(subscription.id)
+              ?.find((o) => o.id === (subscription.pendingPlanId ?? subscription.planId))
+            const nextTaxable = cyclePrice(
+              nextOption?.monthly ?? subscription.amount,
+              nextCycle,
+              nextOption?.yearlyDiscountPercent ?? subscription.plan.yearlyDiscountPercent,
+            )
+            const nextTotal = subscriptionGst(orgTax ?? {}, nextTaxable).total
+            const live = subscription.status !== 'CANCELLED'
             const basis =
               subscription.plan.pricingBasis === 'STANDARD_RENT'
                 ? `${subscription.plan.multiplier}% of this PG's standard rent (${formatMoney(subscription.property.standardRent)})`
@@ -169,24 +247,71 @@ export default async function SubscriptionPage() {
                       </CardTitle>
                       <p className="text-xs text-slate-500">{subscription.plan.name} plan</p>
                     </div>
-                    <StatusChip label={style.label} chip={style.chip} />
+                    <StatusChip label={words?.label ?? style.label} chip={style.chip} />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <p
+                    className={cn(
+                      'rounded-lg px-3 py-2 text-sm font-medium',
+                      words?.tone === 'ok' && 'bg-emerald-50 text-emerald-800',
+                      words?.tone === 'info' && 'bg-violet-50 text-violet-800',
+                      words?.tone === 'warn' && 'bg-amber-50 text-amber-900',
+                      words?.tone === 'bad' && 'bg-red-50 text-red-800',
+                    )}
+                  >
+                    {statusLine}
+                  </p>
                   <div className="flex items-baseline gap-2">
                     <span className="font-display text-3xl font-semibold text-slate-900 tabular">
-                      {formatMoney(subscription.amount)}
+                      {formatMoney(perCycle)}
                     </span>
-                    <span className="text-sm text-slate-500">/month</span>
+                    <span className="text-sm text-slate-500">
+                      {CYCLE_SUFFIX[subscription.billingCycle]} + GST
+                    </span>
                   </div>
-                  <p className="text-xs leading-relaxed text-slate-500">{basis}</p>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    {basis}
+                    {subscription.billingCycle === 'YEARLY' &&
+                      ` · ${formatMoney(subscription.amount)}/month billed yearly with ${subscription.plan.yearlyDiscountPercent}% off`}
+                  </p>
+                  {subscription.lastPaymentError && subscription.status !== 'ACTIVE' && live && (
+                    <p className="flex items-start gap-1.5 text-xs text-red-700">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                      Last payment failed: {subscription.lastPaymentError}
+                    </p>
+                  )}
+                  {(subscription.pendingPlanId || subscription.pendingBillingCycle) && (
+                    <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                      From {formatDate(subscription.nextBillingDate)}:{' '}
+                      {subscription.pendingPlanId &&
+                        `${planNames.get(subscription.pendingPlanId) ?? 'new'} plan`}
+                      {subscription.pendingPlanId && subscription.pendingBillingCycle && ', '}
+                      {subscription.pendingBillingCycle &&
+                        `${CYCLE_LABEL[subscription.pendingBillingCycle].toLowerCase()} billing`}
+                    </p>
+                  )}
+                  {subscription.cancelAtPeriodEnd && live && (
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+                      Ends on {formatDate(subscription.nextBillingDate)}
+                      {subscription.cancelCategory &&
+                        ` — ${CANCEL_CATEGORIES.find((c) => c.value === subscription.cancelCategory)?.label ?? ''}`}
+                      . Change your mind any time before then.
+                    </p>
+                  )}
 
                   <div className="space-y-2 border-t border-slate-100 pt-3 text-sm">
                     <Row
                       label="Current period"
                       value={`${formatDate(subscription.currentPeriodStart)} – ${formatDate(subscription.currentPeriodEnd)}`}
                     />
-                    <Row label="Next billing" value={formatDate(subscription.nextBillingDate)} />
+                    <Row label="Billing" value={CYCLE_LABEL[subscription.billingCycle]} />
+                    {live && !subscription.cancelAtPeriodEnd && (
+                      <Row
+                        label="Next billing"
+                        value={`${formatDate(subscription.nextBillingDate)} · ${formatMoney(nextTotal)}`}
+                      />
+                    )}
                     {subscription.trialEndsAt && subscription.status === 'TRIALING' && (
                       <Row label="Trial ends" value={formatDate(subscription.trialEndsAt)} />
                     )}
@@ -205,11 +330,137 @@ export default async function SubscriptionPage() {
                     demo={demo}
                     authUrl={subscription.gatewayAuthUrl}
                   />
+
+                  {live && (
+                    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                      {subscription.cancelAtPeriodEnd ? (
+                        <ResumeSubscriptionButton subscriptionId={subscription.id} />
+                      ) : (
+                        <>
+                          <ChangePlanButton
+                            subscriptionId={subscription.id}
+                            propertyName={subscription.property.name}
+                            currentPlanId={subscription.planId}
+                            currentCycle={subscription.billingCycle}
+                            plans={optionsBySub.get(subscription.id) ?? []}
+                          />
+                          <CancelSubscriptionButton
+                            subscriptionId={subscription.id}
+                            propertyName={subscription.property.name}
+                            periodEnd={subscription.nextBillingDate.toISOString()}
+                            trial={subscription.status === 'TRIALING'}
+                          />
+                        </>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )
           })}
         </div>
+      )}
+
+      <SectionHeader
+        title="Usage"
+        description={`What your ${usage.planNames.join(' + ') || 'current'} plan allows, and how much you use.`}
+        icon="chart"
+      />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {usage.rows.map((row) => {
+          const near = row.percent != null && row.percent >= 80
+          const full = row.limit != null && row.used >= row.limit
+          return (
+            <Card key={row.key}>
+              <CardContent className="space-y-2 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {LIMIT_NOUN[row.key][1]}
+                </p>
+                <p className="font-display text-xl font-semibold tabular text-slate-900">
+                  {row.used}
+                  <span className="text-sm font-normal text-slate-500">
+                    {row.limit == null ? ' · unlimited' : ` of ${row.limit}`}
+                  </span>
+                </p>
+                {row.limit != null && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="meter" aria-valuenow={row.used} aria-valuemin={0} aria-valuemax={row.limit} aria-label={LIMIT_NOUN[row.key][1]}>
+                    <div
+                      className={cn('h-full rounded-full', full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
+                      style={{ width: `${row.percent ?? 0}%` }}
+                    />
+                  </div>
+                )}
+                {full && <p className="text-[11px] text-red-600">Limit reached — upgrade to add more.</p>}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {plans.length > 0 && (
+        <>
+          <SectionHeader
+            title="Compare plans"
+            description="Prices shown for a typical PG; each PG's exact price is in Change plan."
+            icon="tags"
+          />
+          <TableWrap>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Price rule</TableHead>
+                  <TableHead>Yearly</TableHead>
+                  <TableHead>PGs</TableHead>
+                  <TableHead>Beds</TableHead>
+                  <TableHead>Residents</TableHead>
+                  <TableHead>Staff</TableHead>
+                  <TableHead>Features</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {plans.map((plan) => {
+                  const current = subscriptions.some((s) => s.planId === plan.id && s.status !== 'CANCELLED')
+                  const modules = isModuleEntitlementList(plan.features)
+                    ? OPTIONAL_MODULES.filter((m) => plan.features.includes(m.key)).map((m) => m.label)
+                    : null
+                  return (
+                    <TableRow key={plan.id} className={cn(plan.highlighted && 'bg-blue-50/40')}>
+                      <TableCell>
+                        <p className="flex items-center gap-1.5 font-medium text-slate-900">
+                          {plan.name}
+                          {plan.highlighted && <Badge size="sm">Popular</Badge>}
+                          {current && <Badge variant="success" size="sm">Yours</Badge>}
+                        </p>
+                        {plan.tagline && <p className="text-xs text-slate-500">{plan.tagline}</p>}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {plan.pricingBasis === 'STANDARD_RENT'
+                          ? `${plan.multiplier}% of standard rent`
+                          : plan.pricingBasis === 'PER_BED'
+                            ? `${formatMoney(plan.perBedPrice)} per bed`
+                            : `${formatMoney(plan.flatPrice)} flat`}
+                        <span className="block text-xs text-slate-400">
+                          {formatMoney(plan.minAmount)}–{formatMoney(plan.maxAmount)}/month
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-emerald-700">
+                        {plan.yearlyDiscountPercent > 0 ? `${plan.yearlyDiscountPercent}% off` : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm tabular">{plan.maxProperties ?? '∞'}</TableCell>
+                      <TableCell className="text-sm tabular">{plan.maxBeds ?? '∞'}</TableCell>
+                      <TableCell className="text-sm tabular">{plan.maxResidents ?? '∞'}</TableCell>
+                      <TableCell className="text-sm tabular">{plan.maxStaff ?? '∞'}</TableCell>
+                      <TableCell className="max-w-[260px] text-xs text-slate-600">
+                        {modules ? (modules.length ? modules.join(', ') : 'Core only') : 'Everything'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableWrap>
+        </>
       )}
 
       <SectionHeader title="Invoices" description="Every StayFlow invoice and its payment." icon="receipt" />
@@ -283,6 +534,17 @@ export default async function SubscriptionPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
+                        {invoice.status === 'PAID' && (
+                          <a
+                            href={`/api/documents/subscription-invoice/${invoice.id}.pdf`}
+                            target="_blank"
+                            rel="noopener"
+                            className="text-xs font-medium text-blue-700 hover:underline"
+                            title="Paid tax invoice — serves as your receipt"
+                          >
+                            Receipt
+                          </a>
+                        )}
                         {PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
                           <PayInvoiceButton
                             invoiceId={invoice.id}

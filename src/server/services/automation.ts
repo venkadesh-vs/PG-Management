@@ -10,7 +10,12 @@ import {
   sendRentReminders,
 } from './billing'
 import { snapshotOccupancy } from './residents'
-import { enforceGracePeriods, runSubscriptionBilling } from './subscriptions'
+import {
+  enforceGracePeriods,
+  replayFailedWebhooks,
+  retryFailedCharges,
+  runSubscriptionBilling,
+} from './subscriptions'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
 import { retryFailedWhatsApp } from '../integrations/whatsapp'
 import { orgsWithModuleOff } from './org-modules'
@@ -186,10 +191,24 @@ async function runSteps(
     const billed = await runSubscriptionBilling({ now, organizationId: options?.organizationId })
     report.subscriptions.billed = billed.filter((b) => b.outcome === 'paid').length
     report.subscriptions.failed = billed.filter((b) => b.outcome === 'failed').length
+    // Our own failed charges retry 1, 3 and 5 days after the first failure.
+    if (!options?.organizationId) {
+      const retries = await retryFailedCharges(now)
+      report.subscriptions.failed += retries.failed
+      report.subscriptions.billed += retries.recovered
+    }
     const grace = await enforceGracePeriods(now)
     report.subscriptions.suspended = grace.suspended
   } catch (error) {
     errors.push(`subscriptions: ${(error as Error).message}`)
+  }
+  // Webhooks that failed to process get another go (platform-wide only).
+  if (!options?.organizationId) {
+    try {
+      await replayFailedWebhooks()
+    } catch (error) {
+      errors.push(`webhook replay: ${(error as Error).message}`)
+    }
   }
 
   // 5. Daily occupancy snapshot, which powers the trend charts.

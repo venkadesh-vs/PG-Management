@@ -17,6 +17,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
+import { InvoicePicker, ProofUpload } from '../../payments/payment-fields'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -29,7 +30,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/primitives'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,6 +108,12 @@ export function ResidentActions({
   React.useEffect(() => {
     if (new URLSearchParams(window.location.search).get('transfer') === '1') setDialog('transfer')
   }, [])
+  // The "Checkout" quick action links here with ?checkout=1.
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('checkout') === '1' && can.checkout && resident.status !== 'CHECKED_OUT') {
+      setDialog('checkout')
+    }
+  }, [can.checkout, resident.status])
   const active = resident.status !== 'CHECKED_OUT'
 
   return (
@@ -202,8 +208,12 @@ function PaymentDialog({
   const [amount, setAmount] = React.useState(String(resident.outstanding || resident.rentAmount))
   const [method, setMethod] = React.useState('UPI')
   const [reference, setReference] = React.useState('')
+  const [utr, setUtr] = React.useState('')
+  const [proof, setProof] = React.useState('')
+  const [uploading, setUploading] = React.useState(false)
   const [notes, setNotes] = React.useState('')
-  const [selected, setSelected] = React.useState<string[]>(invoices.map((i) => i.id))
+  // Empty = oldest due first; ticked invoices are paid first, in tick order.
+  const [selected, setSelected] = React.useState<string[]>([])
   const [busy, setBusy] = React.useState(false)
   const [receipt, setReceipt] = React.useState<{ receiptNumber: string; amount: number } | null>(
     null,
@@ -213,7 +223,9 @@ function PaymentDialog({
     if (open) {
       setAmount(String(resident.outstanding || resident.rentAmount))
       setReceipt(null)
-      setSelected(invoices.map((i) => i.id))
+      setSelected([])
+      setUtr('')
+      setProof('')
     }
   }, [open, resident, invoices])
 
@@ -232,8 +244,10 @@ function PaymentDialog({
           amount: value,
           method,
           reference: reference || undefined,
+          utr: utr || undefined,
+          attachmentUrl: proof || undefined,
           notes: notes || undefined,
-          invoiceIds: selected,
+          invoiceIds: selected.length ? selected : undefined,
         },
       )
       setReceipt(result)
@@ -245,10 +259,7 @@ function PaymentDialog({
       )
       router.refresh()
     } catch (error) {
-      toast.error(
-        'Unable to record payment',
-        error instanceof ApiError ? error.message : 'Please try again.',
-      )
+      toast.fromError(error, 'record the payment')
     } finally {
       setBusy(false)
     }
@@ -328,45 +339,22 @@ function PaymentDialog({
                   </Field>
                 </div>
 
-                <Field label="Reference" hint="UPI reference, cheque number or transaction id">
-                  <Input value={reference} onChange={(e) => setReference(e.target.value)} />
-                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="UTR / transaction ID" hint="From the UPI app or bank SMS">
+                    <Input value={utr} onChange={(e) => setUtr(e.target.value)} />
+                  </Field>
+                  <Field label="Reference" hint="Cheque number or other ref">
+                    <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+                  </Field>
+                </div>
+                <ProofUpload value={proof} onChange={setProof} residentId={resident.id} onBusyChange={setUploading} />
 
-                {invoices.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Apply to
-                    </p>
-                    <ul className="space-y-1.5">
-                      {invoices.map((invoice) => (
-                        <li key={invoice.id}>
-                          <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-                            <Checkbox
-                              checked={selected.includes(invoice.id)}
-                              onCheckedChange={(checked) =>
-                                setSelected((current) =>
-                                  checked === true
-                                    ? [...current, invoice.id]
-                                    : current.filter((id) => id !== invoice.id),
-                                )
-                              }
-                            />
-                            <span className="flex-1 truncate text-slate-700">{invoice.number}</span>
-                            <span className="text-xs text-slate-400">
-                              due {formatDate(invoice.dueDate)}
-                            </span>
-                            <span className="font-medium text-slate-800 tabular">
-                              {formatMoney(invoice.balance)}
-                            </span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-2 text-[11px] text-slate-400">
-                      Anything left over automatically clears the oldest remaining invoice.
-                    </p>
-                  </div>
-                )}
+                <InvoicePicker
+                  invoices={invoices}
+                  value={selected}
+                  onChange={setSelected}
+                  amount={Number(amount) || 0}
+                />
 
                 <Field label="Notes">
                   <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -377,7 +365,7 @@ function PaymentDialog({
                 <Button variant="ghost" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button variant="primary" loading={busy} onClick={submit}>
+                <Button variant="primary" loading={busy} disabled={uploading} onClick={submit}>
                   Record {formatMoney(Number(amount) || 0)}
                 </Button>
               </DialogFooter>

@@ -4,7 +4,11 @@ import { ok, parseBody, route } from '@/lib/api-helpers'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import {
   cancelAutopay,
+  cancelSubscription,
+  changeSubscription,
   confirmInvoiceCheckout,
+  previewSubscriptionChange,
+  resumeSubscription,
   payInvoiceDemo,
   setupAutopay,
   startInvoiceCheckout,
@@ -31,10 +35,34 @@ const schema = z.discriminatedUnion('action', [
     signature: z.string().min(1),
   }),
   z.object({ action: z.literal('PAY_INVOICE_DEMO'), invoiceId: z.string().min(1) }),
+  // Plan engine: preview first, then apply. Upgrades are immediate (prorated
+  // difference invoiced now); downgrades and monthly↔yearly switches apply at
+  // the period end.
+  z.object({
+    action: z.literal('PREVIEW_CHANGE'),
+    subscriptionId: z.string().min(1),
+    planId: z.string().min(1).optional(),
+    billingCycle: z.enum(['MONTHLY', 'YEARLY']).optional(),
+  }),
+  z.object({
+    action: z.literal('CHANGE_PLAN'),
+    subscriptionId: z.string().min(1),
+    planId: z.string().min(1).optional(),
+    billingCycle: z.enum(['MONTHLY', 'YEARLY']).optional(),
+  }),
+  z.object({
+    action: z.literal('CANCEL_SUBSCRIPTION'),
+    subscriptionId: z.string().min(1),
+    when: z.enum(['now', 'period_end']),
+    category: z.enum(['PRICE', 'MISSING_FEATURE', 'CLOSING_PG', 'SWITCHING', 'OTHER']),
+    reason: z.string().trim().max(500).optional(),
+  }),
+  z.object({ action: z.literal('RESUME_SUBSCRIPTION'), subscriptionId: z.string().min(1) }),
 ])
 
 /**
- * The PG owner's own StayFlow billing: AutoPay mandates and Pay now.
+ * The PG owner's own StayFlow billing: AutoPay mandates, Pay now, plan
+ * changes (preview → apply) and cancellation.
  * allowRestricted — a suspended organization must still be able to pay.
  * Every amount comes from the database; the client only names the invoice.
  */
@@ -82,6 +110,48 @@ export const POST = route(
           reactivated: outcome.reactivated ?? false,
           message: `${outcome.invoiceNumber} marked paid (demo — no money moved)`,
         })
+      }
+
+      const actor = { id: user.id, name: user.name }
+      if (body.action === 'PREVIEW_CHANGE') {
+        return ok({
+          preview: await previewSubscriptionChange({
+            subscriptionId: body.subscriptionId,
+            organizationId,
+            planId: body.planId,
+            billingCycle: body.billingCycle,
+          }),
+        })
+      }
+      if (body.action === 'CHANGE_PLAN') {
+        const result = await changeSubscription({
+          subscriptionId: body.subscriptionId,
+          organizationId,
+          planId: body.planId,
+          billingCycle: body.billingCycle,
+          actor,
+        })
+        return ok({
+          message: result.message,
+          invoice: result.invoice
+            ? { id: result.invoice.id, number: result.invoice.number, total: result.invoice.total }
+            : null,
+        })
+      }
+      if (body.action === 'CANCEL_SUBSCRIPTION') {
+        return ok(
+          await cancelSubscription({
+            subscriptionId: body.subscriptionId,
+            organizationId,
+            when: body.when,
+            category: body.category,
+            reason: body.reason,
+            actor,
+          }),
+        )
+      }
+      if (body.action === 'RESUME_SUBSCRIPTION') {
+        return ok(await resumeSubscription({ subscriptionId: body.subscriptionId, organizationId, actor }))
       }
 
       const subscription = await prisma.subscription.findUnique({

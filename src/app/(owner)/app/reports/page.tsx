@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Suspense } from 'react'
 import { ArrowDownRight, ArrowUpRight, Printer } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
@@ -159,6 +160,15 @@ export default async function ReportsPage({
         icon="chart"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Reports' }]}
         actions={
+          <>
+          {user.modules.includes('rent') && user.permissions.includes('rent.view') && (
+            <Link
+              href="/app/reports/daily-collection"
+              className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Daily collection
+            </Link>
+          )}
           <Suspense fallback={null}>
             <FilterBar>
               <FilterSelect
@@ -173,6 +183,7 @@ export default async function ReportsPage({
               />
             </FilterBar>
           </Suspense>
+          </>
         }
       />
 

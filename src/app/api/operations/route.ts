@@ -35,6 +35,7 @@ import { markMealServed, recordPurchase, upsertMeal } from '@/server/services/ki
 import { formatMoney, startOfDay } from '@/lib/utils'
 import { sendWhatsApp } from '@/server/integrations/whatsapp'
 import { createWorkerLogin, sendAccessLink } from '@/server/services/accounts'
+import { assertWithinPlan } from '@/server/services/plan-limits'
 import type { ModuleKey } from '@/lib/modules'
 
 /**
@@ -153,6 +154,7 @@ export const POST = route(async ({ user, request }) => {
         throw new ForbiddenError('Choose one of your PGs for this staff member')
       }
       await assertLookupValue(organizationId, 'STAFF_ROLE', body.role)
+      await assertWithinPlan(organizationId, 'staff')
       const wantsLogin = Boolean(body.createLogin)
       // A login is a credential into the org: it needs team.manage.
       if (wantsLogin) requirePermission(user, 'team.manage')

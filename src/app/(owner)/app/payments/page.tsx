@@ -31,6 +31,10 @@ import {
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { RecordPaymentButton } from './record-payment'
+import { PaymentActions, PaymentStatusBadge, type PaymentRow } from './payment-actions'
+import { unallocatedOf } from '@/lib/billing-calc'
+import { CalendarCheck, Paperclip } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export const metadata: Metadata = { title: 'Payments' }
 
@@ -80,6 +84,7 @@ export default async function PaymentsPage({
           OR: [
             { receiptNumber: { contains: q, mode: 'insensitive' } },
             { reference: { contains: q, mode: 'insensitive' } },
+            { utr: { contains: q, mode: 'insensitive' } },
             { resident: { fullName: { contains: q, mode: 'insensitive' } } },
           ],
         }
@@ -128,6 +133,7 @@ export default async function PaymentsPage({
         propertyId: { in: propertyIds },
         paidAt: { gte: startOfMonth(now) },
         purpose: 'RENT',
+        status: 'SUCCESS',
       },
       _sum: { amount: true },
     }),
@@ -153,6 +159,26 @@ export default async function PaymentsPage({
     orderBy: { fullName: 'asc' },
   })
 
+  const can = {
+    edit: user.permissions.includes('payments.record'),
+    reverse: user.permissions.includes('payments.record') && user.permissions.includes('invoices.waive'),
+  }
+  const toRow = (p: (typeof payments)[number]): PaymentRow => ({
+    id: p.id,
+    residentId: p.resident.id,
+    receiptNumber: p.receiptNumber,
+    amount: p.amount,
+    status: p.status,
+    purpose: p.purpose,
+    method: p.method,
+    reference: p.reference,
+    utr: p.utr,
+    notes: p.notes,
+    attachmentUrl: p.attachmentUrl,
+    refundedAmount: p.refundedAmount,
+    unallocated: unallocatedOf(p),
+  })
+
   const topMethod = [...byMethod].sort(
     (a, b) => (b._sum.amount ?? 0) - (a._sum.amount ?? 0),
   )[0]
@@ -167,6 +193,12 @@ export default async function PaymentsPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Payments' }]}
         actions={
           <>
+          <Button variant="outline" asChild>
+            <Link href="/app/reports/daily-collection">
+              <CalendarCheck className="size-4" />
+              Daily collection
+            </Link>
+          </Button>
           {user.permissions.includes('reports.export') && (
             <Suspense fallback={null}>
               <ExportButton kind="payments" />
@@ -230,7 +262,7 @@ export default async function PaymentsPage({
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
-          <SearchInput placeholder="Search receipt, reference or resident…" />
+          <SearchInput placeholder="Search receipt, UTR, reference or resident…" />
           <FilterSelect paramKey="method" placeholder="All methods" options={METHOD_OPTIONS} />
           <FilterSelect
             paramKey="range"
@@ -263,6 +295,7 @@ export default async function PaymentsPage({
                   <TableHead>Method</TableHead>
                   <TableHead>Received</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -291,9 +324,13 @@ export default async function PaymentsPage({
                         <p className="text-xs text-slate-500">{payment.resident.code}</p>
                       </TableCell>
                       <TableCell className="text-xs text-slate-600">
-                        {payment.allocations.length
-                          ? payment.allocations.map((a) => a.invoice.number).join(', ')
-                          : 'Advance'}
+                        {payment.status === 'REVERSED'
+                          ? `Reversed${payment.reversalReason ? ` — ${payment.reversalReason}` : ''}`
+                          : payment.purpose === 'DEPOSIT'
+                            ? 'Security deposit'
+                            : payment.allocations.length
+                              ? payment.allocations.map((a) => a.invoice.number).join(', ')
+                              : 'Advance'}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" size="sm" className="capitalize">
@@ -304,6 +341,14 @@ export default async function PaymentsPage({
                             Demo
                           </Badge>
                         )}
+                        {payment.utr && (
+                          <p className="mt-0.5 font-mono text-[11px] text-slate-500">UTR {payment.utr}</p>
+                        )}
+                        {payment.attachmentUrl && (
+                          <a href={payment.attachmentUrl} target="_blank" rel="noopener" className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-600 hover:underline">
+                            <Paperclip className="size-3" /> Proof
+                          </a>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {formatDateTime(payment.paidAt)}
@@ -311,8 +356,21 @@ export default async function PaymentsPage({
                           <p className="text-xs text-slate-400">by {payment.recordedBy}</p>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-emerald-600 tabular">
-                        {formatMoney(payment.amount)}
+                      <TableCell className="text-right">
+                        <span
+                          className={cn(
+                            'font-semibold tabular',
+                            payment.status === 'REVERSED' ? 'text-slate-400 line-through' : 'text-emerald-600',
+                          )}
+                        >
+                          {formatMoney(payment.amount)}
+                        </span>
+                        <div className="mt-0.5">
+                          <PaymentStatusBadge status={payment.status} refundedAmount={payment.refundedAmount} />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <PaymentActions payment={toRow(payment)} can={can} />
                       </TableCell>
                     </TableRow>
                   )
@@ -339,13 +397,29 @@ export default async function PaymentsPage({
                       {payment.receiptNumber}
                     </a>
                   </div>
-                  <span className="shrink-0 font-semibold text-emerald-600 tabular">
-                    {formatMoney(payment.amount)}
-                  </span>
+                  <div className="flex shrink-0 items-start gap-1">
+                    <div className="text-right">
+                      <span
+                        className={cn(
+                          'font-semibold tabular',
+                          payment.status === 'REVERSED' ? 'text-slate-400 line-through' : 'text-emerald-600',
+                        )}
+                      >
+                        {formatMoney(payment.amount)}
+                      </span>
+                      <div>
+                        <PaymentStatusBadge status={payment.status} refundedAmount={payment.refundedAmount} />
+                      </div>
+                    </div>
+                    <PaymentActions payment={toRow(payment)} can={can} />
+                  </div>
                 </div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span className="capitalize">{payment.method.replace('_', ' ').toLowerCase()}</span>
-                  <span>{formatDateTime(payment.paidAt)}</span>
+                <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                  <span className="capitalize">
+                    {payment.method.replace('_', ' ').toLowerCase()}
+                    {payment.utr ? ` · UTR ${payment.utr}` : ''}
+                  </span>
+                  <span className="shrink-0">{formatDateTime(payment.paidAt)}</span>
                 </div>
               </li>
             ))}

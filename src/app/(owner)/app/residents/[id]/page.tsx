@@ -50,6 +50,11 @@ import { ResidentActions } from './resident-actions'
 import { ResendInviteButton } from '@/components/app/invite-link'
 import { LedgerTable } from './ledger-table'
 import { DepositCard } from './deposit-card'
+import { ChargesCard } from './charges-card'
+import { RentRevisionCard } from './rent-revision-card'
+import { InvoiceActions } from '../../rent/invoice-actions'
+import { PaymentActions, PaymentStatusBadge } from '../../payments/payment-actions'
+import { rentOnDay, unallocatedOf } from '@/lib/billing-calc'
 
 export const metadata: Metadata = { title: 'Resident' }
 
@@ -75,7 +80,9 @@ export default async function ResidentDetailPage({
       checkout: true,
       user: { select: { email: true, status: true, lastLoginAt: true } },
       invoices: { orderBy: { periodStart: 'desc' }, include: { lines: true } },
-      payments: { orderBy: { paidAt: 'desc' } },
+      payments: { orderBy: { paidAt: 'desc' }, include: { allocations: { select: { amount: true } } } },
+      charges: { orderBy: [{ voidedAt: 'asc' }, { createdAt: 'desc' }] },
+      rentRevisions: { orderBy: { effectiveFrom: 'desc' } },
       ledger: { orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }] },
       complaints: { orderBy: { createdAt: 'desc' }, take: 10 },
       utilityCharges: { orderBy: { periodStart: 'desc' }, take: 6 },
@@ -84,6 +91,13 @@ export default async function ResidentDetailPage({
   if (!resident) notFound()
 
   const theme = themeFor(resident.property.type)
+  // rentAmount already holds a revision scheduled for later; show what is in force today.
+  const currentRent = rentOnDay(new Date(), resident.rentAmount, resident.rentRevisions)
+  const billedOn = new Map(resident.invoices.map((i) => [i.id, i.number]))
+  const invoiceCan = { credit: has('invoices.waive'), debit: has('rent.manage') }
+  const paymentCan = { edit: has('payments.record'), reverse: has('payments.record') && has('invoices.waive') }
+  const checkedOut = resident.status === 'CHECKED_OUT'
+  const startOfDayNow = new Date(new Date().setHours(0, 0, 0, 0))
   const outstanding = resident.invoices
     .filter((i) => ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(i.status))
     .reduce((s, i) => s + i.balance, 0)
@@ -123,7 +137,7 @@ export default async function ResidentDetailPage({
               fullName: resident.fullName,
               status: resident.status,
               propertyType: resident.property.type,
-              rentAmount: resident.rentAmount,
+              rentAmount: currentRent,
               outstanding,
               exitDate: resident.exitDate?.toISOString() ?? null,
               noticeDate: resident.noticeDate?.toISOString() ?? null,
@@ -200,7 +214,7 @@ export default async function ResidentDetailPage({
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:w-auto sm:gap-3">
-            <HeaderStat label="Rent" value={formatMoney(resident.rentAmount)} />
+            <HeaderStat label="Rent" value={formatMoney(currentRent)} />
             <HeaderStat
               label="Outstanding"
               value={outstanding === 0 ? 'Clear' : formatMoney(outstanding)}
@@ -291,7 +305,19 @@ export default async function ResidentDetailPage({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2.5">
-                  <Row label="Monthly rent" value={formatMoney(resident.rentAmount)} />
+                  <Row label="Monthly rent" value={formatMoney(currentRent)} />
+                  {currentRent !== resident.rentAmount && (
+                    <Row label="Scheduled rent" value={formatMoney(resident.rentAmount)} />
+                  )}
+                  {resident.charges
+                    .filter((c) => !c.voidedAt && c.kind !== 'ONE_TIME' && (!c.endDate || c.endDate >= startOfDayNow))
+                    .map((c) => (
+                      <Row
+                        key={c.id}
+                        label={c.label}
+                        value={`${c.kind === 'DISCOUNT' ? '− ' : ''}${formatMoney(c.amount)}`}
+                      />
+                    ))}
                   {resident.maintenanceFee > 0 && (
                     <Row label="Maintenance" value={formatMoney(resident.maintenanceFee)} />
                   )}
@@ -422,6 +448,41 @@ export default async function ResidentDetailPage({
 
         {/* --------------------------------------------------------- Rent */}
         <TabsContent value="rent">
+          <div className="mb-4 grid gap-4 lg:grid-cols-2">
+            <ChargesCard
+              residentId={resident.id}
+              canManage={has('rent.manage')}
+              checkedOut={checkedOut}
+              charges={resident.charges.map((c) => ({
+                id: c.id,
+                kind: c.kind,
+                category: c.category,
+                label: c.label,
+                amount: c.amount,
+                startDate: c.startDate.toISOString(),
+                endDate: c.endDate?.toISOString() ?? null,
+                billedInvoice: c.billedInvoiceId ? (billedOn.get(c.billedInvoiceId) ?? 'an invoice') : null,
+                lastBilledFor: c.lastBilledFor?.toISOString() ?? null,
+                voidedAt: c.voidedAt?.toISOString() ?? null,
+                voidReason: c.voidReason,
+              }))}
+            />
+            <RentRevisionCard
+              residentId={resident.id}
+              rentAmount={resident.rentAmount}
+              canManage={has('rent.manage')}
+              checkedOut={checkedOut}
+              revisions={resident.rentRevisions.map((r) => ({
+                id: r.id,
+                oldRent: r.oldRent,
+                newRent: r.newRent,
+                effectiveFrom: r.effectiveFrom.toISOString(),
+                reason: r.reason,
+                createdBy: r.createdBy,
+                createdAt: r.createdAt.toISOString(),
+              }))}
+            />
+          </div>
           {resident.invoices.length === 0 ? (
             <EmptyState
               icon="file"
@@ -442,6 +503,7 @@ export default async function ResidentDetailPage({
                       <TableHead className="text-right">Paid</TableHead>
                       <TableHead className="text-right">Balance</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -481,6 +543,9 @@ export default async function ResidentDetailPage({
                             chip={INVOICE_STATUS_STYLE[invoice.status].chip}
                           />
                         </TableCell>
+                        <TableCell>
+                          <InvoiceActions invoice={invoice} can={invoiceCan} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -498,10 +563,13 @@ export default async function ResidentDetailPage({
                       <a href={`/api/documents/rent-invoice/${invoice.id}.pdf`} target="_blank" rel="noopener" className="truncate font-medium text-slate-900 hover:text-blue-700 hover:underline">
                         {invoice.number}
                       </a>
-                      <StatusChip
-                        label={INVOICE_STATUS_STYLE[invoice.status].label}
-                        chip={INVOICE_STATUS_STYLE[invoice.status].chip}
-                      />
+                      <div className="flex shrink-0 items-center gap-1">
+                        <StatusChip
+                          label={INVOICE_STATUS_STYLE[invoice.status].label}
+                          chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                        />
+                        <InvoiceActions invoice={invoice} can={invoiceCan} />
+                      </div>
                     </div>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {formatDate(invoice.periodStart)} · due {formatDate(invoice.dueDate)}
@@ -536,7 +604,7 @@ export default async function ResidentDetailPage({
               </CardHeader>
               <CardContent>
                 <ul className="divide-y divide-slate-100">
-                  {resident.payments.slice(0, 12).map((payment) => (
+                  {resident.payments.slice(0, 24).map((payment) => (
                     <li key={payment.id} className="flex items-center justify-between gap-3 py-2.5">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-slate-800">
@@ -552,12 +620,52 @@ export default async function ResidentDetailPage({
                         <p className="text-xs text-slate-500">
                           {formatDateTime(payment.paidAt)} ·{' '}
                           {payment.method.replace('_', ' ').toLowerCase()}
+                          {payment.utr ? ` · UTR ${payment.utr}` : ''}
                           {payment.reference ? ` · ${payment.reference}` : ''}
+                          {payment.purpose === 'DEPOSIT' ? ' · deposit' : ''}
                         </p>
+                        {payment.status === 'REVERSED' && payment.reversalReason && (
+                          <p className="text-[11px] text-red-600">Reversed — {payment.reversalReason}</p>
+                        )}
+                        {payment.attachmentUrl && (
+                          <a href={payment.attachmentUrl} target="_blank" rel="noopener" className="text-[11px] text-blue-600 hover:underline">
+                            View proof
+                          </a>
+                        )}
                       </div>
-                      <span className="shrink-0 font-semibold text-emerald-600 tabular">
-                        {formatMoney(payment.amount)}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <div className="text-right">
+                          <span
+                            className={cn(
+                              'font-semibold tabular',
+                              payment.status === 'REVERSED' ? 'text-slate-400 line-through' : 'text-emerald-600',
+                            )}
+                          >
+                            {formatMoney(payment.amount)}
+                          </span>
+                          <div>
+                            <PaymentStatusBadge status={payment.status} refundedAmount={payment.refundedAmount} />
+                          </div>
+                        </div>
+                        <PaymentActions
+                          can={paymentCan}
+                          payment={{
+                            id: payment.id,
+                            residentId: resident.id,
+                            receiptNumber: payment.receiptNumber,
+                            amount: payment.amount,
+                            status: payment.status,
+                            purpose: payment.purpose,
+                            method: payment.method,
+                            reference: payment.reference,
+                            utr: payment.utr,
+                            notes: payment.notes,
+                            attachmentUrl: payment.attachmentUrl,
+                            refundedAmount: payment.refundedAmount,
+                            unallocated: unallocatedOf(payment),
+                          }}
+                        />
+                      </div>
                     </li>
                   ))}
                 </ul>

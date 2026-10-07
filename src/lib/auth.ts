@@ -10,6 +10,7 @@ import type { OrgStatus, UserRole } from '@prisma/client'
 import { prisma } from './prisma'
 import { serverEnv } from './env'
 import { resolveAccess } from './access'
+import { planExcludedModules } from './plan-entitlements'
 import type { ModuleKey } from './modules'
 
 export const SESSION_COOKIE = 'stayflow_session'
@@ -145,6 +146,10 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
               status: true,
               featureOverrides: true,
               settings: { select: { disabledModules: true } },
+              subscriptions: {
+                where: { status: { not: 'CANCELLED' } },
+                select: { plan: { select: { features: true } } },
+              },
             },
           },
           orgRole: { select: { name: true, permissions: true } },
@@ -173,6 +178,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     rolePermissions: user.orgRole?.permissions ?? null,
     disabledModules: user.organization?.settings?.disabledModules ?? [],
     flagsOff,
+    // Modules the org's plan(s) do not include. Plans with an empty / legacy
+    // feature list include everything.
+    planOff: planExcludedModules((user.organization?.subscriptions ?? []).map((s) => s.plan.features)),
   })
 
   return {

@@ -12,12 +12,14 @@ import {
 } from '@/lib/tenancy'
 import { generateInvoiceSchema, utilitySplitSchema } from '@/lib/validation'
 import {
-  appendLedger,
+  adjustInvoice,
   applyOverdueAndLateFees,
   generateInvoice,
   generateMonthlyInvoices,
   sendRentReminders,
+  waiveInvoice,
 } from '@/server/services/billing'
+import { invoiceAdjustSchema } from '@/lib/billing-schemas'
 import { endOfMonthUtilitySplit } from '@/server/services/residents'
 import { endOfMonth, formatMoney, startOfMonth } from '@/lib/utils'
 
@@ -28,6 +30,9 @@ const ACTION_PERMISSION = {
   REFRESH_OVERDUE: 'rent.manage',
   UTILITY_SPLIT: 'rent.manage',
   WAIVE: 'invoices.waive',
+  // A credit note writes money off (invoices.waive); a debit note adds a
+  // charge (rent.manage). Checked per kind below.
+  ADJUST: 'rent.manage',
 } as const
 
 const schema = z.discriminatedUnion('action', [
@@ -38,8 +43,9 @@ const schema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('WAIVE'),
     invoiceId: z.string().min(1),
-    reason: z.string().optional(),
+    reason: z.string().trim().min(3, 'Add a short reason for the waiver').max(300),
   }),
+  invoiceAdjustSchema,
 ])
 
 /**
@@ -49,7 +55,10 @@ const schema = z.discriminatedUnion('action', [
 export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, schema)
-    requirePermission(user, ACTION_PERMISSION[body.action])
+    requirePermission(
+      user,
+      body.action === 'ADJUST' && body.kind === 'CREDIT' ? 'invoices.waive' : ACTION_PERMISSION[body.action],
+    )
     const orgId = user.organizationId!
     // A manager limited to some PGs; null = sees every PG in the org.
     const restricted = restrictedPropertyIds(user)
@@ -142,31 +151,33 @@ export const POST = route(
         })
       }
 
-      case 'WAIVE': {
+      case 'WAIVE':
+      case 'ADJUST': {
         const invoice = await prisma.rentInvoice.findFirst({
           where: { id: body.invoiceId, organizationId: orgId },
         })
         if (!invoice) throw new ValidationError('Invoice not found')
         assertInScope(user, invoice.propertyId)
-        if (!['DRAFT', 'PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status)) {
-          throw new ValidationError('Only an unpaid invoice can be waived')
+        const actor = { id: user.id, name: user.name }
+        if (body.action === 'WAIVE') {
+          await waiveInvoice({ organizationId: orgId, invoiceId: invoice.id, reason: body.reason, actor })
+          return ok({ message: `${formatMoney(invoice.balance)} on ${invoice.number} waived` })
         }
-        await prisma.$transaction(async (tx) => {
-          await tx.rentInvoice.update({
-            where: { id: invoice.id },
-            data: { status: 'WAIVED', balance: 0, notes: body.reason ?? 'Waived by owner' },
-          })
-          await appendLedger(tx, {
-            organizationId: orgId,
-            residentId: invoice.residentId,
-            kind: 'WAIVER',
-            label: `Invoice ${invoice.number} waived`,
-            credit: invoice.balance,
-            refType: 'RentInvoice',
-            refId: invoice.id,
-          })
+        const result = await adjustInvoice({
+          organizationId: orgId,
+          invoiceId: invoice.id,
+          kind: body.kind,
+          amount: body.amount,
+          reason: body.reason,
+          actor,
         })
-        return ok({ message: `Invoice ${invoice.number} waived` })
+        return ok({
+          message:
+            `${body.kind === 'CREDIT' ? 'Credit' : 'Debit'} note of ${formatMoney(body.amount)} added to ${invoice.number}` +
+            (result.releasedAsAdvance > 0
+              ? ` — ${formatMoney(result.releasedAsAdvance)} already paid is now an advance`
+              : ''),
+        })
       }
     }
   },

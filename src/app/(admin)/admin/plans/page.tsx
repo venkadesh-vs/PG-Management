@@ -13,7 +13,7 @@ export default async function PlansPage() {
   const [plans, subscriptions] = await Promise.all([
     prisma.plan.findMany({
       include: { _count: { select: { subscriptions: true } } },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+      orderBy: [{ sortOrder: 'asc' }, { isDefault: 'desc' }, { createdAt: 'asc' }],
     }),
     prisma.subscription.aggregate({
       where: { status: 'ACTIVE' },
@@ -74,6 +74,16 @@ export default async function PlansPage() {
           isDefault: plan.isDefault,
           features: plan.features,
           subscriberCount: plan._count.subscriptions,
+          tagline: plan.tagline,
+          yearlyDiscountPercent: plan.yearlyDiscountPercent,
+          maxProperties: plan.maxProperties,
+          maxBeds: plan.maxBeds,
+          maxResidents: plan.maxResidents,
+          maxStaff: plan.maxStaff,
+          whatsappMonthlyLimit: plan.whatsappMonthlyLimit,
+          storageLimitMb: plan.storageLimitMb,
+          sortOrder: plan.sortOrder,
+          highlighted: plan.highlighted,
         }))}
       />
     </div>

@@ -11,6 +11,7 @@ import {
 } from '@/lib/tenancy'
 import { bedUpdateSchema, floorSchema, roomSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
+import { assertWithinPlan } from '@/server/services/plan-limits'
 
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('ADD_FLOOR') }).merge(floorSchema),
@@ -82,6 +83,11 @@ export const POST = route(
     // properties (and across organizations).
     if (body.action === 'ADD_ROOM' || body.action === 'BULK_ROOMS') {
       await assertFloorInProperty(body.floorId, body.propertyId)
+      await assertWithinPlan(
+        user.organizationId!,
+        'beds',
+        body.action === 'ADD_ROOM' ? body.capacity : body.count * body.capacity,
+      )
     }
 
     if (body.action === 'ADD_ROOM') {

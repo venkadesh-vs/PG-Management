@@ -398,6 +398,24 @@ async function main() {
   }
 
   // ------------------------------------------------------------ leads ----
+  // ------------------------------------------------ cleanup / checkout ----
+  // Check the smoke resident out again so repeated runs never run out of beds;
+  // this also exercises the settlement path end to end.
+  if (newResidentId) {
+    section('Workflow: checkout')
+    const today = new Date().toISOString().slice(0, 10)
+    const preview = await owner.fetch('/api/residents/actions', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'CHECKOUT_PREVIEW', residentId: newResidentId, exitDate: today }),
+    })
+    log(preview.status === 200, 'settlement preview', `HTTP ${preview.status}`)
+    const out = await owner.fetch('/api/residents/actions', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'CHECKOUT', residentId: newResidentId, exitDate: today, reason: 'Smoke test', refund: null }),
+    })
+    log(out.status === 200, 'smoke resident checked out, bed released', `HTTP ${out.status}`)
+  }
+
   section('Website enquiry')
   const lead = await fetch(`${BASE}/api/leads`, {
     method: 'POST',

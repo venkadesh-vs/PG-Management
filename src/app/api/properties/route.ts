@@ -3,7 +3,8 @@ import { ok, parseBody, route } from '@/lib/api-helpers'
 import { ConflictError, resolveScope } from '@/lib/tenancy'
 import { propertySchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
-import { assertPlanCapacity, createSubscriptionForProperty } from '@/server/services/subscriptions'
+import { createSubscriptionForProperty } from '@/server/services/subscriptions'
+import { assertWithinPlan } from '@/server/services/plan-limits'
 import { formatMoney } from '@/lib/utils'
 
 /**
@@ -20,7 +21,7 @@ export const POST = route(
       where: { organizationId, code: body.code.toUpperCase() },
     })
     if (existing) throw new ConflictError('A PG with this short code already exists')
-    await assertPlanCapacity(organizationId, 'property')
+    await assertWithinPlan(organizationId, 'properties')
 
     const result = await prisma.$transaction(async (tx) => {
       const property = await tx.property.create({

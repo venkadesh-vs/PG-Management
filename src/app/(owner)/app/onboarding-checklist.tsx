@@ -2,7 +2,8 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowRight, CircleCheck, Circle, MailWarning, Rocket, X } from 'lucide-react'
+import { ArrowRight, CircleCheck, Circle, MailWarning, Rocket, Sparkles, X } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { api, ApiError } from '@/lib/client'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
@@ -56,6 +57,34 @@ export function VerifyEmailBanner({ email }: { email: string }) {
   )
 }
 
+/** "Continue setup (60%)" — back to the wizard step the owner left off at. */
+export function ContinueSetupCard({ percent, step }: { percent: number; step: string }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <Link
+        href={`/app/setup?step=${encodeURIComponent(step)}`}
+        className="group flex flex-col gap-3 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-4 text-white shadow-brand sm:flex-row sm:items-center sm:justify-between sm:p-5"
+      >
+        <span className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
+            <Sparkles className="size-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-base font-semibold">Continue setup ({percent}%)</span>
+            <span className="block text-sm text-blue-100">Pick up right where you left off — most owners finish in under an hour.</span>
+          </span>
+        </span>
+        <span className="flex items-center gap-3 sm:w-56">
+          <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/20">
+            <span className="block h-full rounded-full bg-white" style={{ width: `${percent}%` }} />
+          </span>
+          <ArrowRight className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </Link>
+    </motion.div>
+  )
+}
+
 /** Getting-started steps; dismissible for the current browser session. */
 export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   const [dismissed, setDismissed] = React.useState(false)
@@ -81,6 +110,7 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   if (dismissed) return null
   const done = items.filter((i) => i.done).length
   const next = items.find((i) => !i.done)
+  const pct = Math.round((done / items.length) * 100)
 
   return (
     <Card>
@@ -91,9 +121,9 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
               <Rocket className="size-4" />
             </div>
             <div>
-              <p className="font-display text-base font-semibold text-slate-900">Get your PG running</p>
+              <p className="font-display text-base font-semibold text-slate-900">Getting started</p>
               <p className="text-sm text-slate-500">
-                {done} of {items.length} done
+                {done} of {items.length} done · {pct}%
               </p>
             </div>
           </div>
@@ -106,7 +136,7 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
             <X className="size-4" />
           </button>
         </div>
-        <Progress value={(done / items.length) * 100} />
+        <Progress value={pct} />
         <ul className="grid gap-2 sm:grid-cols-2">
           {items.map((item) => {
             const isNext = item.key === next?.key

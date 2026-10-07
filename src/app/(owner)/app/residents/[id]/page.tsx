@@ -174,34 +174,33 @@ export default async function ResidentDetailPage({
       {/* ------------------------------------------------ Identity header */}
       <div
         className={cn(
-          'relative overflow-hidden rounded-3xl bg-gradient-to-br p-6 text-white shadow-elevated',
-          theme.gradient,
+          'relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6',
         )}
       >
-        <div className="dot-grid absolute inset-0 opacity-[0.12]" />
+        <div className={cn('absolute inset-x-0 top-0 h-1', theme.bgSolid)} />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-          <Avatar className="size-16 border-2 border-white/30">
-            <AvatarFallback className="bg-white/15 text-lg font-semibold text-white">
+          <Avatar className="size-14 border border-slate-200">
+            <AvatarFallback className="bg-slate-100 text-base font-semibold text-slate-700">
               {initials(resident.fullName)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-xl font-semibold tracking-tight">
+              <h2 className="font-display text-xl font-semibold tracking-tight text-slate-900">
                 {resident.fullName}
               </h2>
               <StatusChip
                 label={RESIDENT_STATUS_STYLE[resident.status].label}
-                chip="border-white/25 bg-white/15 text-white"
+                chip={RESIDENT_STATUS_STYLE[resident.status].chip}
               />
               {resident.kycStatus === 'VERIFIED' && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/15 px-2 py-0.5 text-[11px] font-medium">
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                   <ShieldCheck className="size-3" />
                   KYC verified
                 </span>
               )}
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-white/80">
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500">
               <span className="flex items-center gap-1.5">
                 <Building2 className="size-3.5" />
                 {resident.property.name}
@@ -562,7 +561,7 @@ export default async function ResidentDetailPage({
                         <TableCell
                           className={cn(
                             'text-right font-semibold tabular',
-                            invoice.balance > 0 ? 'text-red-600' : 'text-slate-400',
+                            invoice.balance > 0 ? 'text-rose-600' : 'text-slate-400',
                           )}
                         >
                           {invoice.balance > 0 ? formatMoney(invoice.balance) : '—'}
@@ -587,7 +586,7 @@ export default async function ResidentDetailPage({
                 {resident.invoices.map((invoice) => (
                   <li
                     key={invoice.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <a href={`/api/documents/rent-invoice/${invoice.id}.pdf`} target="_blank" rel="noopener" className="truncate font-medium text-slate-900 hover:text-blue-700 hover:underline">
@@ -615,7 +614,7 @@ export default async function ResidentDetailPage({
                       <span
                         className={cn(
                           'font-semibold tabular',
-                          invoice.balance > 0 ? 'text-red-600' : 'text-slate-400',
+                          invoice.balance > 0 ? 'text-rose-600' : 'text-slate-400',
                         )}
                       >
                         {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}
@@ -655,7 +654,7 @@ export default async function ResidentDetailPage({
                           {payment.purpose === 'DEPOSIT' ? ' · deposit' : ''}
                         </p>
                         {payment.status === 'REVERSED' && payment.reversalReason && (
-                          <p className="text-[11px] text-red-600">Reversed — {payment.reversalReason}</p>
+                          <p className="text-[11px] text-rose-600">Reversed — {payment.reversalReason}</p>
                         )}
                         {payment.attachmentUrl && (
                           <a href={payment.attachmentUrl} target="_blank" rel="noopener" className="text-[11px] text-blue-600 hover:underline">
@@ -733,7 +732,7 @@ export default async function ResidentDetailPage({
               {resident.documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                 >
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
                     <IdCard className="size-5 text-slate-500" />
@@ -779,7 +778,7 @@ export default async function ResidentDetailPage({
                 <li key={complaint.id}>
                   <Link
                     href={`/app/complaints/${complaint.id}`}
-                    className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card transition-shadow hover:shadow-elevated"
+                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-shadow hover:border-slate-300"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">{complaint.title}</p>
@@ -814,12 +813,12 @@ function HeaderStat({
   tone?: 'ok' | 'warn'
 }) {
   return (
-    <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur">
-      <p className="text-[10px] uppercase tracking-wide text-white/60">{label}</p>
+    <div className="rounded-lg bg-slate-50 px-3 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
       <p
         className={cn(
           'font-display text-sm font-semibold tabular',
-          tone === 'warn' ? 'text-amber-200' : 'text-white',
+          tone === 'warn' ? 'text-rose-600' : 'text-slate-900',
         )}
       >
         {value}
@@ -839,7 +838,7 @@ function Detail({
 }) {
   return (
     <div className={className}>
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-0.5 text-sm text-slate-800">{value || '—'}</dd>
     </div>
   )

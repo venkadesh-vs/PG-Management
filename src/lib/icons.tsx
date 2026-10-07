@@ -20,7 +20,9 @@ import {
   ClipboardList,
   Clock,
   CreditCard,
-  CircleDollarSign,
+  FileUp,
+  IndianRupee,
+  TrendingUp,
   DoorOpen,
   FileText,
   Gauge,
@@ -72,7 +74,7 @@ export const ICONS = {
   clipboard: ClipboardList,
   clock: Clock,
   card: CreditCard,
-  money: CircleDollarSign,
+  money: IndianRupee,
   door: DoorOpen,
   file: FileText,
   gauge: Gauge,
@@ -93,6 +95,8 @@ export const ICONS = {
   sparkles: Sparkles,
   tags: Tags,
   trendingDown: TrendingDown,
+  trendingUp: TrendingUp,
+  upload: FileUp,
   userPlus: UserPlus,
   user: UserRound,
   help: CircleHelp,
@@ -107,16 +111,27 @@ export const ICONS = {
 export type IconName = keyof typeof ICONS
 
 /** Accepts either a registry name (safe across the RSC boundary) or a component. */
-export type IconLike = IconName | React.ComponentType<{ className?: string }>
+export type IconLike = IconName | React.ComponentType<{ className?: string; strokeWidth?: number }>
 
-export function resolveIcon(icon: IconLike | undefined): React.ComponentType<{ className?: string }> | null {
+export function resolveIcon(
+  icon: IconLike | undefined,
+): React.ComponentType<{ className?: string; strokeWidth?: number }> | null {
   if (!icon) return null
   if (typeof icon === 'string') return ICONS[icon] ?? null
   return icon
 }
 
-export function Icon({ name, className }: { name: IconLike; className?: string }) {
+/** One stroke weight everywhere (1.75) so icons look like a single set. */
+export function Icon({
+  name,
+  className,
+  strokeWidth = 1.75,
+}: {
+  name: IconLike
+  className?: string
+  strokeWidth?: number
+}) {
   const Component = resolveIcon(name)
   if (!Component) return null
-  return <Component className={className} />
+  return <Component className={className} strokeWidth={strokeWidth} />
 }

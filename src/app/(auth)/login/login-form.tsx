@@ -22,11 +22,11 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 const ROLE_META: Record<string, { label: string; icon: React.ElementType; tone: string }> = {
-  SUPER_ADMIN: { label: 'Super Admin', icon: ShieldCheck, tone: 'text-violet-600 bg-violet-50' },
-  OWNER: { label: 'PG Owner', icon: Users, tone: 'text-blue-600 bg-blue-50' },
-  MANAGER: { label: 'Manager', icon: Users, tone: 'text-sky-600 bg-sky-50' },
-  WORKER: { label: 'Worker', icon: Wrench, tone: 'text-amber-600 bg-amber-50' },
-  TENANT: { label: 'Resident', icon: UserRound, tone: 'text-emerald-600 bg-emerald-50' },
+  SUPER_ADMIN: { label: 'Super Admin', icon: ShieldCheck, tone: 'text-slate-600 bg-slate-100' },
+  OWNER: { label: 'PG Owner', icon: Users, tone: 'text-slate-600 bg-slate-100' },
+  MANAGER: { label: 'Manager', icon: Users, tone: 'text-slate-600 bg-slate-100' },
+  WORKER: { label: 'Worker', icon: Wrench, tone: 'text-slate-600 bg-slate-100' },
+  TENANT: { label: 'Resident', icon: UserRound, tone: 'text-slate-600 bg-slate-100' },
 }
 
 export function LoginForm({
@@ -130,13 +130,13 @@ export function LoginForm({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+          className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="text-sm font-medium text-slate-700">
               Demo accounts
             </p>
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
               Demo data
             </span>
           </div>

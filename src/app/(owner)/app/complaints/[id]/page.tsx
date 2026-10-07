@@ -133,7 +133,7 @@ export default async function ComplaintDetailPage({
 
               {complaint.photoUrls.length > 0 && (
                 <div className="mt-4">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="mb-2 text-xs font-medium text-slate-500">
                     Photos from {complaint.resident ? complaint.resident.fullName.split(' ')[0] : 'the report'}
                   </p>
                   <PhotoGallery urls={complaint.photoUrls} />
@@ -142,7 +142,7 @@ export default async function ComplaintDetailPage({
 
               {complaint.resolutionNote && (
                 <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  <p className="text-xs font-semibold text-emerald-700">
                     Resolution
                   </p>
                   <p className="mt-1 text-sm text-emerald-900">{complaint.resolutionNote}</p>
@@ -153,7 +153,7 @@ export default async function ComplaintDetailPage({
               )}
               {!complaint.resolutionNote && complaint.resolutionPhotoUrl && (
                 <div className="mt-4">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  <p className="mb-2 text-xs font-semibold text-emerald-700">
                     Resolution photo
                   </p>
                   <PhotoGallery urls={[complaint.resolutionPhotoUrl]} />

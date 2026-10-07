@@ -3,7 +3,6 @@ import { Utensils } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { themeFor } from '@/lib/theme'
 import { cn, formatDate, startOfDay } from '@/lib/utils'
 import { MEAL_TYPES, expectedMealCount } from '@/server/services/kitchen'
 import { EmptyState } from '@/components/ui/feedback'
@@ -36,7 +35,6 @@ export default async function WorkerFoodPage() {
   }
 
   const property = staff.property
-  const theme = themeFor(property.type)
 
   const board = await Promise.all(
     MEAL_TYPES.map(async (type) => {
@@ -67,8 +65,7 @@ export default async function WorkerFoodPage() {
 
       <div
         className={cn(
-          'relative overflow-hidden rounded-3xl bg-gradient-to-br p-5 text-white shadow-elevated',
-          theme.gradient,
+          'relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 to-blue-600 p-5 text-white shadow-sm ring-1 ring-blue-900/10',
         )}
       >
         <div className="dot-grid absolute inset-0 opacity-[0.12]" />

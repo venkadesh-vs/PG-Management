@@ -213,7 +213,7 @@ export default async function OwnerDashboard({
       {/* ------------------------------------------------ Greeting (§22) */}
       <header className="space-y-1">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-          {greetingIST()}, {firstName} <span aria-hidden>👋</span>
+          {greetingIST()}, {firstName}
         </h1>
         <p className="text-sm text-slate-500">Here&apos;s what needs your attention today.</p>
       </header>
@@ -235,7 +235,6 @@ export default async function OwnerDashboard({
             value={summary.occupancy.rate}
             format="percent"
             icon="beds"
-            tone="violet"
             hint={`${summary.occupancy.occupied} of ${summary.occupancy.total} beds`}
             href="/app/beds"
           />
@@ -248,7 +247,6 @@ export default async function OwnerDashboard({
                 value={summary.monthCollection}
                 format="money"
                 icon="money"
-                tone="emerald"
                 hint={`This month · ${formatMoney(summary.todayCollection)} today`}
                 href="/app/payments"
               />
@@ -270,7 +268,6 @@ export default async function OwnerDashboard({
                 value={billedThisMonth}
                 format="money"
                 icon="chart"
-                tone="blue"
                 hint={`Billed this month · ${formatMoney(summary.expectedRevenue)} expected`}
                 href="/app/rent"
               />
@@ -284,7 +281,6 @@ export default async function OwnerDashboard({
               value={summary.monthExpenses}
               format="money"
               icon="receipt"
-              tone="amber"
               hint="This month"
               href="/app/expenses"
             />
@@ -308,20 +304,18 @@ export default async function OwnerDashboard({
       {/* --------------------------------------------------- Hero header */}
       <div
         className={cn(
-          'relative overflow-hidden rounded-3xl bg-gradient-to-br p-6 text-white shadow-elevated sm:p-8',
+          'relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6',
           vacancy ? 'lg:col-span-2' : 'lg:col-span-3',
-          theme.gradient,
         )}
       >
-        <div className="dot-grid absolute inset-0 opacity-[0.12]" />
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur">
-                <Building2 className="size-3" />
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                <Building2 className="size-3" strokeWidth={1.75} />
                 {activeProperty ? themeFor(activeProperty.type).label : 'All properties'}
               </span>
-              <span className="text-xs text-white/60">
+              <span className="text-xs text-slate-500">
                 {new Date().toLocaleDateString('en-IN', {
                   timeZone: 'Asia/Kolkata',
                   weekday: 'long',
@@ -330,10 +324,10 @@ export default async function OwnerDashboard({
                 })}
               </span>
             </div>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 className="truncate font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
               {activeProperty ? activeProperty.name : `${user.organizationName}`}
             </h2>
-            <p className="max-w-lg text-sm leading-relaxed text-white/70">
+            <p className="max-w-lg text-sm leading-relaxed text-slate-500">
               {summary.residents} residents across {summary.occupancy.total} beds.{' '}
               {show.money &&
                 (summary.pendingRent > 0
@@ -347,8 +341,10 @@ export default async function OwnerDashboard({
               value={summary.occupancy.rate}
               occupied={summary.occupancy.occupied}
               total={summary.occupancy.total}
+              onDark={false}
+              size={112}
             />
-            <div className="hidden space-y-2 sm:block">
+            <div className="hidden min-w-[15rem] space-y-1.5 sm:block">
               {show.money && (
                 <>
                   <HeroStat label="Collected this month" value={formatMoney(summary.monthCollection)} />
@@ -368,7 +364,7 @@ export default async function OwnerDashboard({
 
         <div className="relative mt-6 flex flex-wrap gap-2">
           {show.checkIn && (
-            <Button size="sm" variant="secondary" asChild className="bg-white/95 text-slate-900 hover:bg-white">
+            <Button size="sm" variant="primary" asChild>
               <Link href={`/app/residents/new${scope.propertyId ? `?property=${scope.propertyId}` : ''}`}>
                 <UserPlus className="size-4" />
                 Check in resident
@@ -376,7 +372,7 @@ export default async function OwnerDashboard({
             </Button>
           )}
           {show.recordPayment && (
-            <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
+            <Button size="sm" variant="outline" asChild>
               <Link href="/app/rent">
                 <Wallet className="size-4" />
                 Record payment
@@ -384,7 +380,7 @@ export default async function OwnerDashboard({
             </Button>
           )}
           {show.beds && (
-            <Button size="sm" variant="ghost" asChild className="border border-white/20 text-white hover:bg-white/10 hover:text-white">
+            <Button size="sm" variant="outline" asChild>
               <Link href="/app/beds">
                 <Bed className="size-4" />
                 Bed map
@@ -399,17 +395,16 @@ export default async function OwnerDashboard({
 
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
-          <StatCard label="Vacant beds" value={summary.occupancy.available} icon="door" tone="emerald" hint={`${summary.occupancy.reserved} reserved`} href="/app/beds" />
+          <StatCard label="Vacant beds" value={summary.occupancy.available} icon="door" hint={`${summary.occupancy.reserved} reserved`} href="/app/beds" />
         </MotionItem>
         <MotionItem>
-          <StatCard label="Under maintenance" value={summary.occupancy.maintenance + summary.occupancy.blocked} icon="wrench" tone="amber" hint="Beds out of service" href="/app/beds" />
+          <StatCard label="Under maintenance" value={summary.occupancy.maintenance + summary.occupancy.blocked} icon="wrench" hint="Beds out of service" href="/app/beds" />
         </MotionItem>
         <MotionItem>
           <StatCard
             label="Residents"
             value={summary.residents}
             icon="user"
-            tone={theme.key === 'pink' ? 'pink' : 'blue'}
             hint={`${summary.newThisMonth} joined this month`}
             href="/app/residents"
           />
@@ -434,7 +429,7 @@ export default async function OwnerDashboard({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <Wallet className="size-4 text-amber-500" />
+                <Wallet className="size-4 text-slate-400" strokeWidth={1.75} />
                 Rent due today
                 {summary.dueToday.length > 0 && (
                   <Badge variant="warning" size="sm">
@@ -484,7 +479,7 @@ export default async function OwnerDashboard({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <Utensils className="size-4 text-orange-500" />
+                <Utensils className="size-4 text-slate-400" strokeWidth={1.75} />
                 Today&apos;s meal count
               </CardTitle>
             </CardHeader>
@@ -492,10 +487,10 @@ export default async function OwnerDashboard({
               {meals.map((meal) => (
                 <div
                   key={meal.type}
-                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-xs font-medium capitalize text-slate-600">
                       {meal.type.toLowerCase()}
                     </p>
                     <p className="truncate text-xs text-slate-500">
@@ -518,7 +513,7 @@ export default async function OwnerDashboard({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <ClipboardList className="size-4 text-violet-500" />
+                <ClipboardList className="size-4 text-slate-400" strokeWidth={1.75} />
                 Needs action
               </CardTitle>
             </CardHeader>
@@ -592,13 +587,13 @@ export default async function OwnerDashboard({
               data={[
                 { name: 'Paid', value: collection.paid, color: '#10b981' },
                 { name: 'Pending', value: collection.pending, color: '#f59e0b' },
-                { name: 'Overdue', value: collection.overdue, color: '#ef4444' },
+                { name: 'Overdue', value: collection.overdue, color: '#f43f5e' },
               ]}
             />
             <div className="mt-2 space-y-1.5">
               <LegendRow color="#10b981" label="Paid" value={formatMoney(collection.paid)} />
               <LegendRow color="#f59e0b" label="Pending" value={formatMoney(collection.pending)} />
-              <LegendRow color="#ef4444" label="Overdue" value={formatMoney(collection.overdue)} />
+              <LegendRow color="#f43f5e" label="Overdue" value={formatMoney(collection.overdue)} />
             </div>
           </CardContent>
         </Card>
@@ -681,7 +676,8 @@ export default async function OwnerDashboard({
                   <Link
                     key={property.id}
                     href={`/app?property=${property.id}`}
-                    className="block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-all hover:shadow-elevated"
+                    className="block rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-slate-300"
+
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -745,7 +741,7 @@ export default async function OwnerDashboard({
                         className={cn(
                           'mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg',
                           complaint.priority === 'URGENT' || complaint.priority === 'HIGH'
-                            ? 'bg-red-50 text-red-600'
+                            ? 'bg-rose-50 text-rose-600'
                             : 'bg-slate-100 text-slate-500',
                         )}
                       >
@@ -840,9 +836,9 @@ function greetingIST() {
 
 function HeroStat({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (
-    <div className="flex items-center justify-between gap-6 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 backdrop-blur">
-      <span className="text-xs text-white/70">{label}</span>
-      <span className={cn('text-sm font-semibold tabular', tone === 'warn' ? 'text-amber-200' : 'text-white')}>
+    <div className="flex items-center justify-between gap-6 rounded-lg bg-slate-50 px-3 py-1.5">
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className={cn('text-sm font-semibold tabular', tone === 'warn' ? 'text-amber-700' : 'text-slate-900')}>
         {value}
       </span>
     </div>
@@ -866,23 +862,14 @@ function OpsRow({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50"
+      className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50"
     >
-      <Icon
-        className={cn(
-          'size-4 shrink-0',
-          tone === 'red' ? 'text-red-500' : tone === 'amber' ? 'text-amber-500' : 'text-slate-400',
-        )}
-      />
+      <Icon className="size-4 shrink-0 text-slate-400" strokeWidth={1.75} />
       <span className="min-w-0 flex-1 truncate text-sm text-slate-600">{label}</span>
-      <span
-        className={cn(
-          'shrink-0 font-display text-sm font-semibold tabular',
-          tone === 'red' ? 'text-red-600' : tone === 'amber' ? 'text-amber-600' : 'text-slate-700',
-        )}
-      >
-        {value}
-      </span>
+      {tone !== 'ok' && value > 0 && (
+        <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'red' ? 'bg-rose-500' : 'bg-amber-500')} />
+      )}
+      <span className="shrink-0 text-sm font-semibold text-slate-900 tabular">{value}</span>
     </Link>
   )
 }
@@ -900,7 +887,8 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-50 px-1.5 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[11px] text-slate-500">{label}</p>
+
       <p className="font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
     </div>
   )

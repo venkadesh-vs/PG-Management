@@ -10,7 +10,7 @@ import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, star
 import { collectionBreakdown } from '@/server/services/analytics'
 import { PageHeader } from '@/components/app/page-header'
 import { ExportButton } from '@/components/app/export-button'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
@@ -156,7 +156,7 @@ export default async function RentPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label="Collected this month"
           value={collection.paid}
@@ -186,10 +186,10 @@ export default async function RentPage({
           value={collection.total ? Math.round((collection.paid / collection.total) * 100) : 0}
           format="percent"
           icon="chart"
-          tone="blue"
+         
           hint="This month"
         />
-      </div>
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
@@ -265,7 +265,7 @@ export default async function RentPage({
                       <TableCell className="text-sm">
                         <span className="text-slate-600">{formatDate(invoice.dueDate)}</span>
                         {invoice.balance > 0 && overdueDays > 0 && (
-                          <span className="ml-1.5 text-xs font-medium text-red-600">
+                          <span className="ml-1.5 text-xs font-medium text-rose-600">
                             +{overdueDays}d
                           </span>
                         )}
@@ -281,7 +281,7 @@ export default async function RentPage({
                       <TableCell
                         className={cn(
                           'text-right font-semibold tabular',
-                          invoice.balance > 0 ? 'text-red-600' : 'text-emerald-600',
+                          invoice.balance > 0 ? 'text-rose-600' : 'text-emerald-600',
                         )}
                       >
                         {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}
@@ -315,7 +315,7 @@ export default async function RentPage({
                 </div>
                 <Link
                   href={`/app/residents/${invoice.resident.id}`}
-                  className="block rounded-2xl border border-slate-200 bg-white p-4 pr-11 shadow-card"
+                  className="block rounded-xl border border-slate-200 bg-white p-4 pr-11 shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -338,7 +338,7 @@ export default async function RentPage({
                     <span
                       className={cn(
                         'font-semibold tabular',
-                        invoice.balance > 0 ? 'text-red-600' : 'text-emerald-600',
+                        invoice.balance > 0 ? 'text-rose-600' : 'text-emerald-600',
                       )}
                     >
                       {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}

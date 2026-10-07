@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 export function TableWrap({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card', className)}>
+    <div className={cn('overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs', className)}>
       <div className="overflow-x-auto scrollbar-slim">{children}</div>
     </div>
   )
@@ -75,7 +75,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-11 whitespace-nowrap px-4 text-left align-middle text-xs font-semibold uppercase tracking-wide text-slate-500',
+      'h-10 whitespace-nowrap bg-slate-50/80 px-4 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500',
       '[&:has([role=checkbox])]:pr-0',
       className,
     )}

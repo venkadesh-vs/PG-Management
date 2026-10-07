@@ -114,7 +114,7 @@ export function BookingsList({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(i * 0.03, 0.3) }}
-              className="flex flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
+              className="flex flex-col rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -150,7 +150,7 @@ export function BookingsList({
                         <DropdownMenuItem onSelect={() => open(b, 'extend')}>
                           <CalendarPlus className="size-4" /> Extend hold
                         </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => open(b, 'cancel')} className="text-red-600">
+                        <DropdownMenuItem onSelect={() => open(b, 'cancel')} className="text-rose-600">
                           <XCircle className="size-4" /> Cancel booking
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -161,23 +161,23 @@ export function BookingsList({
 
               <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wide text-slate-400">Bed</dt>
+                  <dt className="text-[11px] text-slate-500">Bed</dt>
                   <dd className="flex items-center gap-1 font-semibold text-slate-800">
                     <BedDouble className="size-3.5 text-slate-400" /> {b.bed ?? 'Not chosen'}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wide text-slate-400">Moves in</dt>
+                  <dt className="text-[11px] text-slate-500">Moves in</dt>
                   <dd className="text-slate-800">{formatDate(b.checkInDate)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wide text-slate-400">Rent · Deposit</dt>
+                  <dt className="text-[11px] text-slate-500">Rent · Deposit</dt>
                   <dd className="text-slate-800 tabular">
                     {formatMoney(b.rent)} · {formatMoney(b.deposit)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wide text-slate-400">Token</dt>
+                  <dt className="text-[11px] text-slate-500">Token</dt>
                   <dd className={cn('tabular', b.tokenPaidAt ? 'font-semibold text-emerald-700' : 'text-slate-400')}>
                     {b.tokenPaidAt ? formatMoney(b.tokenAmount) : 'Not paid'}
                   </dd>
@@ -185,7 +185,7 @@ export function BookingsList({
               </dl>
 
               {live && b.expiresAt && (
-                <p className={cn('mt-3 rounded-lg px-2.5 py-1.5 text-xs', expiring ? 'bg-red-50 font-semibold text-red-700' : 'bg-slate-50 text-slate-500')}>
+                <p className={cn('mt-3 rounded-lg px-2.5 py-1.5 text-xs', expiring ? 'bg-rose-50 font-semibold text-rose-700' : 'bg-slate-50 text-slate-500')}>
                   {b.status === 'CONFIRMED' ? 'Bed held' : 'Pending'} until {formatDate(b.expiresAt)}
                   {expiring ? ' — expiring soon' : ''}
                 </p>

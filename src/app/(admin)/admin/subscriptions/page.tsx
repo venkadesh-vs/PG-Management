@@ -96,11 +96,11 @@ export default async function AdminSubscriptionsPage({
         actions={<RunBillingButton />}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="MRR" value={metrics.mrr} format="money" icon="sparkles" tone="violet" />
-        <StatCard label="Active" value={metrics.activeSubscriptions} icon="check" tone="emerald" />
-        <StatCard label="On trial" value={metrics.trials} icon="clock" tone="blue" hint={`${metrics.expiringTrials} ending within 7 days`} />
-        <StatCard label="Past due / grace" value={metrics.pastDue} icon="warning" tone={metrics.pastDue ? 'red' : 'emerald'} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard label="MRR" value={metrics.mrr} format="money" icon="sparkles" />
+        <StatCard label="Active" value={metrics.activeSubscriptions} icon="check" />
+        <StatCard label="On trial" value={metrics.trials} icon="clock" hint={`${metrics.expiringTrials} ending within 7 days`} />
+        <StatCard label="Past due / grace" value={metrics.pastDue} icon="warning" tone={metrics.pastDue ? 'red' : undefined} />
       </div>
 
       <Suspense fallback={<TableSkeleton />}>
@@ -190,7 +190,7 @@ export default async function AdminSubscriptionsPage({
                       <TableCell className="text-right font-semibold tabular">
                         {formatMoney(sub.amount)}
                         {owed > 0 && (
-                          <span className="block text-[11px] font-normal text-red-600">
+                          <span className="block text-[11px] font-normal text-rose-600">
                             {formatMoney(owed)} owed
                           </span>
                         )}
@@ -217,10 +217,10 @@ export default async function AdminSubscriptionsPage({
                       <TableCell>
                         <StatusChip label={STATUS_WORDS[sub.status as SubStatus]?.label ?? style.label} chip={style.chip} />
                         {sub.cancelAtPeriodEnd && sub.status !== 'CANCELLED' && (
-                          <span className="block text-[11px] text-red-600">cancels at period end</span>
+                          <span className="block text-[11px] text-rose-600">cancels at period end</span>
                         )}
                         {sub.lastPaymentError && ['PAST_DUE', 'GRACE', 'SUSPENDED'].includes(sub.status) && (
-                          <span className="block max-w-[180px] truncate text-[11px] text-red-600" title={sub.lastPaymentError}>
+                          <span className="block max-w-[180px] truncate text-[11px] text-rose-600" title={sub.lastPaymentError}>
                             {sub.lastPaymentError}
                           </span>
                         )}
@@ -244,7 +244,7 @@ export default async function AdminSubscriptionsPage({
                 <li key={sub.id} className="space-y-1">
                   <Link
                     href={`/admin/organizations/${sub.organization.id}`}
-                    className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="block rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-2">
@@ -273,7 +273,7 @@ export default async function AdminSubscriptionsPage({
                       <span className="text-right font-semibold tabular">
                         {formatMoney(sub.amount)}
                         {owed > 0 && (
-                          <span className="block text-[11px] font-normal text-red-600">
+                          <span className="block text-[11px] font-normal text-rose-600">
                             {formatMoney(owed)} owed
                           </span>
                         )}

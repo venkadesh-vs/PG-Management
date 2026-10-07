@@ -11,7 +11,7 @@ export default async function NoAccessPage() {
   const user = await requireOrgUser()
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+      <div className="flex size-14 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
         <Lock className="size-6" />
       </div>
       <div className="space-y-2">

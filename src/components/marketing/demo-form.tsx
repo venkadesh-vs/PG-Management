@@ -73,7 +73,7 @@ export function DemoForm() {
         initial={reduce ? false : { opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-        className="rounded-3xl border border-emerald-200 bg-white p-8 text-center shadow-lift"
+        className="rounded-2xl border border-emerald-200 bg-white p-8 text-center shadow-lift"
         role="status"
       >
         <motion.div
@@ -108,7 +108,7 @@ export function DemoForm() {
   return (
     <form
       onSubmit={form.handleSubmit(onSubmit)}
-      className="min-w-0 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-lift sm:p-8"
+      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-elevated sm:p-8"
       noValidate
       aria-label="Book a demo"
     >
@@ -211,12 +211,12 @@ export function DemoForm() {
 /** The "Book a demo" section: what to expect on the left, the form on the right. */
 export function DemoSection() {
   return (
-    <section id="demo" aria-labelledby="demo-title" className="relative scroll-mt-24 overflow-hidden bg-white py-20 sm:py-28">
+    <section id="demo" aria-labelledby="demo-title" className="relative scroll-mt-24 overflow-hidden bg-white py-16 sm:py-24">
       <div className="dot-grid absolute inset-0 -z-0 opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]" aria-hidden />
       <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
         <Reveal className="min-w-0">
           <Eyebrow icon={PlayCircle}>Book a demo</Eyebrow>
-          <h2 id="demo-title" className="mt-4 font-display text-3xl font-bold leading-[1.1] tracking-tight text-slate-900 sm:text-4xl">
+          <h2 id="demo-title" className="mt-4 font-display text-[1.75rem] font-semibold leading-[1.15] tracking-tight text-slate-900 text-balance sm:text-4xl">
             See StayFlow with your own PG&apos;s numbers.
           </h2>
           <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
@@ -230,7 +230,7 @@ export function DemoSection() {
               'Honest answers on pricing and fit',
             ].map((item) => (
               <li key={item} className="flex items-start gap-2.5 text-sm text-slate-700">
-                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-50 ring-1 ring-inset ring-blue-200">
                   <Check className="size-3 text-blue-700" strokeWidth={3} aria-hidden />
                 </span>
                 {item}
@@ -253,20 +253,20 @@ export function DemoSection() {
 /** The closing call-to-action band. */
 export function FinalCta() {
   return (
-    <section aria-labelledby="final-cta-title" className="grain relative isolate overflow-hidden bg-slate-950 py-24 text-white sm:py-32">
+    <section aria-labelledby="final-cta-title" className="grain relative isolate overflow-hidden bg-slate-950 py-20 text-white sm:py-28">
       <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-        <div className="aurora opacity-70" />
+        <div className="aurora opacity-60" />
         <div className="absolute left-1/2 top-0 h-px w-2/3 -translate-x-1/2 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
       </div>
       <Reveal className="relative mx-auto w-full max-w-3xl px-4 text-center sm:px-6">
-        <h2 id="final-cta-title" className="font-display text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
-          Your PG. <span className="bg-gradient-to-r from-blue-300 via-violet-300 to-marigold-300 bg-clip-text text-transparent">Finally under control.</span>
+        <h2 id="final-cta-title" className="font-display text-[2.25rem] font-bold leading-[1.06] tracking-[-0.03em] text-balance sm:text-5xl">
+          Your PG. <span className="bg-gradient-to-br from-blue-200 to-blue-400 bg-clip-text text-transparent">Finally under control.</span>
         </h2>
-        <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-white/70 text-pretty">
+        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-white/70 text-pretty sm:text-lg">
           Beds, residents, rent, staff, food, complaints and profit — in one place, from today.
         </p>
         <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-          <Button variant="accent" size="xl" asChild>
+          <Button variant="outline" size="xl" asChild className="border-white bg-white text-slate-900 hover:bg-slate-100 hover:text-slate-900">
             <a href="/signup">
               Start free
               <ArrowRight className="group-hover/btn:translate-x-0.5" aria-hidden />
@@ -282,7 +282,7 @@ export function FinalCta() {
         <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-white/60">
           {['No setup fee', 'Free trial', 'Cancel anytime'].map((item) => (
             <li key={item} className="flex items-center gap-1.5">
-              <Check className="size-3.5 text-emerald-400" aria-hidden />
+              <Check className="size-3.5 text-blue-300" aria-hidden />
               {item}
             </li>
           ))}

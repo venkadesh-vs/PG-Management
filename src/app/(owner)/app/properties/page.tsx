@@ -92,24 +92,22 @@ export default async function PropertiesPage({
             return (
               <div
                 key={property.id}
-                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card transition-shadow hover:shadow-elevated"
+                className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-colors hover:border-slate-300"
               >
-                <div className={cn('relative h-24 bg-gradient-to-br p-5', theme.gradient)}>
-                  <div className="dot-grid absolute inset-0 opacity-[0.15]" />
-                  <div className="relative flex items-start justify-between">
-                    <div>
-                      <h2 className="font-display text-lg font-semibold tracking-tight text-white">
-                        {property.name}
-                      </h2>
-                      <p className="mt-0.5 flex items-center gap-1 text-xs text-white/75">
-                        <MapPin className="size-3" />
-                        {property.city}, {property.state}
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur">
-                      {theme.label}
-                    </span>
+                <div className={cn('h-1', theme.bgSolid)} />
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                  <div className="min-w-0">
+                    <h2 className="truncate font-display text-base font-semibold tracking-tight text-slate-900">
+                      {property.name}
+                    </h2>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                      <MapPin className="size-3" strokeWidth={1.75} />
+                      {property.city}, {property.state}
+                    </p>
                   </div>
+                  <span className={cn('shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium', theme.chip)}>
+                    {theme.label}
+                  </span>
                 </div>
 
                 <div className="space-y-4 p-5">
@@ -211,7 +209,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-slate-50 px-2 py-2">
       <p className="font-display text-lg font-semibold text-slate-900 tabular">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[11px] text-slate-500">{label}</p>
     </div>
   )
 }

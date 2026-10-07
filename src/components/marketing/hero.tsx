@@ -42,44 +42,43 @@ export function Hero() {
         }
 
   return (
-    <section ref={ref} aria-labelledby="hero-title" className="grain relative isolate overflow-hidden pb-16 pt-28 sm:pb-24 sm:pt-36">
+    <section ref={ref} aria-labelledby="hero-title" className="grain relative isolate overflow-hidden pb-14 pt-24 sm:pb-20 sm:pt-32">
       <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden>
         <div className="aurora" />
-        <div className="dot-grid absolute inset-0 opacity-50 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+        <div className="dot-grid absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-white" />
       </div>
 
       <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_1.08fr] lg:gap-10">
         <div className="min-w-0 text-center lg:text-left">
-          <motion.p {...rise(0)} className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-200/80 bg-white/70 py-1 pl-1 pr-3 text-xs font-semibold text-blue-800 shadow-soft backdrop-blur">
-            <span className="rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
-              StayFlow
-            </span>
+          <motion.p {...rise(0)} className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white/80 py-1 pl-1.5 pr-3 text-xs font-medium text-slate-600 shadow-xs backdrop-blur">
+            <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">StayFlow</span>
             <span className="truncate">The operating system for PGs</span>
           </motion.p>
 
           <motion.h1
             id="hero-title"
             {...rise(0.06)}
-            className="mt-6 font-display text-[2.6rem] font-extrabold leading-[1.02] tracking-tight text-slate-900 sm:text-6xl lg:text-[4.25rem]"
+            className="mt-6 font-display text-[2.5rem] font-bold leading-[1.04] tracking-[-0.03em] text-slate-900 text-balance sm:text-6xl lg:text-[4rem]"
           >
             Your PG.
             <br />
-            <span className="text-gradient-animated">Finally under control.</span>
+            <span className="text-gradient">Finally under control.</span>
           </motion.h1>
 
-          <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-slate-600 text-pretty lg:mx-0">
+          <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-slate-600 text-pretty sm:text-lg lg:mx-0">
             StayFlow is the operating system that helps PG owners manage beds, residents, rent, staff,
             food, complaints and profit — from one place.
           </motion.p>
 
-          <motion.div {...rise(0.22)} className="mt-9 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+          <motion.div {...rise(0.22)} className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
             <Button variant="primary" size="xl" asChild>
               <a href="/signup">
                 Start free
                 <ArrowRight className="group-hover/btn:translate-x-0.5" aria-hidden />
               </a>
             </Button>
-            <Button variant="outline" size="xl" asChild className="bg-white/80 backdrop-blur">
+            <Button variant="outline" size="xl" asChild className="bg-white">
               <a href="#demo">
                 <PlayCircle aria-hidden />
                 Book a demo
@@ -87,10 +86,10 @@ export function Hero() {
             </Button>
           </motion.div>
 
-          <motion.ul {...rise(0.3)} className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
+          <motion.ul {...rise(0.3)} className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
             {['Free trial, no card', 'Works on any phone', 'Set up in an afternoon'].map((item) => (
               <li key={item} className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-500" aria-hidden />
+                <CheckCircle2 className="size-4 text-blue-600" strokeWidth={1.75} aria-hidden />
                 {item}
               </li>
             ))}
@@ -104,7 +103,7 @@ export function Hero() {
           transition={{ duration: 1, ease: EASE_OUT, delay: 0.2 }}
           className="relative"
         >
-          <div className="absolute inset-6 -z-10 rounded-full bg-blue-500/25 blur-3xl" />
+          <div className="absolute inset-6 -z-10 rounded-full bg-blue-500/15 blur-3xl" />
           <Tilt max={5}>
             <HeroDashboard />
           </Tilt>
@@ -122,7 +121,7 @@ export function Hero() {
               </span>
             </FloatingChip>
             <FloatingChip className="-left-3 top-[60%] lg:-left-5" delay={1.15} slow>
-              <span className="flex size-7 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                 <Wrench className="size-3.5" />
               </span>
               <span>
@@ -131,7 +130,7 @@ export function Hero() {
               </span>
             </FloatingChip>
             <FloatingChip className="-bottom-9 right-[18%]" delay={1.4}>
-              <span className="flex size-7 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
                 <BedDouble className="size-3.5" />
               </span>
               <span>
@@ -166,7 +165,7 @@ function FloatingChip({
       transition={{ type: 'spring', stiffness: 260, damping: 22, delay }}
       className={cn('absolute hidden sm:block', className)}
     >
-      <div className={cn('glass flex items-center gap-2.5 rounded-2xl px-3 py-2 shadow-lift', slow ? 'animate-float-slow' : 'animate-float')}>
+      <div className={cn('flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lift backdrop-blur', slow ? 'animate-float-slow' : 'animate-float')}>
         {children}
       </div>
     </motion.div>
@@ -194,7 +193,7 @@ const BEDS: BedState[] = [
 function HeroDashboard() {
   const reduce = useReducedMotion()
   return (
-    <BrowserFrame title="app.stayflow.in/overview" className="shadow-[0_40px_80px_-30px_rgb(48_44_126/0.45)]">
+    <BrowserFrame title="app.stayflow.in/overview" className="shadow-[0_40px_80px_-32px_rgb(30_27_75/0.35)]">
       <div className="flex">
         <div className="hidden w-36 shrink-0 border-r border-slate-100 bg-slate-50/70 p-2.5 sm:block">
           {NAV.map(({ icon: Icon, label, active }) => (
@@ -202,7 +201,7 @@ function HeroDashboard() {
               key={label}
               className={cn(
                 'mb-0.5 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-medium',
-                active ? 'bg-white text-blue-700 shadow-soft' : 'text-slate-500',
+                active ? 'bg-blue-50 text-blue-700' : 'text-slate-500',
               )}
             >
               <Icon className="size-3.5" />
@@ -222,27 +221,27 @@ function HeroDashboard() {
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { k: 'Occupancy', v: '87%', s: '42 / 48 beds', c: 'text-violet-700' },
-              { k: 'Collected', v: '₹3.2L', s: 'this month', c: 'text-emerald-700' },
-              { k: 'Due', v: '₹54K', s: '6 residents', c: 'text-amber-700' },
-              { k: 'Complaints', v: '3', s: '1 urgent', c: 'text-red-600' },
+              { k: 'Occupancy', v: '87%', s: '42 / 48 beds', c: 'text-slate-400' },
+              { k: 'Collected', v: '₹3.2L', s: 'this month', c: 'text-emerald-600' },
+              { k: 'Due', v: '₹54K', s: '6 residents', c: 'text-amber-600' },
+              { k: 'Complaints', v: '3', s: '1 urgent', c: 'text-rose-600' },
             ].map((stat, i) => (
               <motion.div
                 key={stat.k}
                 initial={reduce ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.08, duration: 0.5, ease: EASE_OUT }}
-                className="rounded-xl border border-slate-100 bg-white p-2.5 shadow-soft"
+                className="rounded-lg border border-slate-100 bg-white p-2.5"
               >
                 <p className="text-[10px] text-slate-500">{stat.k}</p>
-                <p className={cn('font-display text-base font-bold tabular', stat.c)}>{stat.v}</p>
-                <p className="text-[9px] text-slate-400">{stat.s}</p>
+                <p className="font-display text-base font-semibold text-slate-900 tabular">{stat.v}</p>
+                <p className={cn('text-[9px]', stat.c)}>{stat.s}</p>
               </motion.div>
             ))}
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-[1.25fr_1fr]">
-            <div className="rounded-xl border border-slate-100 p-2.5">
+            <div className="rounded-lg border border-slate-100 p-2.5">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold text-slate-700">Floor 1 · beds</p>
                 <p className="text-[9px] text-slate-400">tap a bed</p>
@@ -263,7 +262,7 @@ function HeroDashboard() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-100 p-2.5">
+            <div className="rounded-lg border border-slate-100 p-2.5">
               <p className="text-[11px] font-semibold text-slate-700">Rent this month</p>
               <div className="mt-2 space-y-1.5">
                 {[
@@ -281,7 +280,7 @@ function HeroDashboard() {
             </div>
           </div>
 
-          <div className="mt-2 rounded-xl border border-slate-100 p-2.5">
+          <div className="mt-2 rounded-lg border border-slate-100 p-2.5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-semibold text-slate-700">Collections · last 6 months</p>
               <p className="text-[10px] font-semibold text-emerald-600">+12%</p>

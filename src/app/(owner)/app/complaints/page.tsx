@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE, themeFor } from '@/lib/theme'
 import { cn, relativeTime } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
@@ -173,7 +173,7 @@ export default async function ComplaintsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
+      <StatGrid cols={5}>
         <StatCard label="Open" value={open} icon="warning" tone={open > 0 ? 'red' : 'emerald'} hint="Not yet assigned" />
         <StatCard label="Being worked on" value={inProgress} icon="wrench" tone="amber" hint="Assigned or in progress" />
         <Link href="/app/complaints?sla=breached" className="block">
@@ -186,8 +186,8 @@ export default async function ComplaintsPage({
           />
         </Link>
         <StatCard label="Resolved this month" value={resolvedThisMonth} icon="check" tone="emerald" />
-        <StatCard label="Total raised" value={counts.reduce((s, c) => s + c._count._all, 0)} icon="clipboard" tone="blue" hint="All time" />
-      </div>
+        <StatCard label="Total raised" value={counts.reduce((s, c) => s + c._count._all, 0)} icon="clipboard" hint="All time" />
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
@@ -241,13 +241,13 @@ export default async function ComplaintsPage({
                 <li key={complaint.id}>
                   <Link
                     href={`/app/complaints/${complaint.id}`}
-                    className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card transition-all hover:border-slate-300 hover:shadow-elevated sm:flex-row sm:items-center"
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-slate-300 hover:border-slate-300 sm:flex-row sm:items-center"
                   >
                     <div
                       className={cn(
                         'flex size-10 shrink-0 items-center justify-center rounded-xl',
                         complaint.priority === 'URGENT' || complaint.priority === 'HIGH'
-                          ? 'bg-red-50 text-red-600'
+                          ? 'bg-rose-50 text-rose-600'
                           : 'bg-slate-100 text-slate-500',
                       )}
                     >

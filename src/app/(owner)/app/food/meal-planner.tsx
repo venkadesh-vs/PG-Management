@@ -101,7 +101,7 @@ export function MealPlanner({
           const total = entry.rows.reduce((s, r) => s + r.expected, 0)
           return (
             <Card key={entry.propertyId} className="overflow-hidden">
-              <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+              <div className={cn('h-1', theme.bgSolid)} />
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                 <CardTitle className="text-sm">{entry.propertyName}</CardTitle>
                 <span className="text-xs text-slate-500">
@@ -136,8 +136,8 @@ export function MealPlanner({
                         <p className={cn('font-display text-xl font-semibold tabular', theme.text)}>
                           {row.actual ?? row.expected}
                         </p>
-                        <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                          {row.actual !== null ? 'served' : 'expected'}
+                        <p className="text-[11px] text-slate-500">
+                          {row.actual !== null ? 'Served' : 'Expected'}
                         </p>
                       </div>
                     </div>

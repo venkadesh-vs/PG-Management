@@ -3,7 +3,6 @@ import { CalendarDays, Utensils } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { themeFor } from '@/lib/theme'
 import { addDays, cn, formatDate, formatMoney, startOfDay } from '@/lib/utils'
 import { MEAL_TYPES } from '@/server/services/kitchen'
 import { Card, CardContent } from '@/components/ui/card'
@@ -37,8 +36,6 @@ export default async function TenantFoodPage() {
     },
   })
   if (!resident) return null
-
-  const theme = themeFor(resident.property.type)
 
   if (!resident.foodOptIn || !resident.foodSubscription?.active) {
     return (
@@ -74,8 +71,7 @@ export default async function TenantFoodPage() {
         <p className="mt-0.5 text-sm text-slate-500">This week&apos;s menu at {resident.property.name}.</p>
       </div>
 
-      <Card className={cn('overflow-hidden', theme.border)}>
-        <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+      <Card className="overflow-hidden">
         <CardContent className="flex items-center justify-between gap-3 p-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
@@ -97,7 +93,7 @@ export default async function TenantFoodPage() {
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className={cn('font-display text-lg font-semibold tabular', theme.text)}>
+            <p className={'font-display text-lg font-semibold tabular text-slate-900'}>
               {formatMoney(resident.foodCharge)}
             </p>
             <p className="text-[11px] text-slate-500">per month</p>
@@ -114,7 +110,7 @@ export default async function TenantFoodPage() {
 
           return (
             <div key={day.toISOString()}>
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900">
                 <CalendarDays className="size-3.5" />
                 {dayIndex === 0
                   ? 'Today'
@@ -152,16 +148,13 @@ export default async function TenantFoodPage() {
                         <Card className={cn(optedOut && 'opacity-60')}>
                           <CardContent className="flex items-start gap-3 p-4">
                             <div
-                              className={cn(
-                                'flex size-9 shrink-0 items-center justify-center rounded-xl',
-                                theme.bg,
-                              )}
+                              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-100"
                             >
-                              <Utensils className={cn('size-4', theme.text)} />
+                              <Utensils className="size-4 text-slate-600" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <p className="text-sm font-semibold capitalize text-slate-900">
                                   {type.toLowerCase()}
                                 </p>
                                 <span className="text-[11px] text-slate-400">

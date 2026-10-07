@@ -169,21 +169,22 @@ export default async function LeadsPage({
         actions={<LeadEditDialog admins={admins} currentAdminId={me.id} />}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="New" value={countFor('NEW')} icon="clipboard" tone={countFor('NEW') ? 'amber' : 'default'} hint="Not contacted yet" href="/admin/leads?status=NEW" />
         <StatCard
           label="Follow-ups due"
           value={dueCount}
           icon="clock"
-          tone={overdueCount ? 'red' : dueCount ? 'amber' : 'emerald'}
+          tone={overdueCount ? 'red' : dueCount ? 'amber' : undefined}
           hint={overdueCount ? `${overdueCount} overdue` : 'All caught up'}
           href="/admin/leads?due=due&sort=followup&view=table"
         />
-        <StatCard label="In the pipeline" value={inPipeline} icon="users" tone="blue" hint={`${countFor('TRIAL')} on trial`} />
-        <StatCard label="Beds in pipeline" value={bedTotal._sum.bedCount ?? 0} icon="bed" tone="violet" hint={`${countFor('CONVERTED') + countFor('ACTIVE_CUSTOMER')} won`} />
+        <StatCard label="In the pipeline" value={inPipeline} icon="users" hint={`${countFor('TRIAL')} on trial`} />
+        <StatCard label="Beds in pipeline" value={bedTotal._sum.bedCount ?? 0} icon="bed" hint={`${countFor('CONVERTED') + countFor('ACTIVE_CUSTOMER')} won`} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="min-w-0 flex-1">
         <Suspense fallback={<TableSkeleton rows={1} />}>
           <FilterBar activeCount={activeFilters}>
             <SearchInput placeholder="Search name, phone, PG or city…" />
@@ -220,14 +221,15 @@ export default async function LeadsPage({
             />
           </FilterBar>
         </Suspense>
-        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+        </div>
+        <div className="inline-flex h-10 shrink-0 self-start items-center rounded-lg bg-slate-100 p-1 text-xs font-medium">
           {(['board', 'table'] as const).map((v) => (
             <Link
               key={v}
               href={viewHref(v)}
               className={cn(
-                'rounded-lg px-3 py-1.5 capitalize transition-colors',
-                view === v ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+                'flex h-8 items-center rounded-md px-3 capitalize transition-colors',
+                view === v ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900',
               )}
             >
               {v}

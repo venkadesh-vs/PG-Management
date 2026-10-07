@@ -148,15 +148,15 @@ function Tile({
   value: number
   tone: 'amber' | 'sky' | 'emerald'
 }) {
-  const tones = {
-    amber: 'border-amber-100 bg-amber-50/60 text-amber-700',
-    sky: 'border-sky-100 bg-sky-50/60 text-sky-700',
-    emerald: 'border-emerald-100 bg-emerald-50/60 text-emerald-700',
-  }
+  // Neutral tile; the status colour is a small dot, not the whole card.
+  const dot = { amber: 'bg-amber-500', sky: 'bg-blue-500', emerald: 'bg-emerald-500' }
   return (
-    <div className={`rounded-2xl border px-3 py-2.5 text-center ${tones[tone]}`}>
-      <p className="font-display text-xl font-semibold tabular">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide opacity-80">{label}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-xs">
+      <p className="font-display text-xl font-semibold tabular text-slate-900">{value}</p>
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+        <span className={`size-1.5 shrink-0 rounded-full ${dot[tone]}`} />
+        {label}
+      </p>
     </div>
   )
 }

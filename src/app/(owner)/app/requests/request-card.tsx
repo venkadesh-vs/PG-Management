@@ -90,7 +90,7 @@ export function RequestCard({
     <Card className="h-full">
       <CardContent className="flex h-full flex-col gap-3 p-4">
         <div className="flex items-start gap-3">
-          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-2xl', meta.tint)}>
+          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', meta.tint)}>
             <Icon className={cn('size-5', meta.iconTint)} />
           </span>
           <div className="min-w-0 flex-1">

@@ -7,7 +7,7 @@ import { themeFor } from '@/lib/theme'
 import { addDays, cn, formatDate, formatMoney, startOfDay, toISODate } from '@/lib/utils'
 import { MEAL_TYPES, expectedMealCount } from '@/server/services/kitchen'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
@@ -103,7 +103,7 @@ export default async function FoodPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Food' }]}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label="Meals expected today"
           value={totalExpectedToday}
@@ -111,17 +111,17 @@ export default async function FoodPage({
           tone="amber"
           hint="Breakfast + lunch + dinner"
         />
-        <StatCard label="On a food plan" value={subscribers} icon="users" tone="blue" hint="Active residents" />
+        <StatCard label="On a food plan" value={subscribers} icon="users" hint="Active residents" />
         <StatCard label="Served in 7 days" value={servedThisWeek} icon="check" tone="emerald" />
         <StatCard
           label="Food revenue"
           value={monthlyFoodRevenue._sum.foodCharge ?? 0}
           format="money"
           icon="wallet"
-          tone="violet"
+         
           hint="Billed per month"
         />
-      </div>
+      </StatGrid>
 
       <MealPlanner
         canManage={user.permissions.includes('food.manage')}
@@ -151,7 +151,7 @@ export default async function FoodPage({
                 return (
                   <div
                     key={plan.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

@@ -296,7 +296,7 @@ function PaymentDialog({
               <DialogDescription>
                 {formatMoney(receipt.amount)} from {resident.fullName}
               </DialogDescription>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
                 <div className="flex items-center gap-2">
                   <Receipt className="size-4 text-slate-400" />
                   <p className="font-mono text-sm font-semibold text-slate-800">
@@ -488,8 +488,8 @@ function TransferDialog({
         )}
 
         {canChangeRent && bed && (
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rent after the move</p>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+            <p className="text-xs font-medium text-slate-500">Rent after the move</p>
             <div className="grid gap-2">
               {(
                 [
@@ -890,7 +890,7 @@ function CheckoutDialog({
 
                     <div
                       className={cn(
-                        'flex items-start gap-3 rounded-2xl border p-4 text-sm',
+                        'flex items-start gap-3 rounded-xl border p-4 text-sm',
                         noticeDays != null && noticeDays >= 30
                           ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800'
                           : 'border-amber-200 bg-amber-50/70 text-amber-800',
@@ -929,7 +929,7 @@ function CheckoutDialog({
                         if they are staying on, use “Mark notice period” instead.
                       </p>
                     )}
-                    {previewError && <p className="text-sm text-red-600">{previewError}</p>}
+                    {previewError && <p className="text-sm text-rose-600">{previewError}</p>}
                   </div>
                 )}
 
@@ -1084,7 +1084,7 @@ function RoomCheckStep({
       <ChecklistBlock title="Clearance" list={clearance} onChange={onClearance} />
 
       <div>
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="mb-1.5 text-xs font-medium text-slate-500">
           Items in the room
         </p>
         {assets === null ? (
@@ -1118,7 +1118,7 @@ function RoomCheckStep({
                             row.outcome === o.value
                               ? o.value === 'OK'
                                 ? 'border-emerald-600 bg-emerald-600 text-white'
-                                : 'border-red-600 bg-red-600 text-white'
+                                : 'border-rose-600 bg-rose-600 text-white'
                               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
                           )}
                         >
@@ -1176,7 +1176,7 @@ export function ChecklistBlock({
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+        <p className="text-xs font-medium text-slate-500">{title}</p>
         <span className={cn('text-xs font-semibold tabular', done === list.items.length ? 'text-emerald-600' : 'text-slate-500')}>
           {done}/{list.items.length}
         </span>
@@ -1226,7 +1226,7 @@ function SettlementStep({
   onRows: (rows: DeductionRow[]) => void
   nextKey: () => number
 }) {
-  if (error) return <p className="text-sm text-red-600">{error}</p>
+  if (error) return <p className="text-sm text-rose-600">{error}</p>
   if (!preview) {
     return (
       <div className="space-y-2">
@@ -1372,7 +1372,7 @@ function SettlementResult({ preview, compact }: { preview: CheckoutPreview; comp
   const tone =
     preview.refundable > 0 ? 'refund' : preview.payable > 0 ? 'payable' : 'settled'
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex items-center justify-between text-sm">
         <span className="text-slate-600">Total dues</span>
         <AnimatedMoney value={preview.owed} className="font-medium text-slate-800" />
@@ -1385,10 +1385,10 @@ function SettlementResult({ preview, compact }: { preview: CheckoutPreview; comp
         layout
         className={cn(
           'mt-2 rounded-xl p-3 text-center transition-colors',
-          tone === 'refund' ? 'bg-emerald-100/80' : tone === 'payable' ? 'bg-red-100/70' : 'bg-slate-200/60',
+          tone === 'refund' ? 'bg-emerald-100/80' : tone === 'payable' ? 'bg-rose-100/70' : 'bg-slate-200/60',
         )}
       >
-        <p className="text-[11px] uppercase tracking-wide text-slate-600">
+        <p className="text-[11px] text-slate-500">
           {tone === 'refund' ? 'Refund to resident' : tone === 'payable' ? 'Resident still owes' : 'Fully settled'}
         </p>
         <AnimatedMoney
@@ -1419,7 +1419,7 @@ function Section({
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+        <p className="text-xs font-medium text-slate-500">{title}</p>
         <span className={cn('text-xs font-semibold tabular', positive || total < 0 ? 'text-emerald-600' : 'text-slate-700')}>
           {total < 0 ? `− ${formatMoney(-total)}` : formatMoney(total)}
         </span>

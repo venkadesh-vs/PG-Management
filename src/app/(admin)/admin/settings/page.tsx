@@ -106,7 +106,7 @@ export default async function SystemSettingsPage() {
               reminders, bills subscriptions, enforces grace periods and snapshots occupancy.
             </p>
             <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="text-sm font-semibold text-slate-900">
                 Last automated action
               </p>
               {lastAutomation ? (

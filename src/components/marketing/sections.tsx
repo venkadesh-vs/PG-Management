@@ -112,7 +112,7 @@ export function ComplaintsSection() {
       className="bg-slate-50/70"
       title="Every complaint has an owner — and an ending."
       problem="“The fan is still not fixed” — and you have no idea who was told, when, or whether anyone went."
-      solution="Residents raise complaints from their app. You assign a worker, they see it in their own app, and the resident sees it move from OPEN to RESOLVED."
+      solution="Residents raise complaints from their app. You assign a worker, they see it in their own app, and the resident sees it move from Open to Resolved."
       benefits={['Raised from the resident app', 'Assigned to the right worker', 'Status residents can track', 'Resolution time you can see']}
       visual={<ComplaintsVisual />}
     />
@@ -131,8 +131,8 @@ export function RevenueSection() {
       benefits={['Vacancy loss in rupees', 'Collections vs expenses', 'Profit per PG', 'Compare PGs side by side']}
       visual={<RevenueVisual />}
       note={
-        <p className="inline-flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2 text-sm text-violet-900">
-          <Sparkles className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p className="inline-flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-blue-600" strokeWidth={1.75} aria-hidden />
           <span>
             <strong className="font-semibold">Coming soon:</strong> an AI assistant and a daily brief that tells you what needs
             your attention each morning.

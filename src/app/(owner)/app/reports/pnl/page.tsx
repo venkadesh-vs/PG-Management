@@ -9,7 +9,7 @@ import { addMonths, cn, formatMoney, startOfMonth } from '@/lib/utils'
 import { profitAndLoss } from '@/server/services/analytics'
 import { monthKey, REVENUE_LABEL, type PnlFigures } from '@/server/services/pnl'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
@@ -116,7 +116,7 @@ export default async function ProfitAndLossPage({
     <div className="space-y-7">
       {header}
 
-      <p className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+      <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
         <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
         <span>
           <strong className="text-slate-800">{periodLabel}</strong> · Cash basis: revenue is rent-account money received in
@@ -133,7 +133,7 @@ export default async function ProfitAndLossPage({
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          <StatGrid cols={4}>
             <StatCard label="Revenue" value={t.revenue.total} format="money" icon="money" tone="emerald" hint="Collected, net of refunds" />
             <StatCard label="Expenses" value={t.expenses} format="money" icon="receipt" tone="red" hint="Approved only" />
             <StatCard
@@ -149,25 +149,25 @@ export default async function ProfitAndLossPage({
               value={t.collectionRate ?? 0}
               format="percent"
               icon="check"
-              tone="blue"
+             
               hint={t.billed ? `${formatMoney(t.paidOnBilled)} of ${formatMoney(t.billed)} billed` : 'Nothing billed'}
             />
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          </StatGrid>
+          <StatGrid cols={4}>
             <StatCard label="Outstanding" value={t.outstanding} format="money" icon="warning" tone="amber" hint="Unpaid on these months' invoices" />
-            <StatCard label="Profit per bed" value={t.profitPerBed ?? 0} format="money" icon="bed" tone="violet" hint={`${t.beds} beds on average`} />
+            <StatCard label="Profit per bed" value={t.profitPerBed ?? 0} format="money" icon="bed" hint={`${t.beds} beds on average`} />
             <StatCard
               label="Revenue per occupied bed"
               value={t.revenuePerOccupiedBed ?? 0}
               format="money"
               icon="user"
-              tone="blue"
+             
               hint={`${t.occupiedBeds} occupied on average`}
             />
             <Link href="/app/vacancy" className="block">
               <StatCard label="Vacancy loss" value={t.vacancyLoss} format="money" icon="warning" tone="red" hint="Empty beds × average rent" />
             </Link>
-          </div>
+          </StatGrid>
         </>
       )}
 
@@ -290,7 +290,7 @@ function Line({
     cn(
       'text-right tabular whitespace-nowrap',
       strong && 'font-semibold text-slate-900',
-      tone && v !== null && (v >= 0 ? 'text-emerald-700' : 'text-red-700'),
+      tone && v !== null && (v >= 0 ? 'text-emerald-700' : 'text-rose-700'),
     )
   return (
     <TableRow>

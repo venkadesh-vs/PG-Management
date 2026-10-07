@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowRight, CircleCheck, Circle, MailWarning, Rocket, Sparkles, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, CircleCheck, Circle, MailWarning, Rocket, Sparkles, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { api, ApiError } from '@/lib/client'
 import { cn } from '@/lib/utils'
@@ -43,51 +43,56 @@ function useResendVerification() {
 export function VerifyEmailBanner({ email }: { email: string }) {
   const { busy, resend } = useResendVerification()
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="flex items-start gap-2 text-sm text-amber-900">
-        <MailWarning className="mt-0.5 size-4 shrink-0" />
-        <span>
-          Please verify your email — we sent a link to <span className="font-medium break-all">{email}</span>.
+    <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex min-w-0 items-start gap-2.5 text-sm text-amber-900">
+        <MailWarning className="mt-0.5 size-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+        <span className="min-w-0">
+          Verify your email. We sent a link to <span className="font-medium break-all">{email}</span>.
         </span>
       </p>
-      <Button size="sm" variant="outline" loading={busy} onClick={resend} className="shrink-0 self-start sm:self-auto">
+      <Button size="sm" variant="outline" loading={busy} onClick={resend} className="shrink-0 self-start bg-white sm:self-auto">
         Resend link
       </Button>
     </div>
   )
 }
 
-/** "Continue setup (60%)" — back to the wizard step the owner left off at. */
+/** "Continue setup" — back to the wizard step the owner left off at (shown only when the checklist is not). */
 export function ContinueSetupCard({ percent, step }: { percent: number; step: string }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+    <motion.div initial={{ opacity: 0.85, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
       <Link
         href={`/app/setup?step=${encodeURIComponent(step)}`}
-        className="group flex flex-col gap-3 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-4 text-white shadow-brand sm:flex-row sm:items-center sm:justify-between sm:p-5"
+        className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-blue-300 sm:flex-row sm:items-center sm:justify-between sm:p-5"
       >
         <span className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
-            <Sparkles className="size-5" />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <Sparkles className="size-4" strokeWidth={1.75} />
           </span>
           <span className="min-w-0">
-            <span className="block font-display text-base font-semibold">Continue setup ({percent}%)</span>
-            <span className="block text-sm text-blue-100">Pick up right where you left off — most owners finish in under an hour.</span>
+            <span className="block text-sm font-semibold text-slate-900">Continue setup</span>
+            <span className="block text-sm text-slate-500">Pick up where you left off. Most owners finish in under an hour.</span>
           </span>
         </span>
         <span className="flex items-center gap-3 sm:w-56">
-          <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/20">
-            <span className="block h-full rounded-full bg-white" style={{ width: `${percent}%` }} />
+          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+            <span className="block h-full rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
           </span>
-          <ArrowRight className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+          <span className="text-xs font-medium text-slate-500 tabular">{percent}%</span>
+          <ArrowRight className="size-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
         </span>
       </Link>
     </motion.div>
   )
 }
 
-/** Getting-started steps; dismissible for the current browser session. */
-export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
+/**
+ * Getting-started steps; dismissible for the current browser session.
+ * Remaining steps are listed; finished ones fold into a single line.
+ */
+export function OnboardingChecklist({ items, continueHref }: { items: ChecklistItem[]; continueHref?: string }) {
   const [dismissed, setDismissed] = React.useState(false)
+  const [showDone, setShowDone] = React.useState(false)
   const { busy, resend } = useResendVerification()
 
   React.useEffect(() => {
@@ -108,70 +113,75 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   }
 
   if (dismissed) return null
-  const done = items.filter((i) => i.done).length
-  const next = items.find((i) => !i.done)
-  const pct = Math.round((done / items.length) * 100)
+  const doneItems = items.filter((i) => i.done)
+  const remaining = items.filter((i) => !i.done)
+  const next = remaining[0]
+  const pct = Math.round((doneItems.length / items.length) * 100)
 
   return (
     <Card>
-      <CardContent className="space-y-4 p-5">
+      <CardContent className="space-y-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Rocket className="size-4" />
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <Rocket className="size-4" strokeWidth={1.75} />
             </div>
-            <div>
-              <p className="font-display text-base font-semibold text-slate-900">Getting started</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">Getting started</p>
               <p className="text-sm text-slate-500">
-                {done} of {items.length} done · {pct}%
+                {doneItems.length} of {items.length} done
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={dismiss}
-            aria-label="Hide for now"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {continueHref && (
+              <Button size="sm" variant="primary" asChild>
+                <Link href={continueHref}>
+                  Continue setup
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={dismiss}
+              aria-label="Hide for now"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
-        <Progress value={pct} />
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {items.map((item) => {
+        <div className="flex items-center gap-3">
+          <Progress value={pct} className="flex-1" />
+          <span className="text-xs font-medium text-slate-500 tabular">{pct}%</span>
+        </div>
+
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
+          {remaining.map((item) => {
             const isNext = item.key === next?.key
-            const Icon = item.done ? CircleCheck : Circle
             const content = (
               <>
-                <Icon
-                  className={cn('mt-0.5 size-4 shrink-0', item.done ? 'text-emerald-500' : 'text-slate-300')}
+                <Circle
+                  className={cn('mt-0.5 size-4 shrink-0', isNext ? 'text-blue-500' : 'text-slate-300')}
+                  strokeWidth={1.75}
                 />
                 <span className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      'block text-sm font-medium',
-                      item.done ? 'text-slate-400 line-through' : 'text-slate-800',
-                    )}
-                  >
-                    {item.title}
-                  </span>
-                  {!item.done && <span className="block text-xs text-slate-500">{item.body}</span>}
+                  <span className="block text-sm font-medium text-slate-900">{item.title}</span>
+                  <span className="block text-xs text-slate-500">{item.body}</span>
                 </span>
-                {!item.done && (item.href || item.action) && (
-                  <ArrowRight className="mt-0.5 size-4 shrink-0 text-slate-400" />
+                {(item.href || item.action) && (
+                  <ArrowRight className="mt-0.5 size-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
                 )}
               </>
             )
             const className = cn(
-              'flex w-full items-start gap-2.5 rounded-xl border p-3 text-left transition-colors',
-              isNext ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200',
-              !item.done && 'hover:border-blue-300',
+              'group flex w-full items-start gap-3 px-3.5 py-3 text-left transition-colors hover:bg-slate-50',
+              isNext && 'bg-blue-50/40',
             )
             return (
               <li key={item.key}>
-                {item.done ? (
-                  <div className={className}>{content}</div>
-                ) : item.action === 'resend-verify' ? (
+                {item.action === 'resend-verify' ? (
                   <button type="button" className={className} onClick={resend} disabled={busy}>
                     {content}
                   </button>
@@ -184,6 +194,34 @@ export function OnboardingChecklist({ items }: { items: ChecklistItem[] }) {
             )
           })}
         </ul>
+
+        {doneItems.length > 0 && (
+          <div className="text-sm">
+            <button
+              type="button"
+              onClick={() => setShowDone((v) => !v)}
+              className="inline-flex items-center gap-1.5 font-medium text-slate-500 hover:text-slate-800"
+              aria-expanded={showDone}
+            >
+              <CircleCheck className="size-4 text-emerald-500" strokeWidth={1.75} />
+              {doneItems.length} completed
+              <ChevronDown className={cn('size-3.5 transition-transform', showDone && 'rotate-180')} />
+            </button>
+            {showDone && (
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {doneItems.map((item) => (
+                  <li
+                    key={item.key}
+                    className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600"
+                  >
+                    <CircleCheck className="size-3 text-emerald-500" strokeWidth={2} />
+                    {item.title}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

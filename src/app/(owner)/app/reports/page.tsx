@@ -26,7 +26,7 @@ import {
   revenueTrend,
 } from '@/server/services/analytics'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import {
@@ -209,13 +209,13 @@ export default async function ReportsPage({
       />
 
       {/* -------------------------------------------------- Headline P&L */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label="Billed"
           value={totals.billed}
           format="money"
           icon="file"
-          tone="blue"
+         
           delta={delta(totals.billed, previousTotals.billed)}
           hint="Invoices raised in this period"
         />
@@ -244,12 +244,12 @@ export default async function ReportsPage({
           tone={totals.net >= 0 ? 'emerald' : 'red'}
           hint="Collections minus expenses"
         />
-      </div>
+      </StatGrid>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard label="Outstanding" value={totals.outstanding} format="money" icon="warning" tone="amber" hint="All unpaid invoices" />
-        <StatCard label="Check-ins" value={totals.checkIns} icon="userPlus" tone="blue" hint="In this period" />
-        <StatCard label="Checkouts" value={totals.checkOuts} icon="door" tone="violet" hint="In this period" />
+        <StatCard label="Check-ins" value={totals.checkIns} icon="userPlus" hint="In this period" />
+        <StatCard label="Checkouts" value={totals.checkOuts} icon="door" hint="In this period" />
         <StatCard
           label="Complaints resolved"
           value={totals.resolved}
@@ -257,7 +257,7 @@ export default async function ReportsPage({
           tone="emerald"
           hint={`${totals.complaints} raised`}
         />
-      </div>
+      </StatGrid>
 
       {/* ------------------------------------------------------- Charts */}
       <section className="grid gap-4 lg:grid-cols-3">
@@ -367,13 +367,13 @@ export default async function ReportsPage({
                       <TableCell className="text-right text-amber-600 tabular">
                         {formatMoney(property.pending)}
                       </TableCell>
-                      <TableCell className="text-right text-red-600 tabular">
+                      <TableCell className="text-right text-rose-600 tabular">
                         {formatMoney(property.expenses)}
                       </TableCell>
                       <TableCell
                         className={cn(
                           'text-right font-semibold tabular',
-                          net >= 0 ? 'text-emerald-700' : 'text-red-700',
+                          net >= 0 ? 'text-emerald-700' : 'text-rose-700',
                         )}
                       >
                         {formatMoney(net)}
@@ -394,7 +394,7 @@ export default async function ReportsPage({
                   <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.collection)}</TableCell>
                   <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.pending)}</TableCell>
                   <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.expenses)}</TableCell>
-                  <TableCell className={cn('text-right font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-red-700')}>
+                  <TableCell className={cn('text-right font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-rose-700')}>
                     {formatMoney(pgTotals.net)}
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular">{pgTotals.complaints}</TableCell>
@@ -411,7 +411,7 @@ export default async function ReportsPage({
               return (
                 <li
                   key={property.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="flex min-w-0 items-center gap-2">
@@ -437,7 +437,7 @@ export default async function ReportsPage({
                     </div>
                     <div>
                       <dt className="text-slate-500">Expenses</dt>
-                      <dd className="font-medium text-red-600 tabular">
+                      <dd className="font-medium text-rose-600 tabular">
                         {formatMoney(property.expenses)}
                       </dd>
                     </div>
@@ -449,7 +449,7 @@ export default async function ReportsPage({
                     <span
                       className={cn(
                         'font-semibold tabular',
-                        net >= 0 ? 'text-emerald-700' : 'text-red-700',
+                        net >= 0 ? 'text-emerald-700' : 'text-rose-700',
                       )}
                     >
                       {formatMoney(net)}
@@ -458,11 +458,11 @@ export default async function ReportsPage({
                 </li>
               )
             })}
-            <li className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+            <li className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
               <span className="min-w-0 font-semibold text-slate-800">
                 All PGs · {pgTotals.occupied}/{pgTotals.beds} beds · {pgTotals.occupancyRate}%
               </span>
-              <span className={cn('shrink-0 font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-red-700')}>
+              <span className={cn('shrink-0 font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-rose-700')}>
                 {formatMoney(pgTotals.net)}
               </span>
             </li>
@@ -517,7 +517,7 @@ export default async function ReportsPage({
                         <TableCell className="text-sm text-slate-600">
                           {formatDate(resident.oldestDue)}
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-red-600 tabular">
+                        <TableCell className="text-right font-semibold text-rose-600 tabular">
                           {formatMoney(resident.outstanding)}
                         </TableCell>
                       </TableRow>
@@ -534,11 +534,11 @@ export default async function ReportsPage({
                 return (
                   <li
                     key={resident.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-medium text-slate-900">{resident.fullName}</p>
-                      <span className="shrink-0 font-semibold text-red-600 tabular">
+                      <span className="shrink-0 font-semibold text-rose-600 tabular">
                         {formatMoney(resident.outstanding)}
                       </span>
                     </div>
@@ -582,7 +582,7 @@ export default async function ReportsPage({
                       <span
                         className={cn(
                           'flex size-7 shrink-0 items-center justify-center rounded-lg',
-                          movedOut ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600',
+                          movedOut ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600',
                         )}
                       >
                         {movedOut ? (

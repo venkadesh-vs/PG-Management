@@ -193,7 +193,7 @@ export function ChangePlanButton({
               {loading ? (
                 <p className="text-slate-500">Working out the price…</p>
               ) : error ? (
-                <p className="text-red-600">{error}</p>
+                <p className="text-rose-600">{error}</p>
               ) : preview ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
@@ -293,7 +293,7 @@ export function CancelSubscriptionButton({
 
   return (
     <>
-      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="sm" className="text-rose-600 hover:text-rose-700" onClick={() => setOpen(true)}>
         <XCircle className="size-3.5" />
         Cancel
       </Button>

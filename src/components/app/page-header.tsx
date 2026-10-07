@@ -43,23 +43,28 @@ export function PageHeader({
           </ol>
         </nav>
       )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="flex min-w-0 items-start gap-3">
           {Icon && (
-            <div className="hidden size-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm sm:flex">
-              <Icon className="size-5 text-slate-500" />
+            <div className="mt-0.5 hidden size-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 ring-1 ring-inset ring-slate-200 sm:flex">
+              <Icon className="size-[18px]" strokeWidth={1.75} />
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className="font-display text-[22px] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">
               {title}
             </h1>
             {subtitle && (
-              <p className="mt-1 text-sm leading-relaxed text-slate-500 text-pretty">{subtitle}</p>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 text-pretty">{subtitle}</p>
             )}
           </div>
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        {actions && (
+          // Phones: one swipeable row instead of buttons wrapping onto three lines.
+          <div className="flex flex-wrap items-center gap-2">
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -83,13 +88,13 @@ export function SectionHeader({
   return (
     <div className={cn('flex flex-wrap items-end justify-between gap-3', className)}>
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 font-display text-base font-semibold tracking-tight text-slate-900">
-          {Icon && <Icon className="size-4 text-slate-400" />}
+        <h2 className="flex items-center gap-2 font-display text-[15px] font-semibold tracking-tight text-slate-900">
+          {Icon && <Icon className="size-4 text-slate-400" strokeWidth={1.75} />}
           {title}
         </h2>
         {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   )
 }

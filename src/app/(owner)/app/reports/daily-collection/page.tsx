@@ -173,7 +173,7 @@ export default async function DailyCollectionPage({
                       {properties.length > 1 ? ` · ${r.property}` : ''}
                     </span>
                   </Link>
-                  <span className={cn('shrink-0 font-semibold tabular', r.balance > 0 ? 'text-red-600' : 'text-emerald-600')}>
+                  <span className={cn('shrink-0 font-semibold tabular', r.balance > 0 ? 'text-rose-600' : 'text-emerald-600')}>
                     {r.balance < 0 ? `${formatMoney(-r.balance)} advance` : formatMoney(r.balance)}
                   </span>
                 </li>
@@ -207,7 +207,7 @@ function Figure({
 }) {
   const body = (
     <>
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-[11px] text-slate-500">{label}</p>
       <p
         className={cn(
           'font-display text-lg font-semibold tabular',

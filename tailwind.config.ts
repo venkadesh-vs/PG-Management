@@ -20,7 +20,22 @@ const config: Config = {
         // Brand palette (PRD §10). `blue` and `slate` are redefined so every
         // existing screen picks up StayFlow deep indigo / blue-violet and the warm-grey charcoal neutrals
         // without touching class names; `marigold` is the warm highlight.
+        // `indigo` is the same brand scale as `blue`, so either class name gives
+        // the one StayFlow accent.
         blue: {
+          50: '#eef0ff',
+          100: '#e0e2ff',
+          200: '#c7c9fe',
+          300: '#a6a6fb',
+          400: '#8582f6',
+          500: '#6863ee',
+          600: '#5248e0',
+          700: '#4439c5',
+          800: '#38309f',
+          900: '#302c7e',
+          950: '#1d1a4a',
+        },
+        indigo: {
           50: '#eef0ff',
           100: '#e0e2ff',
           200: '#c7c9fe',
@@ -114,12 +129,14 @@ const config: Config = {
         '3xl': 'calc(var(--radius) + 16px)',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06)',
+        xs: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
+        card: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
         elevated:
           '0 2px 4px -2px rgb(16 24 40 / 0.06), 0 12px 24px -6px rgb(16 24 40 / 0.10)',
         float: '0 8px 16px -6px rgb(16 24 40 / 0.10), 0 24px 48px -12px rgb(16 24 40 / 0.18)',
         glow: '0 0 0 1px rgb(255 255 255 / 0.06) inset, 0 10px 40px -12px rgb(82 72 224 / 0.40)',
-        soft: '0 1px 1px rgb(27 25 24 / 0.03), 0 2px 6px -1px rgb(27 25 24 / 0.06), 0 10px 24px -12px rgb(27 25 24 / 0.10)',
+        // Cards no longer stack a large shadow on top of the border.
+        soft: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
         lift: '0 2px 4px -1px rgb(27 25 24 / 0.06), 0 16px 32px -12px rgb(27 25 24 / 0.18)',
         brand: '0 1px 0 0 rgb(255 255 255 / 0.25) inset, 0 6px 16px -6px rgb(82 72 224 / 0.55), 0 2px 4px -1px rgb(82 72 224 / 0.25)',
         'inner-highlight': 'inset 0 1px 0 0 rgb(255 255 255 / 0.08)',

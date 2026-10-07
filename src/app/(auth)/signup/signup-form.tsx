@@ -140,7 +140,7 @@ export function SignupForm() {
           </span>
         </label>
         {errors.acceptTerms && (
-          <p className="text-xs font-medium text-red-600">{errors.acceptTerms.message}</p>
+          <p className="text-xs font-medium text-rose-600">{errors.acceptTerms.message}</p>
         )}
       </div>
 

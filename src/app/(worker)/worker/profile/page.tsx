@@ -15,7 +15,7 @@ const ATTENDANCE_STYLE: Record<string, string> = {
   LATE: 'bg-amber-400',
   HALF_DAY: 'bg-sky-300',
   LEAVE: 'bg-violet-300',
-  ABSENT: 'bg-red-400',
+  ABSENT: 'bg-rose-400',
   WEEKLY_OFF: 'bg-slate-200',
 }
 
@@ -51,7 +51,7 @@ export default async function WorkerProfilePage() {
 
   return (
     <div className="space-y-5">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-5 text-white shadow-elevated">
+      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm ring-1 ring-white/5">
         <div className="dot-grid absolute inset-0 opacity-[0.12]" />
         <div className="relative flex items-center gap-4">
           <Avatar className="size-16 border-2 border-white/30">
@@ -99,7 +99,7 @@ export default async function WorkerProfilePage() {
       <Card>
         <CardContent className="p-5">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="text-sm font-semibold text-slate-900">
               Attendance · last 30 days
             </p>
             <span className="text-xs font-semibold text-slate-700">
@@ -129,7 +129,7 @@ export default async function WorkerProfilePage() {
 
       <Card>
         <CardContent className="space-y-3 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your job</p>
+          <p className="text-sm font-semibold text-slate-900">Your job</p>
           <Row icon={Building2} label="PG" value={staff.property?.name ?? 'Not assigned'} />
           <Row icon={CalendarDays} label="Joined" value={formatDate(staff.joiningDate)} />
           <Row icon={Wallet} label="Monthly salary" value={formatMoney(staff.salary)} />
@@ -137,7 +137,7 @@ export default async function WorkerProfilePage() {
           {staff.property?.contactPhone && (
             <a
               href={`tel:${staff.property.contactPhone}`}
-              className="flex items-center gap-2 pt-1 text-sm font-medium text-amber-600"
+              className="flex items-center gap-2 pt-1 text-sm font-medium text-blue-600"
             >
               <Phone className="size-4" />
               Call the PG office

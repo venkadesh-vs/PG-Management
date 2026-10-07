@@ -28,7 +28,7 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Residents', href: '/app/residents', icon: 'user', module: 'residents', permission: 'residents.view' },
       { label: 'Enquiries', href: '/app/leads', icon: 'clipboard', module: 'leads', permission: 'leads.view' },
       { label: 'Bookings', href: '/app/bookings', icon: 'calendar', module: 'leads', permission: 'leads.view' },
-      { label: 'Import data', href: '/app/import', icon: 'file', module: 'residents', permission: 'residents.manage' },
+      { label: 'Import data', href: '/app/import', icon: 'upload', module: 'residents', permission: 'residents.manage' },
     ],
   },
   {
@@ -37,7 +37,7 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Rent & Payments', href: '/app/rent', icon: 'wallet', module: 'rent', permission: 'rent.view' },
       { label: 'Payments', href: '/app/payments', icon: 'card', module: 'rent', permission: 'rent.view' },
       { label: 'Expenses', href: '/app/expenses', icon: 'receipt', module: 'expenses', permission: 'expenses.view' },
-      { label: 'Profit & loss', href: '/app/reports/pnl', icon: 'chart', module: 'reports', permission: 'reports.view' },
+      { label: 'Profit & loss', href: '/app/reports/pnl', icon: 'trendingUp', module: 'reports', permission: 'reports.view' },
     ],
   },
   {

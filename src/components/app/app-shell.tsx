@@ -120,10 +120,10 @@ export function AppShell({
   }, [])
 
   return (
-    <div className="min-h-dvh bg-slate-50/70">
+    <div className="min-h-dvh bg-slate-50">
       {/* ------------------------------------------------ Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white lg:flex">
-        <div className="flex h-16 items-center border-b border-slate-100 px-5">
+        <div className="flex h-16 shrink-0 items-center px-5">
           <Logo href={null} />
         </div>
         <SidebarNav nav={nav} pathname={pathname} badges={badges} />
@@ -168,7 +168,7 @@ export function AppShell({
 
       {/* ---------------------------------------------------- Main column */}
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/85 px-4 backdrop-blur-lg sm:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-3 backdrop-blur-lg sm:h-16 sm:gap-3 sm:px-6">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -178,7 +178,7 @@ export function AppShell({
             <Menu className="size-5" />
           </button>
 
-          <div className="lg:hidden">
+          <div className={cn('lg:hidden', showPropertySwitcher && properties.length > 0 && 'hidden')}>
             <LogoMark className="size-8" />
           </div>
 
@@ -186,13 +186,14 @@ export function AppShell({
             <PropertySwitcher properties={properties} />
           )}
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600"
+              aria-label="Search"
+              className="flex size-9 items-center justify-center gap-2 rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:w-auto sm:justify-start sm:border sm:border-slate-200 sm:bg-white sm:px-3 sm:text-sm sm:text-slate-400 sm:hover:border-slate-300 sm:hover:bg-white"
             >
-              <Search className="size-4" />
+              <Search className="size-[18px] sm:size-4" strokeWidth={1.75} />
               <span className="hidden sm:inline">Search</span>
               <kbd className="hidden rounded border border-slate-200 bg-slate-50 px-1.5 font-sans text-[10px] font-medium text-slate-400 sm:inline">
                 ⌘K
@@ -208,7 +209,7 @@ export function AppShell({
           className={cn(
             'mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8',
             // Clear the bottom nav, the floating button and the iOS home indicator.
-            bottomNav && 'pb-[calc(env(safe-area-inset-bottom,0px)+9rem)] sm:pb-[calc(env(safe-area-inset-bottom,0px)+9rem)] lg:pb-8',
+            bottomNav && 'pb-[calc(env(safe-area-inset-bottom,0px)+6rem)] lg:pb-8',
           )}
         >
           {installName && <InstallPrompt appName={installName} className="mb-6 lg:hidden" />}
@@ -218,13 +219,13 @@ export function AppShell({
 
       {bottomNav && access && (
         <>
-          <QuickAction access={access} variant="fab" />
           <MobileBottomNav
             nav={nav}
             pathname={pathname}
             badges={badges}
             moreOpen={mobileOpen}
             onMore={() => setMobileOpen(true)}
+            center={<QuickAction access={access} variant="tab" />}
           />
         </>
       )}
@@ -246,11 +247,11 @@ function SidebarNav({
   // Keep the PG picked in the switcher when moving between pages.
   const property = useSearchParams().get('property')
   return (
-    <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5 scrollbar-slim">
+    <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-5 pt-2 scrollbar-slim">
       {nav.map((section, i) => (
-        <div key={section.title ?? i} className="space-y-1">
+        <div key={section.title ?? i} className="space-y-0.5">
           {section.title && (
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <p className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
               {section.title}
             </p>
           )}
@@ -262,9 +263,9 @@ function SidebarNav({
                 key={item.href}
                 href={withPgScope(item.href, property)}
                 className={cn(
-                  'group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                  'group relative flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors',
                   active
-                    ? 'bg-slate-900 text-white shadow-sm'
+                    ? 'bg-blue-50 font-medium text-blue-700'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                 )}
               >
@@ -272,15 +273,15 @@ function SidebarNav({
                   name={item.icon}
                   className={cn(
                     'size-[18px] shrink-0 transition-colors',
-                    active ? 'text-white' : 'text-slate-400 group-hover:text-slate-600',
+                    active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600',
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
                 {count > 0 && (
                   <span
                     className={cn(
-                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular',
-                      active ? 'bg-white/15 text-white' : 'bg-red-100 text-red-700',
+                      'flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular',
+                      active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600',
                     )}
                   >
                     {count > 99 ? '99+' : count}
@@ -314,19 +315,19 @@ function UserPanel({ user }: { user: ShellUser }) {
   }
 
   return (
-    <div className="border-t border-slate-100 p-3">
+    <div className="border-t border-slate-200/70 p-3">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-slate-100"
+            className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-slate-100"
           >
-            <Avatar className="size-9">
+            <Avatar className="size-8">
               {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
               <AvatarFallback>{initials(user.name)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-800">{user.name}</p>
+              <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
               <p className="truncate text-xs text-slate-500">
                 {user.organizationName ?? user.role.replace('_', ' ').toLowerCase()}
               </p>
@@ -391,11 +392,11 @@ function PropertySwitcher({ properties }: { properties: ShellProperty[] }) {
         <button
           type="button"
           className={cn(
-            'flex h-9 max-w-[200px] items-center gap-2 rounded-xl border px-2.5 text-sm font-medium transition-colors sm:max-w-none',
-            theme ? cn(theme.chip, 'border') : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+            'flex h-9 min-w-0 max-w-[180px] items-center gap-2 rounded-lg border px-2.5 text-sm font-medium transition-colors sm:max-w-none',
+            theme ? cn(theme.chip, 'border') : 'border-slate-200 bg-white text-slate-700 shadow-xs hover:border-slate-300',
           )}
         >
-          <Building2 className="size-4 shrink-0" />
+          <Building2 className="size-4 shrink-0" strokeWidth={1.75} />
           <span className="truncate">{selected ? selected.name : 'All PGs'}</span>
           <ChevronsUpDown className="size-3.5 shrink-0 opacity-60" />
         </button>
@@ -432,13 +433,13 @@ function NotificationBell({ count }: { count: number }) {
   return (
     <Button variant="ghost" size="icon" asChild className="relative">
       <Link href="/app/notifications" aria-label={`Notifications${count ? `, ${count} unread` : ''}`}>
-        <Bell className="size-[18px]" />
+        <Bell className="size-[18px]" strokeWidth={1.75} />
         {count > 0 && (
           <motion.span
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-            className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white tabular"
+            className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular ring-2 ring-white"
           >
             {count > 9 ? '9+' : count}
           </motion.span>

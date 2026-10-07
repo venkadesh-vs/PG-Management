@@ -144,7 +144,7 @@ export default async function ResidentsPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryTile label="Active" value={countFor('ACTIVE')} tone="emerald" />
         <SummaryTile label="On notice" value={countFor('NOTICE')} tone="amber" />
         <SummaryTile label="Pending" value={countFor('PENDING')} tone="sky" />
@@ -243,7 +243,7 @@ export default async function ResidentsPage({
                             outstanding === 0
                               ? 'text-emerald-600'
                               : hasOverdue
-                                ? 'text-red-600'
+                                ? 'text-rose-600'
                                 : 'text-amber-600',
                           )}
                         >
@@ -272,7 +272,7 @@ export default async function ResidentsPage({
                 <li key={resident.id}>
                   <Link
                     href={`/app/residents/${resident.id}`}
-                    className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="block rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
                     <div className="flex items-start gap-3">
                       <Avatar className="size-10">
@@ -307,7 +307,7 @@ export default async function ResidentsPage({
                           <span
                             className={cn(
                               'font-semibold tabular',
-                              outstanding === 0 ? 'text-emerald-600' : 'text-red-600',
+                              outstanding === 0 ? 'text-emerald-600' : 'text-rose-600',
                             )}
                           >
                             {outstanding === 0 ? 'No dues' : formatMoney(outstanding)}
@@ -339,16 +339,20 @@ function SummaryTile({
   value: number
   tone: 'emerald' | 'amber' | 'sky' | 'slate'
 }) {
-  const tones = {
-    emerald: 'border-emerald-100 bg-emerald-50/60 text-emerald-700',
-    amber: 'border-amber-100 bg-amber-50/60 text-amber-700',
-    sky: 'border-sky-100 bg-sky-50/60 text-sky-700',
-    slate: 'border-slate-200 bg-slate-50 text-slate-600',
+  // Neutral tile, near-black number; status shows as a small dot.
+  const dots = {
+    emerald: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    sky: 'bg-sky-500',
+    slate: 'bg-slate-300',
   }
   return (
-    <div className={cn('rounded-2xl border px-4 py-3', tones[tone])}>
-      <p className="text-xs font-medium uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-0.5 font-display text-2xl font-semibold tabular">{value}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <span className={cn('size-1.5 rounded-full', dots[tone])} />
+        {label}
+      </p>
+      <p className="mt-1 font-display text-2xl font-semibold text-slate-900 tabular">{value}</p>
     </div>
   )
 }

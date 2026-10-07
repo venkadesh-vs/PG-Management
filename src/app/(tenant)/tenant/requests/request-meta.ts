@@ -9,10 +9,10 @@ export const KIND_META: Record<
   ResidentRequestKind,
   { label: string; icon: React.ElementType; tint: string; iconTint: string }
 > = {
-  LEAVE: { label: 'Leave', icon: CalendarDays, tint: 'bg-sky-50', iconTint: 'text-sky-600' },
-  VISITOR: { label: 'Visitor', icon: UserPlus, tint: 'bg-violet-50', iconTint: 'text-violet-600' },
-  ROOM_CHANGE: { label: 'Room change', icon: DoorOpen, tint: 'bg-amber-50', iconTint: 'text-amber-600' },
-  SERVICE: { label: 'Service', icon: Sparkles, tint: 'bg-emerald-50', iconTint: 'text-emerald-600' },
+  LEAVE: { label: 'Leave', icon: CalendarDays, tint: 'bg-slate-100', iconTint: 'text-slate-600' },
+  VISITOR: { label: 'Visitor', icon: UserPlus, tint: 'bg-slate-100', iconTint: 'text-slate-600' },
+  ROOM_CHANGE: { label: 'Room change', icon: DoorOpen, tint: 'bg-slate-100', iconTint: 'text-slate-600' },
+  SERVICE: { label: 'Service', icon: Sparkles, tint: 'bg-slate-100', iconTint: 'text-slate-600' },
   OTHER: { label: 'Other', icon: HelpCircle, tint: 'bg-slate-100', iconTint: 'text-slate-500' },
 }
 

@@ -124,14 +124,13 @@ export default async function AdminDashboard() {
       />
 
       {/* ------------------------------------------------------ Headline */}
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Monthly recurring revenue"
             value={kpis.mrr}
             format="money"
             icon="sparkles"
-            tone="violet"
             hint={`${kpis.activeSubscriptions} active subscriptions`}
             href="/admin/subscriptions"
           />
@@ -142,7 +141,6 @@ export default async function AdminDashboard() {
             value={kpis.arr}
             format="moneyCompact"
             icon="chart"
-            tone="blue"
             hint="MRR × 12"
           />
         </MotionItem>
@@ -151,7 +149,6 @@ export default async function AdminDashboard() {
             label="Customers"
             value={kpis.customers.total}
             icon="building"
-            tone="emerald"
             hint={`${kpis.customers.active} active · ${kpis.customers.trial} on trial`}
             href="/admin/organizations"
           />
@@ -161,20 +158,19 @@ export default async function AdminDashboard() {
             label="New this month"
             value={kpis.customers.newThisMonth}
             icon="userPlus"
-            tone="pink"
             hint="Accounts created since the 1st"
           />
         </MotionItem>
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Churn (30 days)"
             value={kpis.churn.rate}
             format="percent"
             icon="trendingDown"
-            tone={kpis.churn.churned ? 'red' : 'emerald'}
+            tone={kpis.churn.churned ? 'red' : undefined}
             hint={`${kpis.churn.churned} of ${kpis.churn.activeAtStart} paying customers left`}
           />
         </MotionItem>
@@ -193,7 +189,7 @@ export default async function AdminDashboard() {
             label="Failed payments (30 days)"
             value={kpis.failedPayments30d}
             icon="card"
-            tone={kpis.failedPayments30d ? 'red' : 'emerald'}
+            tone={kpis.failedPayments30d ? 'red' : undefined}
             hint={`${metrics.failedPayments} in total`}
             href="/admin/payments"
           />
@@ -203,7 +199,7 @@ export default async function AdminDashboard() {
             label="Follow-ups due"
             value={kpis.followUps.due}
             icon="clipboard"
-            tone={kpis.followUps.overdue ? 'red' : kpis.followUps.due ? 'amber' : 'emerald'}
+            tone={kpis.followUps.overdue ? 'red' : kpis.followUps.due ? 'amber' : undefined}
             hint={
               kpis.followUps.overdue
                 ? `${kpis.followUps.overdue} overdue · ${kpis.followUps.today} today`
@@ -214,13 +210,12 @@ export default async function AdminDashboard() {
         </MotionItem>
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Residents managed"
             value={metrics.residents}
             icon="users"
-            tone="emerald"
             hint={`${metrics.properties} PGs · ${metrics.beds} beds · ${metrics.occupancyRate}% occupied`}
           />
         </MotionItem>
@@ -230,7 +225,7 @@ export default async function AdminDashboard() {
             value={metrics.pendingAmount}
             format="money"
             icon="warning"
-            tone={metrics.pendingAmount > 0 ? 'amber' : 'emerald'}
+            tone={metrics.pendingAmount > 0 ? 'amber' : undefined}
             hint={`${metrics.pendingCount} unpaid invoices`}
             href="/admin/payments"
           />
@@ -240,7 +235,7 @@ export default async function AdminDashboard() {
             label="Past due"
             value={metrics.pastDue}
             icon="warning"
-            tone={metrics.pastDue ? 'red' : 'emerald'}
+            tone={metrics.pastDue ? 'red' : undefined}
             hint="In grace or overdue"
           />
         </MotionItem>
@@ -266,7 +261,7 @@ export default async function AdminDashboard() {
           <CardContent className="pt-2">
             <CategoryBarChart
               layout="horizontal"
-              color={CHART_COLORS[4]}
+              color={CHART_COLORS[0]}
               height={220}
               data={kpis.trends.map((t) => ({ name: t.month, amount: t.mrr }))}
             />
@@ -281,7 +276,7 @@ export default async function AdminDashboard() {
             <CategoryBarChart
               layout="horizontal"
               money={false}
-              color={CHART_COLORS[2]}
+              color={CHART_COLORS[1]}
               height={220}
               data={kpis.trends.map((t) => ({ name: t.month, amount: t.newCustomers }))}
             />
@@ -421,7 +416,7 @@ export default async function AdminDashboard() {
           )}
 
           {failed.length > 0 && (
-            <Card className="border-red-200">
+            <Card className="border-rose-200">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Failed payments</CardTitle>
                 <p className="text-xs text-slate-500">AutoPay attempts that did not go through</p>
@@ -439,7 +434,7 @@ export default async function AdminDashboard() {
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-red-600 tabular">
+                        <p className="text-sm font-semibold text-rose-600 tabular">
                           {formatMoney(payment.amount)}
                         </p>
                         {payment.isDemo && (
@@ -482,7 +477,7 @@ export default async function AdminDashboard() {
                 .reduce((s, sub) => s + sub.amount, 0)
               return (
                 <Link key={org.id} href={`/admin/organizations/${org.id}`}>
-                  <Card className="transition-shadow hover:shadow-elevated">
+                  <Card className="transition-shadow hover:shadow-sm">
                     <CardContent className="flex items-center gap-3 p-4">
                       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
                         <Building2 className="size-5 text-slate-500" />
@@ -599,7 +594,7 @@ export default async function AdminDashboard() {
           <CardContent className="pt-2">
             <CategoryBarChart
               data={topOrgs.map((o) => ({ name: o.name, amount: o.amount }))}
-              color={CHART_COLORS[4]}
+              color={CHART_COLORS[0]}
               height={Math.max(160, topOrgs.length * 44)}
             />
           </CardContent>

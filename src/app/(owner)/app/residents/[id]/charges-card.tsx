@@ -138,7 +138,7 @@ export function ChargesCard({
                     <button
                       type="button"
                       onClick={() => setVoiding(c)}
-                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                       aria-label={`Void ${c.label}`}
                       title="Void"
                     >

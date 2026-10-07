@@ -135,9 +135,9 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
             key={f.key}
             href={f.key === 'active' ? '/admin/support' : `/admin/support?tickets=${f.key}`}
             className={cn(
-              'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
               f.key === filter
-                ? 'border-slate-900 bg-slate-900 text-white'
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
                 : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
             )}
             aria-current={f.key === filter ? 'page' : undefined}
@@ -199,20 +199,20 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
           label="Open complaints platform-wide"
           value={totals}
           icon="wrench"
-          tone={totals > 0 ? 'amber' : 'emerald'}
+          tone={totals > 0 ? 'amber' : undefined}
         />
         <StatCard
           label="Accounts with a backlog"
           value={atRisk.length}
           icon="warning"
-          tone={atRisk.length ? 'red' : 'emerald'}
+          tone={atRisk.length ? 'red' : undefined}
           hint="3 or more open complaints"
         />
         <StatCard
           label="Quiet for a week"
           value={quietOrgs.length}
           icon="clock"
-          tone={quietOrgs.length ? 'amber' : 'emerald'}
+          tone={quietOrgs.length ? 'amber' : undefined}
           hint="No sign-in in 7 days"
         />
       </div>
@@ -296,7 +296,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                   <p className="font-display text-lg font-semibold text-amber-600 tabular">
                     {org._count.complaints}
                   </p>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400">open</p>
+                  <p className="text-[11px] font-medium text-slate-500">Open</p>
                 </div>
                 <a
                   href={`tel:${org.contactPhone}`}

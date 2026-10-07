@@ -101,13 +101,12 @@ export default async function AdminPaymentsPage({
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Payments' }]}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label="Collected this month"
           value={collectedThisMonth._sum.amount ?? 0}
           format="money"
           icon="money"
-          tone="emerald"
           hint={`${collectedThisMonth._count} payments`}
         />
         <StatCard
@@ -115,11 +114,11 @@ export default async function AdminPaymentsPage({
           value={owed}
           format="money"
           icon="warning"
-          tone={owed > 0 ? 'amber' : 'emerald'}
+          tone={owed > 0 ? 'amber' : undefined}
           hint={`${outstanding._count} unpaid invoices`}
         />
-        <StatCard label="Failed attempts" value={failedCount} icon="card" tone={failedCount ? 'red' : 'emerald'} />
-        <StatCard label="Invoices raised" value={invoices.length} icon="receipt" tone="blue" hint="Most recent 60" />
+        <StatCard label="Failed attempts" value={failedCount} icon="card" tone={failedCount ? 'red' : undefined} />
+        <StatCard label="Invoices raised" value={invoices.length} icon="receipt" hint="Most recent 60" />
       </div>
 
       <Tabs defaultValue="invoices">
@@ -236,7 +235,7 @@ export default async function AdminPaymentsPage({
                   return (
                     <li
                       key={invoice.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <Link
@@ -336,7 +335,7 @@ export default async function AdminPaymentsPage({
                                 variant={payment.status === 'SUCCESS' ? 'success' : 'danger'}
                                 size="sm"
                               >
-                                {payment.status.toLowerCase()}
+                                {payment.status.charAt(0) + payment.status.slice(1).toLowerCase().replace(/_/g, ' ')}
                               </Badge>
                               {payment.isDemo && (
                                 <Badge variant="warning" size="sm">
@@ -345,7 +344,7 @@ export default async function AdminPaymentsPage({
                               )}
                             </div>
                             {payment.failureReason && (
-                              <p className="mt-0.5 text-[11px] text-red-600">
+                              <p className="mt-0.5 text-[11px] text-rose-600">
                                 {payment.failureReason}
                               </p>
                             )}
@@ -365,7 +364,7 @@ export default async function AdminPaymentsPage({
                     <li key={payment.id}>
                       <Link
                         href={`/admin/organizations/${payment.subscription.organization.id}`}
-                        className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                        className="block rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="truncate font-medium text-slate-900">
@@ -381,7 +380,7 @@ export default async function AdminPaymentsPage({
                               variant={payment.status === 'SUCCESS' ? 'success' : 'danger'}
                               size="sm"
                             >
-                              {payment.status.toLowerCase()}
+                              {payment.status.charAt(0) + payment.status.slice(1).toLowerCase().replace(/_/g, ' ')}
                             </Badge>
                           </div>
                         </div>
@@ -395,7 +394,7 @@ export default async function AdminPaymentsPage({
                           </span>
                         </p>
                         {payment.failureReason && (
-                          <p className="mt-1 text-[11px] text-red-600">{payment.failureReason}</p>
+                          <p className="mt-1 text-[11px] text-rose-600">{payment.failureReason}</p>
                         )}
                         <div className="mt-2 flex items-center justify-between gap-2 text-sm">
                           <span className="text-xs text-slate-500">

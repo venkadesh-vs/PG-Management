@@ -139,7 +139,7 @@ export function CreateClientDialog({
                     />
                   </Field>
                 ))}
-                {error && <p className="text-xs font-medium text-red-600 sm:col-span-2">{error}</p>}
+                {error && <p className="text-xs font-medium text-rose-600 sm:col-span-2">{error}</p>}
               </div>
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

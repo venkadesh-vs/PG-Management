@@ -68,7 +68,7 @@ export function WelcomeStep({ ctx }: { ctx: StepContext }) {
   return (
     <>
       <div className="space-y-3">
-        <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+        <span className="inline-flex size-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
           <Rocket className="size-6" />
         </span>
         <h2 className="font-display text-2xl font-semibold text-slate-900">Welcome, {first}! Let’s get your PG live.</h2>
@@ -80,7 +80,7 @@ export function WelcomeStep({ ctx }: { ctx: StepContext }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Your account</p>
+          <p className="text-xs font-medium text-slate-500">Your account</p>
           <p className="mt-1 font-medium text-slate-900">{owner.name}</p>
           <p className="break-all text-sm text-slate-500">{owner.email}</p>
           {owner.phone && <p className="text-sm text-slate-500">{owner.phone}</p>}
@@ -99,7 +99,7 @@ export function WelcomeStep({ ctx }: { ctx: StepContext }) {
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Have these handy</p>
+          <p className="text-xs font-medium text-slate-500">Have these handy</p>
           <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
             <li>• PG address and a contact number</li>
             <li>• Floors and room numbers</li>

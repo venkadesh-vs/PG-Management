@@ -110,7 +110,7 @@ export function WhatsAppConnect({ initial, webhookUrl }: { initial: Connection; 
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Sending from</p>
+            <p className="text-xs text-slate-500">Sending from</p>
             <p className="text-sm font-semibold text-slate-900">
               {copy.title}
               {connection.mode === 'own' && own?.displayPhoneNumber ? ` · ${own.displayPhoneNumber}` : ''}
@@ -135,12 +135,12 @@ export function WhatsAppConnect({ initial, webhookUrl }: { initial: Connection; 
               <Detail label="Delivery receipts" value={own.hasAppSecret ? 'App secret saved' : 'Using StayFlow app only'} />
             </dl>
             {!own.readable && (
-              <p className="rounded-lg bg-red-50 p-3 text-xs text-red-700">
+              <p className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">
                 The saved token can no longer be read on this server (encryption key changed). Reconnect
                 the number — until then messages use the StayFlow number.
               </p>
             )}
-            {own.lastError && <p className="text-xs text-red-600">{own.lastError}</p>}
+            {own.lastError && <p className="text-xs text-rose-600">{own.lastError}</p>}
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button type="button" variant="outline" onClick={() => setEditing((v) => !v)}>
                 <Link2 className="size-4" />
@@ -206,7 +206,7 @@ export function WhatsAppConnect({ initial, webhookUrl }: { initial: Connection; 
 function Detail({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-0.5 break-words text-sm text-slate-800">{value || '—'}</dd>
     </div>
   )

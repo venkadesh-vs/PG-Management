@@ -80,7 +80,7 @@ export default async function WorkerHome() {
   return (
     <div className="space-y-5">
       {/* --------------------------------------------------------- Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-5 text-white shadow-elevated">
+      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm ring-1 ring-white/5">
         <div className="dot-grid absolute inset-0 opacity-[0.12]" />
         <div className="relative">
           <p className="text-sm text-white/75">
@@ -122,7 +122,7 @@ export default async function WorkerHome() {
             <ClipboardList className="size-4 text-slate-400" />
             Your tasks
           </h2>
-          <Link href="/worker/tasks" className="text-xs font-semibold text-amber-600">
+          <Link href="/worker/tasks" className="text-xs font-semibold text-blue-600">
             See all
           </Link>
         </div>
@@ -167,10 +167,10 @@ export default async function WorkerHome() {
           <CardContent className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900">
-                <Utensils className="size-4 text-orange-500" />
+                <Utensils className="size-4 text-slate-500" />
                 Today&apos;s kitchen
               </h2>
-              <Link href="/worker/food" className="text-xs font-semibold text-amber-600">
+              <Link href="/worker/food" className="text-xs font-semibold text-blue-600">
                 Open
               </Link>
             </div>
@@ -180,7 +180,7 @@ export default async function WorkerHome() {
                   key={entry.type}
                   className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-center"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-[11px] font-medium text-slate-500">
                     {entry.type.toLowerCase()}
                   </p>
                   <p className="font-display text-2xl font-semibold text-slate-900 tabular">
@@ -199,16 +199,16 @@ export default async function WorkerHome() {
       {/* ------------------------------------------------------ Low stock */}
       {lowStockItems.length > 0 && (
         <Link href="/worker/grocery">
-          <Card className="border-red-200 bg-red-50/50 transition-shadow hover:shadow-elevated">
+          <Card className="border-rose-200 bg-rose-50/50 transition-shadow hover:shadow-sm">
             <CardContent className="flex items-center gap-3 p-4">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
-                <ShoppingCart className="size-5 text-red-600" />
+                <ShoppingCart className="size-5 text-rose-600" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-red-900">
+                <p className="text-sm font-semibold text-rose-900">
                   {lowStockItems.length} item{lowStockItems.length === 1 ? '' : 's'} running low
                 </p>
-                <p className="truncate text-xs text-red-800/80">
+                <p className="truncate text-xs text-rose-800/80">
                   {lowStockItems
                     .slice(0, 3)
                     .map((i) => i.name)
@@ -216,7 +216,7 @@ export default async function WorkerHome() {
                   {lowStockItems.length > 3 ? '…' : ''}
                 </p>
               </div>
-              <ArrowRight className="size-4 shrink-0 text-red-400" />
+              <ArrowRight className="size-4 shrink-0 text-rose-400" />
             </CardContent>
           </Card>
         </Link>
@@ -239,7 +239,7 @@ export default async function WorkerHome() {
 function Tile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/15 bg-white/10 p-2.5 backdrop-blur">
-      <p className="text-[10px] uppercase tracking-wide text-white/60">{label}</p>
+      <p className="text-[11px] font-medium text-white/70">{label}</p>
       <p className="truncate font-display text-lg font-semibold capitalize">{value}</p>
     </div>
   )

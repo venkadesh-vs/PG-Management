@@ -21,13 +21,15 @@ type RevealProps = HTMLMotionProps<'div'> & {
 }
 
 /** Fades and rises its children into place. */
-export function Reveal({ delay = 0, y = 14, onView = true, children, ...props }: RevealProps) {
+export function Reveal({ delay = 0, y = 8, onView = true, children, ...props }: RevealProps) {
   const reduce = useReducedMotion()
   if (reduce) return <div {...(props as React.HTMLAttributes<HTMLDivElement>)}>{children as React.ReactNode}</div>
-  const target = { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT, delay } }
+  const target = { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT, delay } }
   return (
     <motion.div
-      initial={{ opacity: 0, y }}
+      // Never fully hidden: content stays readable before the observer fires
+      // (screenshots, slow devices, fast scrolling).
+      initial={{ opacity: 0.85, y }}
       {...(onView ? { whileInView: target, viewport: { once: true, margin: '0px 0px -60px 0px' } } : { animate: target })}
       {...props}
     >
@@ -59,14 +61,14 @@ export function Stagger({
   )
 }
 
-export function StaggerItem({ y = 12, children, ...props }: HTMLMotionProps<'div'> & { y?: number }) {
+export function StaggerItem({ y = 8, children, ...props }: HTMLMotionProps<'div'> & { y?: number }) {
   const reduce = useReducedMotion()
   if (reduce) return <div {...(props as React.HTMLAttributes<HTMLDivElement>)}>{children as React.ReactNode}</div>
   return (
     <motion.div
       variants={{
-        hidden: { opacity: 0, y },
-        show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE_OUT } },
+        hidden: { opacity: 0.85, y },
+        show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE_OUT } },
       }}
       {...props}
     >
@@ -84,9 +86,10 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   if (reduce) return <>{children}</>
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
-      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-      transition={{ duration: 0.45, ease: EASE_OUT }}
+      // Short and blur-free: blur filters are costly on phones.
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: EASE_OUT }}
     >
       {children}
     </motion.div>

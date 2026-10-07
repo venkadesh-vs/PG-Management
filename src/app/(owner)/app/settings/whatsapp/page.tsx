@@ -126,7 +126,7 @@ export default async function WhatsAppSettingsPage() {
             </span>
           </p>
           {lastFailure && (
-            <p className="break-words text-sm text-red-600">
+            <p className="break-words text-sm text-rose-600">
               Last error {relativeTime(lastFailure.createdAt)}
               {lastFailure.toName ? ` (to ${lastFailure.toName})` : ''}: {lastFailure.error ?? 'Not delivered'}
             </p>
@@ -215,7 +215,7 @@ function Metric({ label, value, tone }: { label: string; value: number; tone?: '
   return (
     <div className="rounded-xl border border-slate-200 p-3">
       <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className={`mt-0.5 text-lg font-semibold ${tone === 'red' ? 'text-red-600' : 'text-slate-900'}`}>{value}</dd>
+      <dd className={`mt-0.5 text-lg font-semibold ${tone === 'red' ? 'text-rose-600' : 'text-slate-900'}`}>{value}</dd>
     </div>
   )
 }

@@ -39,15 +39,16 @@ export default async function LoginPage() {
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       {/* Brand panel — hidden on mobile so the form is immediately usable. */}
       <div className="relative hidden overflow-hidden bg-slate-950 lg:block">
-        <div className="mesh-blue absolute inset-0 opacity-90" />
-        <div className="dot-grid absolute inset-0 opacity-[0.15]" />
+        <div className="mesh-blue absolute inset-0 opacity-80" />
+        <div className="dot-grid absolute inset-0 opacity-[0.12] invert" />
+        <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent" />
         <div className="relative flex h-full flex-col justify-between p-12">
           <Logo variant="light" />
 
           <div className="max-w-md space-y-8">
             <div className="space-y-4">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
-                <Sparkles className="size-3" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
+                <Sparkles className="size-3 text-blue-300" />
                 An operating system for PGs
               </span>
               <h1 className="font-display text-4xl font-semibold leading-tight tracking-tight text-white text-balance">
@@ -62,8 +63,8 @@ export default async function LoginPage() {
             <ul className="space-y-4">
               {HIGHLIGHTS.map((item) => (
                 <li key={item.title} className="flex gap-3">
-                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 backdrop-blur">
-                    <item.icon className="size-4 text-white" />
+                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
+                    <item.icon className="size-4 text-blue-200" strokeWidth={1.75} />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-white">{item.title}</p>
@@ -81,14 +82,14 @@ export default async function LoginPage() {
       </div>
 
       {/* Form panel */}
-      <div className="flex flex-col justify-center px-5 py-10 sm:px-10 lg:px-16">
+      <div className="flex flex-col justify-center bg-white px-5 py-10 sm:px-10 lg:px-16">
         <div className="mx-auto w-full max-w-md">
           <div className="lg:hidden">
             <Logo />
           </div>
 
-          <div className="mt-8 space-y-2 lg:mt-0">
-            <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-900">
+          <div className="mt-10 space-y-2 lg:mt-0">
+            <h2 className="font-display text-[1.75rem] font-semibold tracking-tight text-slate-900">
               Sign in
             </h2>
             <p className="text-sm text-slate-500">

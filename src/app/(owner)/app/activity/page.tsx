@@ -70,7 +70,7 @@ export default async function ActivityPage({
       {byEvent.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {byEvent.map((entry) => (
-            <div key={entry.event} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-card">
+            <div key={entry.event} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-xs">
               <p className="font-display text-lg font-semibold text-slate-900 tabular">{entry._count._all}</p>
               <p className="truncate text-[11px] text-slate-500">{EVENT_LABEL[entry.event as EventType]}</p>
             </div>

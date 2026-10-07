@@ -200,7 +200,7 @@ export function ComplaintWorkflow({
               <DropdownMenuLabel>Priority (resets the SLA)</DropdownMenuLabel>
               {(['URGENT', 'HIGH', 'MEDIUM', 'LOW'] as const).map((p) => (
                 <DropdownMenuItem key={p} onSelect={() => setPriority(p)}>
-                  <Flag className={p === 'URGENT' ? 'text-red-500' : p === 'HIGH' ? 'text-orange-500' : p === 'MEDIUM' ? 'text-amber-500' : 'text-slate-400'} />
+                  <Flag className={p === 'URGENT' ? 'text-rose-500' : p === 'HIGH' ? 'text-orange-500' : p === 'MEDIUM' ? 'text-amber-500' : 'text-slate-400'} />
                   {p.charAt(0) + p.slice(1).toLowerCase()}
                   {p === complaint.priority && <Check className="ml-auto" />}
                 </DropdownMenuItem>

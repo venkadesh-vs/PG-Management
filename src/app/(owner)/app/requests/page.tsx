@@ -88,7 +88,7 @@ export default async function RequestsPage({
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-card" aria-label="Request status">
+        <nav className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-xs" aria-label="Request status">
           {TABS.map((t) => {
             const count = t.key === 'pending' ? counts.pending : t.key === 'approved' ? counts.approved : null
             return (

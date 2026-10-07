@@ -74,7 +74,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     ['Visit', lead.visitAt ? formatDateTime(lead.visitAt) : '—'],
     [
       'Next follow-up',
-      <span key="f" className={cn(overdue && 'font-semibold text-red-600')}>
+      <span key="f" className={cn(overdue && 'font-semibold text-rose-600')}>
         {lead.nextFollowUpAt ? `${formatDateTime(lead.nextFollowUpAt)}${overdue ? ' · overdue' : ''}` : '—'}
       </span>,
     ],
@@ -110,7 +110,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                 {facts.map(([label, value]) => (
                   <div key={label}>
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+                    <dt className="text-[11px] text-slate-500">{label}</dt>
                     <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
                   </div>
                 ))}
@@ -150,7 +150,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <div className="space-y-4">
           <Card>
             <CardContent className="space-y-3 p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next step</h2>
+              <h2 className="text-xs font-medium text-slate-500">Next step</h2>
               <LeadActions
                 lead={{ id: lead.id, name: lead.name, status }}
                 canManage={canManage}
@@ -163,7 +163,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
           <Card>
             <CardContent className="space-y-3 p-4">
-              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <CalendarClock className="size-3.5" /> Bookings
               </h2>
               {lead.bookings.length === 0 ? (

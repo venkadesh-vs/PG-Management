@@ -297,7 +297,7 @@ export function CheckInWizard({
       {/* --------------------------------------------------- Step rail */}
       <div className="space-y-4">
         <Card className="overflow-hidden">
-          <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+          <div className={cn('h-1', theme.bgSolid)} />
           <CardContent className="p-4">
             <Progress
               value={((step + 1) / STEPS.length) * 100}
@@ -357,7 +357,7 @@ export function CheckInWizard({
         {prefill && (
           <Card className="border-blue-200 bg-blue-50/60">
             <CardContent className="space-y-1 p-4 text-sm text-blue-900">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+              <p className="text-xs font-semibold text-blue-700">
                 From booking {prefill.code}
               </p>
               <p>
@@ -375,7 +375,7 @@ export function CheckInWizard({
         {/* Live summary — the owner always sees what they are committing to. */}
         <Card className="hidden lg:block">
           <CardContent className="space-y-2.5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Summary</p>
+            <p className="text-xs font-medium text-slate-500">Summary</p>
             <SummaryRow label="PG" value={property.name} />
             <SummaryRow
               label="Bed"
@@ -544,7 +544,7 @@ export function CheckInWizard({
                     </Field>
                   </div>
 
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-start gap-3">
                       <FileText className="mt-0.5 size-5 shrink-0 text-slate-400" />
                       <div>
@@ -582,7 +582,7 @@ export function CheckInWizard({
                   </div>
 
                   {form.formState.errors.bedId && (
-                    <p className="text-xs font-medium text-red-600">
+                    <p className="text-xs font-medium text-rose-600">
                       {form.formState.errors.bedId.message}
                     </p>
                   )}
@@ -615,7 +615,7 @@ export function CheckInWizard({
                     <div className="max-h-[420px] space-y-5 overflow-y-auto pr-1 scrollbar-slim">
                       {floors.map((floor) => (
                         <div key={floor.id} className="space-y-2">
-                          <p className="sticky top-0 z-10 bg-white py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <p className="sticky top-0 z-10 bg-white py-1 text-xs font-medium text-slate-500">
                             {floor.name}
                           </p>
                           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -695,10 +695,10 @@ export function CheckInWizard({
                   </div>
 
                   {foodEnabled && (
-                  <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="rounded-xl border border-slate-200 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-start gap-3">
-                        <Utensils className="mt-0.5 size-5 text-orange-500" />
+                        <Utensils className="mt-0.5 size-5 text-slate-400" strokeWidth={1.75} />
                         <div>
                           <p className="text-sm font-medium text-slate-800">Food plan</p>
                           <p className="text-xs text-slate-500">
@@ -790,8 +790,8 @@ export function CheckInWizard({
                     />
                   </div>
 
-                  <div className={cn('rounded-2xl border p-4', theme.border, theme.bg)}>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <div className={cn('rounded-xl border p-4', theme.border, theme.bg)}>
+                    <p className="text-xs font-medium text-slate-500">
                       Monthly charges
                     </p>
                     <div className="mt-2 space-y-1.5">
@@ -863,7 +863,7 @@ export function CheckInWizard({
                     <Textarea rows={2} placeholder="Anything worth remembering" {...form.register('notes')} />
                   </Field>
 
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
                     <p className="flex items-center gap-2 text-sm font-semibold text-blue-900">
                       <Sparkles className="size-4" />
                       What happens when you press Check in
@@ -940,7 +940,7 @@ function StepHeading({
         <Icon className="size-5 text-slate-500" />
       </div>
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-[11px] text-slate-500">
           Step {index + 1} of {STEPS.length}
         </p>
         <h2 className="font-display text-lg font-semibold tracking-tight text-slate-900">
@@ -971,8 +971,8 @@ function ChargeRow({ label, value }: { label: string; value: number }) {
 
 function ReviewBlock({ title, rows }: { title: string; rows: [string, string][] }) {
   return (
-    <div className="rounded-2xl border border-slate-200 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+    <div className="rounded-xl border border-slate-200 p-4">
+      <p className="text-xs font-medium text-slate-500">{title}</p>
       <dl className="mt-2 space-y-1.5">
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-start justify-between gap-3 text-sm">
@@ -1000,19 +1000,19 @@ function SuccessPanel({
       className="mx-auto max-w-2xl"
     >
       <Card className="overflow-hidden">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-center text-white">
+        <div className="border-b border-slate-100 bg-white p-8 text-center">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 18 }}
-            className="mx-auto flex size-16 items-center justify-center rounded-full bg-white/20 backdrop-blur"
+            className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/50"
           >
-            <Check className="size-8" strokeWidth={3} />
+            <Check className="size-7" strokeWidth={2.5} />
           </motion.div>
-          <h2 className="mt-4 font-display text-2xl font-semibold tracking-tight">
+          <h2 className="mt-4 font-display text-xl font-semibold tracking-tight text-slate-900">
             {result.resident.fullName} is checked in
           </h2>
-          <p className="mt-1 text-sm text-white/80">
+          <p className="mt-1 text-sm text-slate-500">
             Room {result.bed.room} · Bed {result.bed.label} · {result.resident.code}
           </p>
         </div>

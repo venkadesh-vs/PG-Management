@@ -16,7 +16,7 @@ export default async function FeatureOffPage({ searchParams }: { searchParams: P
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+      <div className="flex size-14 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
         <ToggleRight className="size-7" />
       </div>
       <div className="space-y-2">

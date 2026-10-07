@@ -19,13 +19,13 @@ export function Eyebrow({ icon: Icon, children, dark }: { icon?: LucideIcon; chi
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide',
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
         dark
-          ? 'border border-white/15 bg-white/[0.06] text-blue-200'
-          : 'border border-blue-200/80 bg-blue-50/80 text-blue-700',
+          ? 'border border-white/15 bg-white/[0.06] text-white/75'
+          : 'border border-slate-200 bg-white text-slate-600 shadow-xs',
       )}
     >
-      {Icon && <Icon className="size-3.5" aria-hidden />}
+      {Icon && <Icon className={cn('size-3.5', dark ? 'text-blue-300' : 'text-blue-600')} strokeWidth={1.75} aria-hidden />}
       {children}
     </span>
   )
@@ -57,7 +57,7 @@ export function SectionHeading({
       )}
       <Tag
         className={cn(
-          'mt-4 font-display text-3xl font-bold leading-[1.1] tracking-tight sm:text-4xl lg:text-[2.75rem]',
+          'mt-4 font-display text-[1.875rem] font-semibold leading-[1.12] tracking-tight text-balance sm:text-4xl lg:text-[2.625rem]',
           dark ? 'text-white' : 'text-slate-900',
         )}
       >
@@ -95,7 +95,7 @@ export function BrowserFrame({
   return (
     <div
       className={cn(
-        'min-w-0 overflow-hidden rounded-2xl border shadow-float',
+        'min-w-0 overflow-hidden rounded-xl border shadow-float',
         dark ? 'border-white/10 bg-slate-900' : 'border-slate-200/80 bg-white',
         className,
       )}
@@ -107,9 +107,9 @@ export function BrowserFrame({
         )}
       >
         <span className="flex gap-1.5">
-          <span className="size-2.5 rounded-full bg-red-300" />
-          <span className="size-2.5 rounded-full bg-amber-300" />
-          <span className="size-2.5 rounded-full bg-emerald-300" />
+          <span className={cn('size-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-slate-200')} />
+          <span className={cn('size-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-slate-200')} />
+          <span className={cn('size-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-slate-200')} />
         </span>
         {title && (
           <span
@@ -150,9 +150,9 @@ export type Tone = 'green' | 'blue' | 'indigo' | 'amber' | 'red' | 'neutral' | '
 const TONES: Record<Tone, string> = {
   green: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   blue: 'bg-sky-50 text-sky-700 ring-sky-200',
-  indigo: 'bg-violet-50 text-violet-700 ring-violet-200',
+  indigo: 'bg-blue-50 text-blue-700 ring-blue-200',
   amber: 'bg-amber-50 text-amber-700 ring-amber-200',
-  red: 'bg-red-50 text-red-700 ring-red-200',
+  red: 'bg-rose-50 text-rose-700 ring-rose-200',
   neutral: 'bg-slate-100 text-slate-600 ring-slate-200',
   dark: 'bg-slate-800 text-white ring-slate-700',
 }
@@ -160,9 +160,9 @@ const TONES: Record<Tone, string> = {
 const DOTS: Record<Tone, string> = {
   green: 'bg-emerald-500',
   blue: 'bg-sky-500',
-  indigo: 'bg-violet-500',
+  indigo: 'bg-blue-500',
   amber: 'bg-amber-500',
-  red: 'bg-red-500',
+  red: 'bg-rose-500',
   neutral: 'bg-slate-400',
   dark: 'bg-white',
 }
@@ -171,7 +171,7 @@ export function Pill({ tone, children, className, dot = true }: { tone: Tone; ch
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset',
         TONES[tone],
         className,
       )}
@@ -188,9 +188,9 @@ export type BedState = 'available' | 'reserved' | 'occupied' | 'maintenance' | '
 export const BED_STYLES: Record<BedState, { label: string; tile: string; tone: Tone }> = {
   available: { label: 'Available', tile: 'border-emerald-200 bg-emerald-50 text-emerald-700', tone: 'green' },
   reserved: { label: 'Reserved', tile: 'border-sky-200 bg-sky-50 text-sky-700', tone: 'blue' },
-  occupied: { label: 'Occupied', tile: 'border-violet-200 bg-violet-100/70 text-violet-700', tone: 'indigo' },
-  maintenance: { label: 'Maintenance', tile: 'border-amber-200 bg-amber-50 text-amber-700', tone: 'amber' },
-  blocked: { label: 'Blocked', tile: 'border-slate-700 bg-slate-700 text-white', tone: 'dark' },
+  occupied: { label: 'Occupied', tile: 'border-blue-200 bg-blue-50 text-blue-700', tone: 'indigo' },
+  maintenance: { label: 'Maintenance', tile: 'border-dashed border-slate-300 bg-slate-50 text-slate-500', tone: 'neutral' },
+  blocked: { label: 'Blocked', tile: 'border-slate-300 bg-slate-200 text-slate-600', tone: 'neutral' },
 }
 
 // --------------------------------------------------------------- Tilt ----
@@ -260,40 +260,40 @@ export function FeatureSection({
 }: FeatureSectionProps) {
   const headingId = `${id}-title`
   return (
-    <section id={id} aria-labelledby={headingId} className={cn('relative scroll-mt-24 py-20 sm:py-28', className)}>
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
+    <section id={id} aria-labelledby={headingId} className={cn('relative scroll-mt-24 py-16 sm:py-24', className)}>
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
         <div className={cn('min-w-0', reverse && 'lg:order-2')}>
           <Reveal>
             <Eyebrow icon={icon}>{eyebrow}</Eyebrow>
             <h2
               id={headingId}
-              className="mt-4 font-display text-3xl font-bold leading-[1.1] tracking-tight text-slate-900 sm:text-4xl"
+              className="mt-4 font-display text-[1.75rem] font-semibold leading-[1.15] tracking-tight text-slate-900 text-balance sm:text-4xl"
             >
               {title}
             </h2>
           </Reveal>
 
-          <Reveal delay={0.08} className="mt-6 space-y-4">
-            <p className="flex gap-3 text-[15px] leading-relaxed text-slate-500">
-              <span className="mt-0.5 shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
-                Today
-              </span>
-              <span className="min-w-0">{problem}</span>
-            </p>
-            <p className="flex gap-3 text-[15px] leading-relaxed text-slate-700">
-              <span className="mt-0.5 shrink-0 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
-                StayFlow
-              </span>
-              <span className="min-w-0">{solution}</span>
-            </p>
+          <Reveal delay={0.08} className="mt-6 space-y-3">
+            <div className="flex gap-3 border-l-2 border-slate-200 pl-4 text-[15px] leading-relaxed text-slate-500">
+              <p className="min-w-0">
+                <span className="mb-0.5 block text-xs font-medium text-slate-400">Today</span>
+                {problem}
+              </p>
+            </div>
+            <div className="flex gap-3 border-l-2 border-blue-500 pl-4 text-[15px] leading-relaxed text-slate-700">
+              <p className="min-w-0">
+                <span className="mb-0.5 block text-xs font-medium text-blue-700">With StayFlow</span>
+                {solution}
+              </p>
+            </div>
           </Reveal>
 
           <Reveal delay={0.14}>
             <ul className="mt-6 grid gap-2.5 sm:grid-cols-2">
               {benefits.map((benefit) => (
                 <li key={benefit} className="flex min-w-0 items-start gap-2 text-sm text-slate-700">
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                    <Check className="size-2.5 text-emerald-700" strokeWidth={3.5} aria-hidden />
+                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-blue-50 ring-1 ring-inset ring-blue-200">
+                    <Check className="size-2.5 text-blue-700" strokeWidth={3} aria-hidden />
                   </span>
                   {benefit}
                 </li>
@@ -311,7 +311,7 @@ export function FeatureSection({
 
         <Reveal delay={0.1} y={24} className={cn('min-w-0', reverse && 'lg:order-1')}>
           <div aria-hidden className="relative">
-            <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-br from-blue-100/70 via-violet-50/40 to-marigold-50/60 blur-2xl" />
+            <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-blue-100/40 blur-3xl" />
             {visual}
           </div>
         </Reveal>

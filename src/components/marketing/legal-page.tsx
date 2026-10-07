@@ -37,7 +37,7 @@ export function LegalPage({
       <div className="mesh-blue pointer-events-none absolute inset-x-0 top-0 h-80 opacity-60" aria-hidden />
       <SiteHeader />
       <main id="main" className="relative mx-auto w-full max-w-3xl px-4 pb-20 pt-28 sm:px-6 sm:pt-32">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{title}</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-slate-900 text-balance sm:text-4xl">{title}</h1>
         <p className="mt-3 text-base text-slate-600 sm:text-lg">{intro}</p>
         <p className="mt-2 text-sm text-slate-400">Last updated: {updated}</p>
 

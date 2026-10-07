@@ -28,7 +28,7 @@ import {
   type ExpenseStatus,
 } from '@/server/services/expense-rules'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -309,7 +309,7 @@ export default async function ExpensesPage({
       {pending._count._all > 0 && (
         <Link
           href="/app/expenses?status=PENDING"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
         >
           <span>
             <strong>{pending._count._all}</strong> {pending._count._all === 1 ? 'expense is' : 'expenses are'} waiting for
@@ -319,7 +319,7 @@ export default async function ExpensesPage({
         </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard label="Total spent" value={spent} format="money" icon="receipt" tone="red" hint={`${sum._count._all} approved entries`} />
         {canSeeRent && (
           <StatCard label="Collected" value={income} format="money" icon="money" tone="emerald" hint="Same period" />
@@ -342,7 +342,7 @@ export default async function ExpensesPage({
           tone="amber"
           hint={breakdown[0]?.name ?? 'Nothing recorded'}
         />
-      </div>
+      </StatGrid>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -500,7 +500,7 @@ export default async function ExpensesPage({
               return (
                 <li
                   key={expense.id}
-                  className={cn('rounded-2xl border border-slate-200 bg-white p-4 shadow-card', off && 'opacity-60')}
+                  className={cn('rounded-xl border border-slate-200 bg-white p-4 shadow-xs', off && 'opacity-60')}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">

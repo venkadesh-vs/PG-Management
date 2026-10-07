@@ -117,7 +117,7 @@ export default async function PropertyDetailPage({
       />
 
       {archived && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           This PG was archived on {formatDate(property.archivedAt!)}. It is hidden from the
           dashboard and is not billed. {canArchive ? 'Restore it to edit or use it again.' : 'Ask the owner to restore it.'}
         </div>
@@ -125,26 +125,25 @@ export default async function PropertyDetailPage({
 
       <div
         className={cn(
-          'relative overflow-hidden rounded-3xl bg-gradient-to-br p-6 text-white shadow-elevated',
-          theme.gradient,
+          'relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6',
         )}
       >
-        <div className="dot-grid absolute inset-0 opacity-[0.12]" />
+        <div className={cn('absolute inset-x-0 top-0 h-1', theme.bgSolid)} />
         <div className="relative grid gap-5 lg:grid-cols-[1fr_auto]">
           <div>
-            <h2 className="font-display text-xl font-semibold tracking-tight">{property.name}</h2>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-white/75">
+            <h2 className="font-display text-xl font-semibold tracking-tight text-slate-900">{property.name}</h2>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
               <MapPin className="size-3.5" />
               {property.addressLine}, {property.city}, {property.state} {property.pincode}
             </p>
             {property.contactPhone && (
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-white/75">
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
                 <Phone className="size-3.5" />
                 {property.contactName} · {formatPhone(property.contactPhone)}
               </p>
             )}
             {property.description && (
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/70">
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600">
                 {property.description}
               </p>
             )}
@@ -152,7 +151,7 @@ export default async function PropertyDetailPage({
               {property.amenities.map((amenity) => (
                 <span
                   key={amenity}
-                  className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] backdrop-blur"
+                  className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
                 >
                   {amenity}
                 </span>
@@ -360,9 +359,9 @@ export default async function PropertyDetailPage({
 
 function HeroTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur">
-      <p className="text-[10px] uppercase tracking-wide text-white/60">{label}</p>
-      <p className="font-display text-lg font-semibold tabular">{value}</p>
+    <div className="rounded-lg bg-slate-50 px-3 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="font-display text-lg font-semibold text-slate-900 tabular">{value}</p>
     </div>
   )
 }

@@ -393,7 +393,7 @@ export function PropertyForm({
       {/* ---------------------------------------------------- Sidebar */}
       <div className="space-y-4">
         <Card className="overflow-hidden lg:sticky lg:top-24">
-          <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+          <div className={cn('h-1', theme.bgSolid)} />
           <CardContent className="space-y-4 p-5">
             <div className="flex items-center gap-2.5">
               <div className={cn('flex size-9 items-center justify-center rounded-xl', theme.bg)}>
@@ -422,7 +422,7 @@ export function PropertyForm({
                 layout
                 className="rounded-xl border border-blue-100 bg-blue-50/70 p-4"
               >
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-800">
                   <Sparkles className="size-3.5" />
                   StayFlow subscription
                 </p>

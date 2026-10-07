@@ -106,7 +106,7 @@ export function LeadActions({
               <Button
                 variant="ghost"
                 size="sm"
-                className="col-span-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="col-span-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                 disabled={booked}
                 onClick={() => setLostOpen(true)}
               >

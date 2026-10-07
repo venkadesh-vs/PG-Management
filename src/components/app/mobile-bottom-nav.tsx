@@ -51,12 +51,15 @@ export function MobileBottomNav({
   badges,
   moreOpen,
   onMore,
+  center,
 }: {
   nav: NavSection[]
   pathname: string
   badges: ShellBadges
   moreOpen: boolean
   onMore: () => void
+  /** Optional centre slot (the + quick action), placed between the tabs. */
+  center?: React.ReactNode
 }) {
   const tabs = React.useMemo(() => bottomTabs(nav), [nav])
   const property = useSearchParams().get('property')
@@ -66,21 +69,23 @@ export function MobileBottomNav({
   return (
     <nav
       aria-label="Primary"
-      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/90 backdrop-blur-lg lg:hidden"
+      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-lg lg:hidden"
     >
-      <ul className="mx-auto flex max-w-md items-stretch justify-around px-2 pt-1.5">
-        {tabs.map((tab) => {
+      <ul className="mx-auto flex max-w-md items-stretch justify-around px-1 pt-1">
+        {tabs.map((tab, index) => {
           const active = tab.href === activeHref
           const count = tab.badge ? badges[tab.badge] : 0
           return (
-            <li key={tab.href} className="flex-1">
+            <React.Fragment key={tab.href}>
+            {center && index === Math.ceil(tabs.length / 2) && <li className="flex w-14 shrink-0 items-start justify-center">{center}</li>}
+            <li className="flex-1">
               <Link
                 href={withPgScope(tab.href, property)}
                 aria-current={active ? 'page' : undefined}
-                className="relative flex flex-col items-center gap-0.5 rounded-2xl px-1 py-1.5"
+                className="relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-1"
               >
                 <TabIcon active={active} count={count}>
-                  <Icon name={tab.icon} className="size-5" />
+                  <Icon name={tab.icon} className="size-5" strokeWidth={1.75} />
                 </TabIcon>
                 <span
                   className={cn(
@@ -92,6 +97,7 @@ export function MobileBottomNav({
                 </span>
               </Link>
             </li>
+            </React.Fragment>
           )
         })}
         <li className="flex-1">
@@ -100,10 +106,10 @@ export function MobileBottomNav({
             onClick={onMore}
             aria-label="More — open the full menu"
             aria-expanded={moreOpen}
-            className="relative flex w-full flex-col items-center gap-0.5 rounded-2xl px-1 py-1.5"
+            className="relative flex w-full flex-col items-center gap-0.5 rounded-xl px-1 py-1"
           >
             <TabIcon active={moreActive} count={0}>
-              <Menu className="size-5" />
+              <Menu className="size-5" strokeWidth={1.75} />
             </TabIcon>
             <span
               className={cn(
@@ -124,15 +130,15 @@ function TabIcon({ active, count, children }: { active: boolean; count: number; 
   return (
     <span
       className={cn(
-        'relative flex h-8 w-14 items-center justify-center transition-colors',
-        active ? 'text-blue-700' : 'text-slate-400',
+        'relative flex h-7 w-12 items-center justify-center transition-colors',
+        active ? 'text-blue-700' : 'text-slate-500',
       )}
     >
       {active && (
         <motion.span
           layoutId="owner-bottom-nav-pill"
           transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-          className="absolute inset-0 rounded-full bg-blue-100/80"
+          className="absolute inset-0 rounded-full bg-blue-50"
         />
       )}
       <span className="relative">{children}</span>
@@ -141,7 +147,7 @@ function TabIcon({ active, count, children }: { active: boolean; count: number; 
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-          className="absolute right-2 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white tabular ring-2 ring-white"
+          className="absolute right-2 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular ring-2 ring-white"
         >
           {count > 99 ? '99+' : count}
         </motion.span>

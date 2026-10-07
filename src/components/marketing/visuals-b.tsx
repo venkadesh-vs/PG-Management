@@ -47,7 +47,7 @@ export function FoodVisual() {
             const count = meal.counts[phase]
             return (
               <div key={meal.name} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <Icon className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -55,7 +55,7 @@ export function FoodVisual() {
                   <p className="truncate text-[10px] text-slate-500">{meal.menu}</p>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <motion.div
-                      className="h-full rounded-full bg-gradient-to-r from-orange-400 to-marigold-500"
+                      className="h-full rounded-full bg-blue-600"
                       animate={{ width: `${(count / 48) * 100}%` }}
                       transition={{ duration: 0.8 }}
                     />
@@ -198,14 +198,14 @@ export function RevenueVisual() {
     <div ref={ref}>
       <BrowserFrame title="Revenue intelligence">
         <div className="p-3 sm:p-4">
-          <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4">
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
               <TrendingDown className="size-3.5" /> Vacancy loss
             </p>
             <p className="mt-1 text-xs text-slate-600">You are losing approximately</p>
-            <p className="font-display text-3xl font-extrabold tracking-tight text-amber-700 tabular">
+            <p className="font-display text-3xl font-bold tracking-tight text-slate-900 tabular">
               ₹{new Intl.NumberFormat('en-IN').format(shown)}
-              <span className="text-sm font-semibold text-amber-600">/month</span>
+              <span className="text-sm font-medium text-slate-500">/month</span>
             </p>
             <p className="text-xs text-slate-600">from 5 vacant beds.</p>
           </div>
@@ -215,7 +215,7 @@ export function RevenueVisual() {
                 <span className="w-14 shrink-0 text-slate-500">{f.name}</span>
                 <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-red-400"
+                    className="h-full rounded-full bg-amber-400"
                     initial={reduce ? false : { width: 0 }}
                     whileInView={{ width: `${(f.loss / 25500) * 100}%` }}
                     viewport={{ once: true }}
@@ -228,10 +228,10 @@ export function RevenueVisual() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-violet-200 bg-violet-50/50 px-3 py-2 text-[11px] text-violet-800">
-            <Sparkles className="size-3.5 shrink-0" />
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+            <Sparkles className="size-3.5 shrink-0 text-blue-600" />
             <span className="min-w-0 flex-1">AI daily brief</span>
-            <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide">Coming soon</span>
+            <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200">Coming soon</span>
           </div>
         </div>
       </BrowserFrame>
@@ -247,22 +247,22 @@ export function ResidentAppVisual() {
 
   return (
     <div ref={ref} className="relative flex justify-center">
-      <div className="absolute inset-x-10 top-10 -z-10 h-64 rounded-full bg-violet-300/30 blur-3xl" />
+      <div className="absolute inset-x-10 top-10 -z-10 h-64 rounded-full bg-blue-200/40 blur-3xl" />
       <PhoneFrame>
-        <div className="bg-gradient-to-br from-blue-600 to-violet-600 px-4 pb-5 pt-8 text-white">
+        <div className="bg-gradient-to-br from-blue-700 to-blue-600 px-4 pb-5 pt-8 text-white">
           <div className="flex items-center justify-between">
             <p className="text-[10px] text-white/70">Sree Balaji PG · 204-A</p>
             <Bell className="size-3.5 text-white/80" />
           </div>
-          <p className="mt-1 font-display text-base font-bold">Hi Arjun 👋</p>
+          <p className="mt-1 font-display text-base font-semibold">Hi Arjun</p>
           <div className="mt-3 rounded-2xl bg-white/15 p-3 backdrop-blur">
             <p className="text-[10px] text-white/70">November rent</p>
             <div className="flex items-center justify-between">
               <p className="font-display text-xl font-bold tabular">₹9,000</p>
               <AnimatePresence mode="wait" initial={false}>
                 <motion.span key={String(paid)} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
-                  <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-bold', paid ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-300 text-amber-950')}>
-                    {paid ? 'PAID' : 'DUE 5 NOV'}
+                  <span className={cn('rounded-md px-2 py-0.5 text-[9px] font-semibold', paid ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-300 text-amber-950')}>
+                    {paid ? 'Paid' : 'Due 5 Nov'}
                   </span>
                 </motion.span>
               </AnimatePresence>

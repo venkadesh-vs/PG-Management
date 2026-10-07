@@ -116,7 +116,7 @@ export function RoomBuilder({
             {floors.map((floor) => (
               <div key={floor.id} className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <h3 className="text-xs font-medium text-slate-500">
                     {floor.name}
                   </h3>
                   <div className="h-px flex-1 bg-slate-100" />
@@ -543,7 +543,7 @@ function BulkRoomDialog({
           </label>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+            <p className="text-xs font-medium text-slate-500">Preview</p>
             <p className="mt-1 text-sm text-slate-700">
               {preview.join(', ')}
               {Number(count) > 4 ? `, … (${count} rooms)` : ''} ·{' '}

@@ -144,7 +144,7 @@ export function InvoicePicker({
   return (
     <div className="rounded-xl border border-slate-200 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Apply to</p>
+        <p className="text-xs font-medium text-slate-500">Apply to</p>
         <p className="text-[11px] text-slate-400">
           {value.length ? 'Ticked first, then oldest' : 'Oldest due first — tick to choose'}
         </p>

@@ -21,7 +21,7 @@ const STATUS_STYLE: Record<string, { className: string; label: string }> = {
   LATE: { className: 'bg-amber-400', label: 'Late' },
   HALF_DAY: { className: 'bg-sky-300', label: 'Half day' },
   LEAVE: { className: 'bg-violet-300', label: 'Leave' },
-  ABSENT: { className: 'bg-red-400', label: 'Absent' },
+  ABSENT: { className: 'bg-rose-400', label: 'Absent' },
   WEEKLY_OFF: { className: 'bg-slate-200', label: 'Weekly off' },
 }
 

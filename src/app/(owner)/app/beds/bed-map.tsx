@@ -124,7 +124,7 @@ export function BedMap({
     <div className="space-y-5">
       {/* --------------------------------------------------- Status bar */}
       <Card className="overflow-hidden">
-        <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+        <div className={cn('h-1', theme.bgSolid)} />
         <CardContent className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -181,7 +181,7 @@ export function BedMap({
           return (
             <div key={floor.id} className="space-y-3">
               <div className="flex items-center gap-3">
-                <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold text-slate-700">
                   {floor.name}
                 </h2>
                 <div className="h-px flex-1 bg-slate-200" />
@@ -202,7 +202,7 @@ export function BedMap({
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.25 }}
                       className={cn(
-                        'rounded-2xl border bg-white p-4 shadow-card transition-shadow hover:shadow-elevated',
+                        'rounded-xl border bg-white p-4 shadow-xs transition-shadow hover:border-slate-300',
                         focusRoomId === room.id ? cn(theme.border, 'ring-2', theme.ring) : 'border-slate-200',
                       )}
                     >
@@ -261,7 +261,7 @@ export function BedMap({
                                 )}
                               />
                               {bed.resident && bed.resident.outstanding > 0 && (
-                                <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-red-500 ring-2 ring-white" />
+                                <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
                               )}
                             </motion.button>
                           )
@@ -434,7 +434,7 @@ function BedPanel({
           )}
 
           {bed.resident && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
                   <UserRound className="size-5 text-slate-500" />
@@ -478,8 +478,8 @@ function BedPanel({
           )}
 
           {bed.booking && (
-            <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
                 <CalendarCheck className="size-3.5" />
                 Held for a booking
               </p>
@@ -518,8 +518,8 @@ function BedPanel({
           )}
 
           {actionable && (
-            <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bed actions</p>
+            <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+              <p className="text-xs font-medium text-slate-500">Bed actions</p>
               <div className="grid grid-cols-2 gap-2">
                 {bed.status !== 'BLOCKED' && (
                   <Button

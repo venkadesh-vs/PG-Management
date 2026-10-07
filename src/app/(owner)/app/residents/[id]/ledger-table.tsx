@@ -125,7 +125,7 @@ export function LedgerTable({
                 <TableCell
                   className={cn(
                     'text-right font-semibold tabular',
-                    entry.balance > 0 ? 'text-red-600' : 'text-slate-500',
+                    entry.balance > 0 ? 'text-rose-600' : 'text-slate-500',
                   )}
                 >
                   {formatMoney(entry.balance)}
@@ -152,7 +152,7 @@ export function LedgerTable({
               <TableCell
                 className={cn(
                   'text-right font-semibold tabular',
-                  closing > 0 ? 'text-red-600' : 'text-emerald-600',
+                  closing > 0 ? 'text-rose-600' : 'text-emerald-600',
                 )}
               >
                 {formatMoney(closing)}
@@ -167,7 +167,7 @@ export function LedgerTable({
         {entries.map((entry) => (
           <li
             key={entry.id}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
           >
             <div className="flex items-start justify-between gap-2">
               <p className={cn('min-w-0 text-sm font-medium', KIND_STYLE[entry.kind] ?? 'text-slate-700')}>
@@ -188,7 +188,7 @@ export function LedgerTable({
               <span
                 className={cn(
                   'font-semibold tabular',
-                  entry.balance > 0 ? 'text-red-600' : 'text-slate-500',
+                  entry.balance > 0 ? 'text-rose-600' : 'text-slate-500',
                 )}
               >
                 {formatMoney(entry.balance)}
@@ -196,13 +196,13 @@ export function LedgerTable({
             </div>
           </li>
         ))}
-        <li className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-card">
+        <li className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs">
           <div className="flex items-center justify-between gap-2">
             <p className="font-semibold text-slate-700">Closing balance</p>
             <span
               className={cn(
                 'font-semibold tabular',
-                closing > 0 ? 'text-red-600' : 'text-emerald-600',
+                closing > 0 ? 'text-rose-600' : 'text-emerald-600',
               )}
             >
               {formatMoney(closing)}
@@ -233,7 +233,7 @@ function SummaryCard({
   const tones = {
     slate: 'bg-slate-100 text-slate-600',
     emerald: 'bg-emerald-50 text-emerald-600',
-    red: 'bg-red-50 text-red-600',
+    red: 'bg-rose-50 text-rose-600',
   }
   return (
     <Card>
@@ -242,7 +242,7 @@ function SummaryCard({
           <Icon className="size-5" />
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="text-xs text-slate-500">{label}</p>
           <p className="font-display text-lg font-semibold text-slate-900 tabular">{value}</p>
         </div>
       </CardContent>

@@ -135,7 +135,7 @@ export function FloorsStep({ ctx }: { ctx: StepContext }) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Your floors</p>
+        <p className="text-xs font-medium text-slate-500">Your floors</p>
         <div className="flex flex-wrap gap-2">
           {floors.map((f) => (
             <span key={f.id} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
@@ -344,7 +344,7 @@ export function RoomsStep({ ctx }: { ctx: StepContext }) {
                   />
                 </Field>
               </div>
-              {errors[f.id] && <p className="text-xs font-medium text-red-600">{errors[f.id]}</p>}
+              {errors[f.id] && <p className="text-xs font-medium text-rose-600">{errors[f.id]}</p>}
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="min-w-0 truncate text-xs text-slate-500">
                   {preview.length

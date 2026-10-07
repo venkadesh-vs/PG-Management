@@ -51,14 +51,14 @@ export default async function WorkerGroceryPage() {
       </div>
 
       {lowStock.length > 0 && (
-        <Card className="border-red-200 bg-red-50/50">
+        <Card className="border-rose-200 bg-rose-50/50">
           <CardContent className="flex items-start gap-3 p-4">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-600" />
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600" />
             <div>
-              <p className="text-sm font-semibold text-red-900">
+              <p className="text-sm font-semibold text-rose-900">
                 {lowStock.length} item{lowStock.length === 1 ? '' : 's'} below minimum
               </p>
-              <p className="mt-0.5 text-sm text-red-800/80">
+              <p className="mt-0.5 text-sm text-rose-800/80">
                 {lowStock.map((i) => i.name).join(', ')}
               </p>
             </div>
@@ -77,8 +77,8 @@ export default async function WorkerGroceryPage() {
           <Card>
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-amber-50">
-                  <ShoppingCart className="size-5 text-amber-600" />
+                <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100">
+                  <ShoppingCart className="size-5 text-slate-600" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -97,7 +97,7 @@ export default async function WorkerGroceryPage() {
               const low = item.currentStock <= item.minimumStock
               return (
                 <li key={item.id}>
-                  <Card className={cn(low && 'border-red-200')}>
+                  <Card className={cn(low && 'border-rose-200')}>
                     <CardContent className="flex items-center gap-3 p-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -115,11 +115,11 @@ export default async function WorkerGroceryPage() {
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="font-display text-lg font-semibold text-amber-700 tabular">
+                        <p className="font-display text-lg font-semibold text-slate-900 tabular">
                           {item.shortfall}
                           <span className="text-xs font-medium">{UNIT_LABEL[item.unit]}</span>
                         </p>
-                        <p className="text-[10px] uppercase tracking-wide text-slate-400">to buy</p>
+                        <p className="text-[11px] font-medium text-slate-500">To buy</p>
                       </div>
                       {user.permissions.includes('grocery.manage') && (
                       <WorkerPurchaseButton

@@ -199,7 +199,7 @@ export function ImportWizard({
 
           <label
             className={cn(
-              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 px-4 py-8 text-center transition hover:border-blue-300 hover:bg-blue-50/40',
+              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-4 py-8 text-center transition hover:border-blue-300 hover:bg-blue-50/40',
               busy && 'pointer-events-none opacity-60',
             )}
           >
@@ -317,7 +317,7 @@ function MappingStep({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-800">
                     {f.label}
-                    {f.required && <span className="text-red-600"> *</span>}
+                    {f.required && <span className="text-rose-600"> *</span>}
                   </p>
                   {f.hint && <p className="text-xs text-slate-500">{f.hint}</p>}
                 </div>
@@ -326,7 +326,7 @@ function MappingStep({
                     aria-label={`Column for ${f.label}`}
                     value={idx === undefined ? '' : String(idx)}
                     onChange={(e) => set(f.key, e.target.value)}
-                    className={cn(f.required && idx === undefined && 'border-red-300')}
+                    className={cn(f.required && idx === undefined && 'border-rose-300')}
                   >
                     <option value="">— Not in my file —</option>
                     {parsed.headers.map((h, i) => (

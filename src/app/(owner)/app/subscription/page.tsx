@@ -6,7 +6,7 @@ import { demoPaymentsAllowed, paymentMode } from '@/server/integrations/payments
 import { SUBSCRIPTION_STATUS_STYLE, INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge, StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
@@ -163,12 +163,12 @@ export default async function SubscriptionPage() {
       )}
 
       {atRisk && (
-        <Card className="border-red-200 bg-red-50/50">
+        <Card className="border-rose-200 bg-rose-50/50">
           <CardContent className="flex items-start gap-3 p-5">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-600" />
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600" />
             <div>
-              <p className="text-sm font-semibold text-red-900">A subscription payment is pending</p>
-              <p className="mt-1 text-sm text-red-800/80">
+              <p className="text-sm font-semibold text-rose-900">A subscription payment is pending</p>
+              <p className="mt-1 text-sm text-rose-800/80">
                 Settle the outstanding invoice before the grace period ends to keep full access.
               </p>
             </div>
@@ -176,13 +176,13 @@ export default async function SubscriptionPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label="Monthly total"
           value={monthlyTotal}
           format="money"
           icon="sparkles"
-          tone="violet"
+         
           hint={`${subscriptions.length} PG${subscriptions.length === 1 ? '' : 's'}`}
         />
         <StatCard
@@ -200,7 +200,7 @@ export default async function SubscriptionPage() {
           tone={organization?.status === 'ACTIVE' ? 'emerald' : 'amber'}
           hint={`${organization?.status.replace('_', ' ').toLowerCase()} · ${subscriptions.length} subscriptions`}
         />
-      </div>
+      </StatGrid>
 
       <SectionHeader
         title="Your PG subscriptions"
@@ -255,7 +255,7 @@ export default async function SubscriptionPage() {
 
             return (
               <Card key={subscription.id} className="overflow-hidden">
-                <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
+                <div className={cn('h-1', theme.bgSolid)} />
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -274,7 +274,7 @@ export default async function SubscriptionPage() {
                       words?.tone === 'ok' && 'bg-emerald-50 text-emerald-800',
                       words?.tone === 'info' && 'bg-violet-50 text-violet-800',
                       words?.tone === 'warn' && 'bg-amber-50 text-amber-900',
-                      words?.tone === 'bad' && 'bg-red-50 text-red-800',
+                      words?.tone === 'bad' && 'bg-rose-50 text-rose-800',
                     )}
                   >
                     {statusLine}
@@ -293,7 +293,7 @@ export default async function SubscriptionPage() {
                       ` · ${formatMoney(subscription.amount)}/month billed yearly with ${subscription.plan.yearlyDiscountPercent}% off`}
                   </p>
                   {subscription.lastPaymentError && subscription.status !== 'ACTIVE' && live && (
-                    <p className="flex items-start gap-1.5 text-xs text-red-700">
+                    <p className="flex items-start gap-1.5 text-xs text-rose-700">
                       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                       Last payment failed: {subscription.lastPaymentError}
                     </p>
@@ -309,7 +309,7 @@ export default async function SubscriptionPage() {
                     </p>
                   )}
                   {subscription.cancelAtPeriodEnd && live && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+                    <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">
                       Ends on {formatDate(subscription.nextBillingDate)}
                       {subscription.cancelCategory &&
                         ` — ${CANCEL_CATEGORIES.find((c) => c.value === subscription.cancelCategory)?.label ?? ''}`}
@@ -391,7 +391,7 @@ export default async function SubscriptionPage() {
           return (
             <Card key={row.key}>
               <CardContent className="space-y-2 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-medium text-slate-500 capitalize">
                   {LIMIT_NOUN[row.key][1]}
                 </p>
                 <p className="font-display text-xl font-semibold tabular text-slate-900">
@@ -403,12 +403,12 @@ export default async function SubscriptionPage() {
                 {row.limit != null && (
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="meter" aria-valuenow={row.used} aria-valuemin={0} aria-valuemax={row.limit} aria-label={LIMIT_NOUN[row.key][1]}>
                     <div
-                      className={cn('h-full rounded-full', full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
+                      className={cn('h-full rounded-full', full ? 'bg-rose-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
                       style={{ width: `${row.percent ?? 0}%` }}
                     />
                   </div>
                 )}
-                {full && <p className="text-[11px] text-red-600">Limit reached — upgrade to add more.</p>}
+                {full && <p className="text-[11px] text-rose-600">Limit reached — upgrade to add more.</p>}
               </CardContent>
             </Card>
           )
@@ -420,7 +420,7 @@ export default async function SubscriptionPage() {
           return (
             <Card key={row.key} className="min-w-0">
               <CardContent className="space-y-2 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.label}</p>
+                <p className="text-xs font-medium text-slate-500">{row.label}</p>
                 <p className="font-display text-xl font-semibold tabular text-slate-900">
                   {row.used}
                   <span className="text-sm font-normal text-slate-500">
@@ -430,13 +430,13 @@ export default async function SubscriptionPage() {
                 {row.limit != null && (
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="meter" aria-valuenow={row.used} aria-valuemin={0} aria-valuemax={row.limit} aria-label={row.label}>
                     <div
-                      className={cn('h-full rounded-full', full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
+                      className={cn('h-full rounded-full', full ? 'bg-rose-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
                       style={{ width: `${row.percent ?? 0}%` }}
                     />
                   </div>
                 )}
                 {full && (
-                  <p className="text-[11px] text-red-600">
+                  <p className="text-[11px] text-rose-600">
                     {row.key === 'whatsapp'
                       ? 'Used up — WhatsApp messages are paused until the 1st. In-app notifications still work.'
                       : 'Full — new uploads are refused until you upgrade.'}
@@ -583,7 +583,7 @@ export default async function SubscriptionPage() {
                             </Badge>
                           )}
                           {payment?.status === 'FAILED' && (
-                            <span className="text-[11px] text-red-600">{payment.failureReason}</span>
+                            <span className="text-[11px] text-rose-600">{payment.failureReason}</span>
                           )}
                         </div>
                       </TableCell>
@@ -623,7 +623,7 @@ export default async function SubscriptionPage() {
               return (
                 <li
                   key={invoice.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <a
@@ -651,7 +651,7 @@ export default async function SubscriptionPage() {
                     <span className="truncate">{invoice.subscription.property.name}</span>
                   </p>
                   {payment?.status === 'FAILED' && (
-                    <p className="mt-1 text-[11px] text-red-600">{payment.failureReason}</p>
+                    <p className="mt-1 text-[11px] text-rose-600">{payment.failureReason}</p>
                   )}
                   <div className="mt-2 flex items-center justify-between gap-2 text-sm">
                     <span className="text-xs text-slate-500">

@@ -149,7 +149,7 @@ export function ReviewStep({ ctx }: { ctx: StepContext }) {
               <CircleDashed className="mt-0.5 size-4 shrink-0 text-slate-300" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{r.label}</p>
+              <p className="text-xs font-medium text-slate-500">{r.label}</p>
               <p className="break-words text-sm text-slate-800">{r.value}</p>
               {r.warn && <p className="mt-0.5 text-xs text-amber-700">{r.warn}</p>}
             </div>
@@ -198,7 +198,7 @@ export function DoneStep({ ctx }: { ctx: StepContext }) {
           initial={reduce ? false : { scale: 0.4, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 320, damping: 18 }}
-          className="flex size-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-brand"
+          className="flex size-16 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm"
         >
           <PartyPopper className="size-9" />
         </motion.span>

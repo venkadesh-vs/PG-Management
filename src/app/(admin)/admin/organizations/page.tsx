@@ -169,10 +169,10 @@ export default async function OrganizationsPage({
         actions={<CreateClientDialog />}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total accounts" value={counts.reduce((n, c) => n + c._count._all, 0)} icon="building" tone="blue" hint={activeFilters ? `${total} match these filters` : undefined} />
-        <StatCard label="Active" value={countFor('ACTIVE')} icon="check" tone="emerald" />
-        <StatCard label="On trial" value={countFor('TRIAL')} icon="clock" tone="violet" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard label="Total accounts" value={counts.reduce((n, c) => n + c._count._all, 0)} icon="building" hint={activeFilters ? `${total} match these filters` : undefined} />
+        <StatCard label="Active" value={countFor('ACTIVE')} icon="check" />
+        <StatCard label="On trial" value={countFor('TRIAL')} icon="clock" />
         <StatCard
           label="Combined MRR"
           value={platformMrr}
@@ -308,7 +308,7 @@ export default async function OrganizationsPage({
                 <li key={org.id}>
                   <Link
                     href={`/admin/organizations/${org.id}`}
-                    className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="block rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-medium text-slate-900">{org.name}</p>

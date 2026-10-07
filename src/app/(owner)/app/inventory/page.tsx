@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
@@ -251,13 +251,13 @@ export default async function InventoryPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Item types" value={total} icon="boxes" tone="blue" />
+      <StatGrid cols={4}>
+        <StatCard label="Item types" value={total} icon="boxes" />
         <StatCard
           label="Total units"
           value={valueAgg._sum.quantity ?? 0}
           icon="clipboard"
-          tone="violet"
+         
         />
         <StatCard
           label="Asset value"
@@ -274,7 +274,7 @@ export default async function InventoryPage({
           tone={needsRepair > 0 ? 'amber' : 'emerald'}
           hint="Damaged or needing repair"
         />
-      </div>
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
@@ -387,7 +387,7 @@ export default async function InventoryPage({
               return (
                 <li
                   key={asset.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-medium text-slate-900">{asset.name}</p>

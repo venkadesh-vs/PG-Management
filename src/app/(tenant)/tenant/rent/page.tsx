@@ -51,7 +51,7 @@ export default async function TenantRentPage() {
         <CardContent className="p-5">
           {outstanding > 0 ? (
             <>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-medium text-slate-500">
                 Total outstanding
               </p>
               <p className="mt-1 font-display text-3xl font-semibold text-slate-900 tabular">
@@ -73,7 +73,7 @@ export default async function TenantRentPage() {
             </>
           ) : (
             <div className="flex items-center gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
                 <CheckCircle2 className="size-5 text-emerald-600" />
               </div>
               <div>
@@ -115,7 +115,7 @@ export default async function TenantRentPage() {
                 const unpaid = invoice.balance > 0
                 return (
                   <li key={invoice.id}>
-                    <Card className={cn(unpaid && invoice.status === 'OVERDUE' && 'border-red-200')}>
+                    <Card className={cn(unpaid && invoice.status === 'OVERDUE' && 'border-rose-200')}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -163,7 +163,7 @@ export default async function TenantRentPage() {
                             <p className="text-xs text-slate-500">
                               Due {formatDate(invoice.dueDate)}
                               {unpaid && overdueDays > 0 && (
-                                <span className="ml-1 font-semibold text-red-600">
+                                <span className="ml-1 font-semibold text-rose-600">
                                   · {overdueDays} days overdue
                                 </span>
                               )}
@@ -247,18 +247,18 @@ export default async function TenantRentPage() {
             <CardContent className="p-4">
               <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Current balance</p>
+                  <p className="text-xs font-medium text-slate-500">Current balance</p>
                   <p
                     className={cn(
                       'font-display text-xl font-semibold tabular',
-                      outstanding > 0 ? 'text-red-600' : 'text-emerald-600',
+                      outstanding > 0 ? 'text-rose-600' : 'text-emerald-600',
                     )}
                   >
                     {outstanding > 0 ? formatMoney(outstanding) : 'Settled'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Deposit held</p>
+                  <p className="text-xs font-medium text-slate-500">Deposit held</p>
                   <p className="font-display text-xl font-semibold text-slate-900 tabular">
                     {formatMoney(resident.deposit?.collected ?? 0)}
                   </p>

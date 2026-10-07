@@ -8,7 +8,7 @@ import { addDays, cn, formatDate, formatMoney } from '@/lib/utils'
 
 import { UNIT_LABEL, purchasePlan } from '@/server/services/kitchen'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
@@ -199,8 +199,8 @@ export default async function GroceryPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Items tracked" value={plan.length} icon="boxes" tone="blue" />
+      <StatGrid cols={4}>
+        <StatCard label="Items tracked" value={plan.length} icon="boxes" />
         <StatCard
           label="Low on stock"
           value={lowStock.length}
@@ -221,9 +221,9 @@ export default async function GroceryPage({
           value={spendThisMonth._sum.totalAmount ?? 0}
           format="money"
           icon="receipt"
-          tone="violet"
+         
         />
-      </div>
+      </StatGrid>
 
       {lowStock.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50">
@@ -286,7 +286,7 @@ export default async function GroceryPage({
                           {item.category}
                         </Badge>
                       </TableCell>
-                      <TableCell className={cn('text-right tabular', low && 'font-semibold text-red-600')}>
+                      <TableCell className={cn('text-right tabular', low && 'font-semibold text-rose-600')}>
                         {item.currentStock} {UNIT_LABEL[item.unit]}
                       </TableCell>
                       <TableCell className="text-right text-slate-500 tabular">
@@ -324,7 +324,7 @@ export default async function GroceryPage({
               return (
                 <li
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-medium text-slate-900">{item.name}</p>
@@ -346,7 +346,7 @@ export default async function GroceryPage({
                     {item.perResidentPerMeal ? ` · ${item.perResidentPerMeal}/resident/meal` : ''}
                   </p>
                   <div className="mt-2 flex items-center justify-between gap-2 text-sm">
-                    <span className={cn('tabular', low ? 'font-semibold text-red-600' : 'text-slate-700')}>
+                    <span className={cn('tabular', low ? 'font-semibold text-rose-600' : 'text-slate-700')}>
                       {item.currentStock} {UNIT_LABEL[item.unit]} in stock
                     </span>
                     <span className="text-xs text-slate-500 tabular">
@@ -412,7 +412,7 @@ export default async function GroceryPage({
                 {needsBuying.map((item) => (
                   <li
                     key={item.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-medium text-slate-900">{item.name}</p>
@@ -502,7 +502,7 @@ export default async function GroceryPage({
                   return (
                     <li
                       key={purchase.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="truncate font-medium text-slate-900">

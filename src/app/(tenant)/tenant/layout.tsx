@@ -23,10 +23,12 @@ export default async function TenantLayout({ children }: { children: React.React
     prisma.notification.count({ where: { userId: user.id, readAt: null } }),
   ])
 
+  // Room first so a narrow header truncates the PG name, not the room.
+  const pgName = resident?.property.name.replace(/^StayFlow\s+/i, '')
   const subtitle = resident
-    ? `${resident.property.name}${resident.room ? ` · Room ${resident.room.number}` : ''}${
-        resident.bed ? ` · Bed ${resident.bed.label}` : ''
-      }`
+    ? [resident.room ? `Room ${resident.room.number}${resident.bed ? resident.bed.label : ''}` : null, pgName]
+        .filter(Boolean)
+        .join(' · ')
     : undefined
 
   return (
@@ -37,7 +39,7 @@ export default async function TenantLayout({ children }: { children: React.React
       subtitle={subtitle}
       unread={unread}
       installName={PWA_APPS.tenant.shortName}
-      accent={resident?.property.type === 'WOMENS' ? 'pink' : 'blue'}
+      accent="blue"
     >
       {children}
     </MobileShell>

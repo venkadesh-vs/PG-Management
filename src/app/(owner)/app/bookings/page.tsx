@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { addDays, cn } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Button } from '@/components/ui/button'
 import { getLeadForUser } from '@/server/services/leads'
 import { BOOKING_STATUS } from '../leads/lead-meta'
@@ -153,12 +153,12 @@ export default async function BookingsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Beds on hold" value={confirmed} icon="bed" tone="blue" hint="Confirmed bookings" />
+      <StatGrid cols={4}>
+        <StatCard label="Beds on hold" value={confirmed} icon="bed" hint="Confirmed bookings" />
         <StatCard label="Pending" value={pending} icon="clock" tone="amber" hint="Not holding a bed yet" />
         <StatCard label="Tokens collected" value={tokens._sum.tokenAmount ?? 0} format="money" icon="wallet" tone="emerald" hint="On active bookings" />
         <StatCard label="Expiring in 48h" value={expiringSoon} icon="warning" tone="red" hint={expiringSoon ? 'Call them or extend' : 'Nothing urgent'} />
-      </div>
+      </StatGrid>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-slim sm:mx-0 sm:px-0">

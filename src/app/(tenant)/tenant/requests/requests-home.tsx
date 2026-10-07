@@ -40,11 +40,11 @@ const TILES: { kind: FormKind; title: string; hint: string; meta: ResidentReques
 export function RequestsHome({
   requests,
   canPauseMeals,
-  accent,
 }: {
   requests: TenantRequest[]
   canPauseMeals: boolean
-  accent: 'blue' | 'pink'
+  /** Kept for callers; tiles use the single brand accent. */
+  accent?: 'blue' | 'pink'
 }) {
   const [kind, setKind] = React.useState<FormKind | null>(null)
   const waiting = requests.filter((r) => r.status === 'PENDING').length
@@ -68,12 +68,12 @@ export function RequestsHome({
                 type="button"
                 onClick={() => setKind(tile.kind)}
                 className={cn(
-                  'group flex h-full w-full flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-card transition-all active:scale-[0.98]',
-                  accent === 'pink' ? 'hover:border-pink-200' : 'hover:border-blue-200',
-                  'hover:shadow-elevated',
+                  'group flex h-full w-full flex-col items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-card transition-all active:scale-[0.98]',
+                  'hover:border-blue-200',
+                  'hover:shadow-sm',
                 )}
               >
-                <span className={cn('flex size-11 items-center justify-center rounded-2xl', meta.tint)}>
+                <span className={cn('flex size-11 items-center justify-center rounded-xl', meta.tint)}>
                   <Icon className={cn('size-5', meta.iconTint)} />
                 </span>
                 <span>
@@ -213,7 +213,7 @@ function Timeline({ request }: { request: TenantRequest }) {
               step.state === 'done' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
               step.state === 'current' && 'border-amber-200 bg-amber-50 text-amber-700',
               step.state === 'todo' && 'border-dashed border-slate-200 text-slate-400',
-              step.state === 'bad' && 'border-red-200 bg-red-50 text-red-700',
+              step.state === 'bad' && 'border-rose-200 bg-rose-50 text-rose-700',
             )}
             title={step.at ? formatDateTime(step.at) : undefined}
           >

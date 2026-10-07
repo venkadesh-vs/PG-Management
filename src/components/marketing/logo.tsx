@@ -10,10 +10,10 @@ export function LogoMark({ className, variant = 'dark' }: { className?: string; 
   return (
     <span
       className={cn(
-        'relative flex size-9 shrink-0 items-center justify-center rounded-xl shadow-sm',
+        'relative flex size-9 shrink-0 items-center justify-center rounded-lg shadow-sm',
         variant === 'light'
           ? 'bg-white/10 ring-1 ring-inset ring-white/20 backdrop-blur'
-          : 'bg-gradient-to-br from-blue-600 to-blue-700 shadow-blue-600/25',
+          : 'bg-blue-600 shadow-blue-600/20',
         className,
       )}
     >
@@ -53,7 +53,7 @@ export function Logo({
       {showWordmark && (
         <span
           className={cn(
-            'font-display text-lg font-bold tracking-tight',
+            'font-display text-lg font-semibold tracking-tight',
             variant === 'light' ? 'text-white' : 'text-slate-900',
           )}
         >

@@ -57,7 +57,7 @@ export function LeadCard({ lead, showStatus }: { lead: LeadCardData; showStatus?
   const follow = followUpState(lead)
   const meta = STATUS_META[lead.status]
   return (
-    <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-card transition-shadow hover:shadow-elevated">
+    <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition-shadow hover:border-slate-300">
       <div className="flex items-start justify-between gap-2">
         <Link href={`/app/leads/${lead.id}`} className="min-w-0 flex-1">
           <p className="truncate font-display text-sm font-semibold text-slate-900 group-hover:text-blue-700">
@@ -102,7 +102,7 @@ export function LeadCard({ lead, showStatus }: { lead: LeadCardData; showStatus?
           <span
             className={cn(
               'rounded-full px-2 py-px text-[11px] font-semibold',
-              follow === 'overdue' && 'bg-red-50 text-red-700',
+              follow === 'overdue' && 'bg-rose-50 text-rose-700',
               follow === 'today' && 'bg-amber-50 text-amber-700',
               follow === 'later' && 'bg-slate-50 text-slate-500',
             )}

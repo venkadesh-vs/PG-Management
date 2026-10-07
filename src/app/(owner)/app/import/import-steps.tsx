@@ -96,7 +96,7 @@ export function PreviewStep({
         <div className="grid grid-cols-3 gap-2">
           <Tile label="Will import" value={counts.ready} tone="text-emerald-700" />
           <Tile label="Will skip" value={counts.skip} tone="text-slate-700" />
-          <Tile label="Has errors" value={counts.error} tone="text-red-700" />
+          <Tile label="Has errors" value={counts.error} tone="text-rose-700" />
         </div>
 
         {preview.notes.map((n) => (
@@ -105,7 +105,7 @@ export function PreviewStep({
           </p>
         ))}
         {counts.error > 0 && (
-          <div className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 text-xs text-red-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2 text-xs text-rose-800 sm:flex-row sm:items-center sm:justify-between">
             <span>
               Rows with errors are not imported. Download the error report, fix those rows in your sheet and upload it
               again — rows already imported will be skipped.
@@ -154,7 +154,7 @@ export function PreviewStep({
                 </TableHeader>
                 <TableBody>
                   {shown.slice(0, limit).map((c) => (
-                    <TableRow key={c.row} className={cn(c.status === 'error' && 'bg-red-50/40')}>
+                    <TableRow key={c.row} className={cn(c.status === 'error' && 'bg-rose-50/40')}>
                       <TableCell className="align-top text-xs text-slate-500 tabular">{c.row}</TableCell>
                       <TableCell className="align-top">
                         <p className="font-medium text-slate-800">{c.title}</p>
@@ -173,8 +173,8 @@ export function PreviewStep({
                 <li
                   key={c.row}
                   className={cn(
-                    'rounded-2xl border bg-white p-3 shadow-card',
-                    c.status === 'error' ? 'border-red-200' : 'border-slate-200',
+                    'rounded-xl border bg-white p-3 shadow-xs',
+                    c.status === 'error' ? 'border-rose-200' : 'border-slate-200',
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -283,7 +283,7 @@ function RowStatus({ check }: { check: RowCheck }) {
         </li>
       )}
       {check.errors.map((e) => (
-        <li key={e} className="flex items-start gap-1 text-red-700">
+        <li key={e} className="flex items-start gap-1 text-rose-700">
           <XCircle className="mt-px size-3.5 shrink-0" />
           {e}
         </li>
@@ -347,12 +347,12 @@ export function SummaryStep({ result, kind, onAgain }: { result: ImportResult; k
         <div className="grid grid-cols-3 gap-2">
           <Tile label="Imported" value={result.imported} tone="text-emerald-700" />
           <Tile label="Skipped" value={result.skipped} tone="text-slate-700" />
-          <Tile label="Failed" value={result.failed} tone="text-red-700" />
+          <Tile label="Failed" value={result.failed} tone="text-rose-700" />
         </div>
 
         {problems.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Not imported</p>
+            <p className="mb-2 text-xs font-medium text-slate-500">Not imported</p>
             <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
               {problems.map((o) => (
                 <li key={o.row} className="flex items-start gap-3 px-3 py-2 text-sm">
@@ -415,7 +415,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone: stri
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-2 py-2 text-center">
       <p className={cn('font-display text-2xl font-semibold tabular', tone)}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-[11px]">{label}</p>
+      <p className="text-[11px] text-slate-500">{label}</p>
     </div>
   )
 }

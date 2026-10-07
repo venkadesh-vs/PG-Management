@@ -118,7 +118,7 @@ export function ResidentsVisual() {
                 key={r.name}
                 className={cn('flex items-center gap-2.5 px-2.5 py-2 transition-colors duration-300', i === index && 'bg-blue-50/70')}
               >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-[10px] font-bold text-white">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
                   {r.name.split(' ').map((p) => p[0]).join('')}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -141,9 +141,9 @@ export function ResidentsVisual() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.35 }}
-          className="glass relative mx-3 -mt-6 rounded-2xl p-3 shadow-lift sm:absolute sm:-bottom-8 sm:-right-6 sm:mx-0 sm:mt-0 sm:w-60"
+          className="relative mx-3 -mt-6 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lift backdrop-blur sm:absolute sm:-bottom-8 sm:-right-6 sm:mx-0 sm:mt-0 sm:w-60"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Profile</p>
+          <p className="text-[10px] font-medium text-slate-400">Profile</p>
           <p className="font-display text-sm font-bold text-slate-900">{selected.name}</p>
           <div className="mt-2 space-y-1 text-[11px] text-slate-600">
             <p className="flex items-center gap-1.5">

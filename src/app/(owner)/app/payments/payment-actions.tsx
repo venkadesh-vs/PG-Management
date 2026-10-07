@@ -88,7 +88,7 @@ export function PaymentActions({
             </DropdownMenuItem>
           )}
           {canReverse && (
-            <DropdownMenuItem onSelect={() => setDialog('reverse')} className="text-red-600">
+            <DropdownMenuItem onSelect={() => setDialog('reverse')} className="text-rose-600">
               <Undo2 className="size-4" /> Reverse payment
             </DropdownMenuItem>
           )}

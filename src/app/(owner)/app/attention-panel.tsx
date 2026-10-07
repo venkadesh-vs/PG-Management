@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BedDouble, CalendarClock, ChevronRight, Clock, LogOut, PackageMinus, PhoneCall, Wallet, Inbox } from 'lucide-react'
+import { BedDouble, CalendarClock, ChevronRight, CircleCheck, Clock, LogOut, PackageMinus, PhoneCall, Wallet, Inbox } from 'lucide-react'
 import type { AttentionCounts, AttentionFlags } from '@/server/services/analytics'
 import { LONG_VACANT_DAYS } from '@/server/services/analytics'
 import { cn, formatMoney } from '@/lib/utils'
@@ -17,9 +17,9 @@ type AttentionItem = {
 }
 
 const SEVERITY: Record<Severity, { card: string; icon: string; value: string }> = {
-  red: { card: 'border-red-100 hover:border-red-200', icon: 'bg-red-50 text-red-600', value: 'text-red-700' },
-  amber: { card: 'border-amber-100 hover:border-amber-200', icon: 'bg-amber-50 text-amber-600', value: 'text-amber-700' },
-  blue: { card: 'border-blue-100 hover:border-blue-200', icon: 'bg-blue-50 text-blue-600', value: 'text-blue-700' },
+  red: { card: 'hover:border-rose-200', icon: 'bg-rose-50 text-rose-600', value: 'text-slate-900' },
+  amber: { card: 'hover:border-amber-200', icon: 'bg-amber-50 text-amber-600', value: 'text-slate-900' },
+  blue: { card: 'hover:border-blue-200', icon: 'bg-slate-100 text-slate-600', value: 'text-slate-900' },
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
@@ -125,12 +125,12 @@ export function AttentionPanel({
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center gap-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-card">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-2xl" aria-hidden>
-          🎉
+      <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600" aria-hidden>
+          <CircleCheck className="size-5" strokeWidth={1.75} />
         </span>
         <div>
-          <p className="font-display text-base font-semibold text-slate-900">All clear today</p>
+          <p className="text-sm font-semibold text-slate-900">All clear today</p>
           <p className="text-sm text-slate-500">Rent, complaints and beds are all on track. Enjoy the calm.</p>
         </div>
       </div>
@@ -140,7 +140,7 @@ export function AttentionPanel({
   return (
     <section aria-labelledby="attention-title" className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h2 id="attention-title" className="font-display text-base font-semibold text-slate-900">
+        <h2 id="attention-title" className="text-[15px] font-semibold text-slate-900">
           Needs attention
         </h2>
         <span className="text-xs font-medium text-slate-500">
@@ -155,15 +155,16 @@ export function AttentionPanel({
               <Link
                 href={item.href}
                 className={cn(
-                  'group flex h-full items-center gap-3 rounded-2xl border bg-white p-3.5 shadow-card transition-all hover:shadow-elevated',
+                  'group flex h-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-colors',
                   tone.card,
                 )}
               >
-                <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tone.icon)}>
-                  <item.icon className="size-5" />
+                <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', tone.icon)}>
+                  <item.icon className="size-[18px]" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block font-display text-xl font-semibold leading-tight tabular', tone.value)}>
+                  <span className={cn('block text-lg font-semibold leading-tight tabular', tone.value)}>
+
                     {item.value}
                   </span>
                   <span className="block text-sm leading-snug text-slate-600">{item.text}</span>

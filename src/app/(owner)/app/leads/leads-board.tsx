@@ -176,13 +176,13 @@ export function LeadsBoard({
             className={cn(
               'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition-colors',
               dueOnly
-                ? 'border-red-200 bg-red-50 text-red-700'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
                 : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
             )}
           >
             <BellRing className="size-4" /> Due today
             {dueCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 text-[11px] text-white tabular">{dueCount}</span>
+              <span className="rounded-full bg-rose-500 px-1.5 text-[11px] text-white tabular">{dueCount}</span>
             )}
           </button>
           <div className="hidden rounded-xl border border-slate-200 bg-white p-0.5 lg:flex">
@@ -291,7 +291,7 @@ export function LeadsBoard({
                     onDrop(col.status)
                   }}
                   className={cn(
-                    'flex w-64 shrink-0 flex-col rounded-2xl border bg-gradient-to-b to-transparent p-2 transition-colors',
+                    'flex w-64 shrink-0 flex-col rounded-xl border bg-slate-50/70 p-2 transition-colors',
                     col.column,
                     isOver
                       ? isSystem
@@ -301,7 +301,7 @@ export function LeadsBoard({
                   )}
                 >
                   <div className="flex items-center justify-between px-1.5 pb-2 pt-1">
-                    <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                       <span className={cn('size-2 rounded-full', col.dot)} />
                       {col.label}
                     </p>
@@ -368,7 +368,7 @@ export function LeadsBoard({
 
 function LeadTable({ leads }: { leads: LeadCardData[] }) {
   return (
-    <div className="hidden overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card lg:block">
+    <div className="hidden overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs lg:block">
       <table className="w-full text-sm">
         <thead className="bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
@@ -403,7 +403,7 @@ function LeadTable({ leads }: { leads: LeadCardData[] }) {
                 <td
                   className={cn(
                     'px-4 py-3',
-                    follow === 'overdue' ? 'font-semibold text-red-600' : follow === 'today' ? 'font-semibold text-amber-700' : 'text-slate-600',
+                    follow === 'overdue' ? 'font-semibold text-rose-600' : follow === 'today' ? 'font-semibold text-amber-700' : 'text-slate-600',
                   )}
                 >
                   {follow ? formatDate(lead.nextFollowUpAt) : '—'}

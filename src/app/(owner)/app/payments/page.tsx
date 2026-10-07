@@ -17,7 +17,7 @@ import {
 } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { ExportButton } from '@/components/app/export-button'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
@@ -225,7 +225,7 @@ export default async function PaymentsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label="Collected today"
           value={todaySum._sum.amount ?? 0}
@@ -239,7 +239,7 @@ export default async function PaymentsPage({
           value={monthSum._sum.amount ?? 0}
           format="money"
           icon="chart"
-          tone="blue"
+         
           hint={`${monthSum._count} payments`}
         />
         <StatCard
@@ -247,7 +247,7 @@ export default async function PaymentsPage({
           value={monthSum._count ? Math.round((monthSum._sum.amount ?? 0) / monthSum._count) : 0}
           format="money"
           icon="receipt"
-          tone="violet"
+         
           hint="This month"
         />
         <StatCard
@@ -258,7 +258,7 @@ export default async function PaymentsPage({
           tone="amber"
           hint={topMethod ? topMethod.method.replace('_', ' ').toLowerCase() : 'No payments yet'}
         />
-      </div>
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
@@ -383,7 +383,7 @@ export default async function PaymentsPage({
             {payments.map((payment) => (
               <li
                 key={payment.id}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

@@ -130,7 +130,7 @@ export function TaskCard({ task }: { task: WorkerTask }) {
       <Card
         className={cn(
           'overflow-hidden transition-colors',
-          overdue && 'border-red-200',
+          overdue && 'border-rose-200',
           justDone && 'border-emerald-300',
         )}
       >
@@ -176,7 +176,7 @@ export function TaskCard({ task }: { task: WorkerTask }) {
               <p
                 className={cn(
                   'mt-1 flex items-center gap-1 text-[11px]',
-                  overdue ? 'font-medium text-red-600' : 'text-slate-400',
+                  overdue ? 'font-medium text-rose-600' : 'text-slate-400',
                 )}
               >
                 <Clock className="size-3" />
@@ -219,7 +219,7 @@ export function TaskCard({ task }: { task: WorkerTask }) {
                   )}
                   {task.complaintPhotos && task.complaintPhotos.length > 0 && (
                     <div className="mt-3">
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <p className="mb-1.5 text-xs font-medium text-slate-500">
                         Photos from the resident
                       </p>
                       <PhotoGallery urls={task.complaintPhotos} size="sm" />
@@ -227,7 +227,7 @@ export function TaskCard({ task }: { task: WorkerTask }) {
                   )}
                   {task.completionPhotoUrl && (
                     <div className="mt-3">
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+                      <p className="mb-1.5 text-xs font-medium text-emerald-700">
                         Your proof photo
                       </p>
                       <PhotoGallery urls={[task.completionPhotoUrl]} size="sm" />

@@ -81,8 +81,9 @@ export function StorySection() {
   }
 
   return (
-    <section id="how" aria-labelledby="how-title" className="relative scroll-mt-24 overflow-hidden bg-slate-950 py-20 text-white sm:py-28">
-      <div className="mesh-blue absolute inset-0 opacity-50" aria-hidden />
+    <section id="how" aria-labelledby="how-title" className="relative scroll-mt-24 overflow-hidden bg-slate-950 py-16 text-white sm:py-24">
+      <div className="mesh-blue absolute inset-0 opacity-40" aria-hidden />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden />
       <div className="dot-grid absolute inset-0 opacity-[0.08] invert" aria-hidden />
 
       <div className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
@@ -93,7 +94,7 @@ export function StorySection() {
           description="Watch a single bed move through StayFlow — from vacant to profit. Every screen updates the next one, so nothing is typed twice and nothing falls through."
         />
 
-        <div ref={ref} className="mt-14 grid gap-8 lg:grid-cols-[300px_1fr] lg:gap-10">
+        <div ref={ref} className="mt-12 grid gap-8 lg:grid-cols-[300px_1fr] lg:gap-10">
           {/* --------------------------------------------- Step rail */}
           <div className="min-w-0">
             <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-1">
@@ -108,7 +109,7 @@ export function StorySection() {
                       onClick={() => jump(i)}
                       aria-current={active ? 'step' : undefined}
                       className={cn(
-                        'relative flex w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition-colors',
+                        'relative flex w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-lg border px-3 py-2.5 text-left transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
                         active
                           ? 'border-blue-400/50 bg-white/10 text-white'
@@ -120,19 +121,19 @@ export function StorySection() {
                       <span
                         className={cn(
                           'flex size-7 shrink-0 items-center justify-center rounded-lg',
-                          active ? 'bg-blue-500 text-white' : done ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5',
+                          active ? 'bg-blue-500 text-white' : done ? 'bg-white/10 text-white/80' : 'bg-white/5',
                         )}
                       >
                         {done ? <CheckCircle2 className="size-3.5" aria-hidden /> : <Icon className="size-3.5" aria-hidden />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-white/40">Step {i + 1}</span>
+                        <span className="block text-[10px] font-medium text-white/40">Step {i + 1}</span>
                         <span className="block truncate text-sm font-semibold">{s.label}</span>
                       </span>
                       {active && playing && (
                         <motion.span
                           key={`bar-${step}`}
-                          className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-blue-400 to-violet-400"
+                          className="absolute bottom-0 left-0 h-0.5 bg-blue-400"
                           initial={{ width: '0%' }}
                           animate={{ width: '100%' }}
                           transition={{ duration: (step === LAST ? STEP_MS * 1.8 : STEP_MS) / 1000, ease: 'linear' }}
@@ -189,11 +190,11 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
       ? null
       : step === 5
         ? phase === 0
-          ? { label: 'OPEN', tone: 'red' }
-          : { label: 'ASSIGNED', tone: 'blue' }
+          ? { label: 'Open', tone: 'red' }
+          : { label: 'Assigned', tone: 'blue' }
         : step === 6 && phase === 0
-          ? { label: 'IN PROGRESS', tone: 'amber' }
-          : { label: 'RESOLVED', tone: 'green' }
+          ? { label: 'In progress', tone: 'amber' }
+          : { label: 'Resolved', tone: 'green' }
 
   const focus = ['bed', 'resident', 'resident', 'invoice', 'invoice', 'complaint', 'complaint', 'profit'][step]
 
@@ -207,7 +208,7 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
             initial={{ scale: 0.8, opacity: 0.4 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 380, damping: 20 }}
-            className={cn('flex size-14 shrink-0 items-center justify-center rounded-xl border-2 font-display text-sm font-bold', BED_STYLES[bed].tile)}
+            className={cn('flex size-14 shrink-0 items-center justify-center rounded-lg border font-display text-sm font-semibold', BED_STYLES[bed].tile)}
           >
             204A
           </motion.div>
@@ -227,7 +228,7 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
             <p className="py-3 text-sm text-slate-400">No booking yet — the bed is listed as vacant.</p>
           ) : (
             <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-sm font-bold text-white">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
                 AK
               </span>
               <div className="min-w-0">
@@ -271,9 +272,9 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
                 <Pill tone={complaint.tone}>{complaint.label}</Pill>
               </div>
               <p className="mt-1 truncate text-xs text-slate-500">
-                {complaint.label === 'OPEN'
+                {complaint.label === 'Open'
                   ? 'Raised by Arjun · Room 204'
-                  : complaint.label === 'RESOLVED'
+                  : complaint.label === 'Resolved'
                     ? 'Fixed by Ravi · photo attached · 42 min'
                     : 'Assigned to Ravi (maintenance)'}
               </p>
@@ -287,10 +288,8 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
       {/* Profit */}
       <div
         className={cn(
-          'relative overflow-hidden rounded-2xl border p-4 transition-all duration-500 sm:col-span-2',
-          focus === 'profit'
-            ? 'border-emerald-300/60 bg-gradient-to-br from-emerald-50 to-white shadow-[0_0_0_4px_rgb(16_185_129/0.15)]'
-            : 'border-white/10 bg-white',
+          'relative overflow-hidden rounded-xl border bg-white p-4 transition-all duration-500 sm:col-span-2',
+          focus === 'profit' ? 'border-blue-300 shadow-[0_0_0_4px_rgb(104_99_238/0.22)]' : 'border-white/10',
         )}
       >
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -299,28 +298,28 @@ function Stage({ step, phase }: { step: number; phase: 0 | 1 }) {
               <TrendingUp className="size-3.5 text-emerald-600" />
               Profit this month · Sree Balaji PG
             </p>
-            <p className="mt-1 font-display text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+            <p className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
               <Counter value={step === LAST ? 127400 : 118400} />
             </p>
           </div>
           <div className="flex gap-4 text-xs">
             <div>
               <p className="text-slate-400">Occupancy</p>
-              <p className="font-semibold text-violet-700 tabular">{step >= 2 ? '43 / 48' : '42 / 48'}</p>
+              <p className="font-semibold text-slate-900 tabular">{step >= 2 ? '43 / 48' : '42 / 48'}</p>
             </div>
             <div>
               <p className="text-slate-400">Collected</p>
-              <p className="font-semibold text-emerald-700 tabular">{step >= 4 && !(step === 4 && phase === 0) ? '₹3.29L' : '₹3.20L'}</p>
+              <p className="font-semibold text-slate-900 tabular">{step >= 4 && !(step === 4 && phase === 0) ? '₹3.29L' : '₹3.20L'}</p>
             </div>
             <div>
               <p className="text-slate-400">Open tickets</p>
-              <p className="font-semibold text-slate-700 tabular">{step === 5 || (step === 6 && phase === 0) ? '4' : '3'}</p>
+              <p className="font-semibold text-slate-900 tabular">{step === 5 || (step === 6 && phase === 0) ? '4' : '3'}</p>
             </div>
           </div>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-violet-500 to-emerald-500"
+            className="h-full rounded-full bg-blue-600"
             animate={{ width: step === LAST ? '78%' : '72%' }}
             transition={{ duration: 1, ease: EASE_OUT }}
           />
@@ -348,8 +347,8 @@ function StageCard({
       animate={{ scale: focus ? 1.02 : 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
       className={cn(
-        'min-w-0 rounded-2xl border bg-white p-4 text-slate-900 transition-shadow duration-500',
-        focus ? 'border-blue-300 shadow-[0_0_0_4px_rgb(104_99_238/0.25),0_20px_40px_-20px_rgb(82_72_224/0.6)]' : 'border-white/10',
+        'min-w-0 rounded-xl border bg-white p-4 text-slate-900 transition-shadow duration-500',
+        focus ? 'border-blue-300 shadow-[0_0_0_4px_rgb(104_99_238/0.22)]' : 'border-white/10',
       )}
     >
       <div className="mb-3 flex items-center justify-between gap-2">

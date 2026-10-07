@@ -7,7 +7,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-slate-50 px-6 text-center">
       <LogoMark className="size-12" />
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-white shadow-card">
+      <div className="flex size-14 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-xs">
         <SearchX className="size-6 text-slate-400" />
       </div>
       <div className="max-w-sm space-y-2">

@@ -175,16 +175,16 @@ export default async function AdminOrganizationPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Monthly revenue" value={mrr} format="money" icon="sparkles" tone="violet" hint={`${org.subscriptions.length} subscriptions`} />
-        <StatCard label="PGs" value={org._count.properties} icon="building" tone="blue" hint={`${occupancy.total} beds`} />
-        <StatCard label="Residents" value={org._count.residents} icon="users" tone="emerald" hint={`${occupancy.rate}% occupancy`} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard label="Monthly revenue" value={mrr} format="money" icon="sparkles" hint={`${org.subscriptions.length} subscriptions`} />
+        <StatCard label="PGs" value={org._count.properties} icon="building" hint={`${occupancy.total} beds`} />
+        <StatCard label="Residents" value={org._count.residents} icon="users" hint={`${occupancy.rate}% occupancy`} />
         <StatCard
           label="Outstanding to us"
           value={outstanding}
           format="money"
           icon="warning"
-          tone={outstanding > 0 ? 'amber' : 'emerald'}
+          tone={outstanding > 0 ? 'amber' : undefined}
         />
       </div>
 
@@ -252,7 +252,7 @@ export default async function AdminOrganizationPage({
                       </Badge>
                     )}
                     <Badge variant={member.role === 'OWNER' ? 'blue' : 'outline'} size="sm">
-                      {member.role.toLowerCase()}
+                      {member.role.charAt(0) + member.role.slice(1).toLowerCase().replace(/_/g, ' ')}
                     </Badge>
                   </div>
                 </li>
@@ -332,7 +332,7 @@ export default async function AdminOrganizationPage({
                     <div
                       className={cn(
                         'h-full rounded-full',
-                        row.percent >= 100 ? 'bg-red-500' : row.percent >= 80 ? 'bg-amber-500' : 'bg-emerald-500',
+                        row.percent >= 100 ? 'bg-rose-500' : row.percent >= 80 ? 'bg-amber-500' : 'bg-emerald-500',
                       )}
                       style={{ width: `${row.percent}%` }}
                     />
@@ -395,7 +395,6 @@ export default async function AdminOrganizationPage({
             const theme = themeFor(property.type)
             return (
               <Card key={property.id} className="overflow-hidden">
-                <div className={cn('h-1.5 bg-gradient-to-r', theme.gradient)} />
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -509,7 +508,7 @@ export default async function AdminOrganizationPage({
               return (
                 <li
                   key={invoice.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-mono text-sm font-medium text-slate-900">
@@ -614,7 +613,7 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg bg-slate-50 px-1.5 py-1.5">
       <p className="font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
     </div>
   )
 }

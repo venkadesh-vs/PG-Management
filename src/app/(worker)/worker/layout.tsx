@@ -30,7 +30,7 @@ export default async function WorkerLayout({ children }: { children: React.React
       subtitle={subtitle}
       unread={unread}
       installName={PWA_APPS.worker.shortName}
-      accent="amber"
+      accent="blue"
     >
       {children}
     </MobileShell>

@@ -69,8 +69,8 @@ export function MobileShell({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-slate-50/70">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-lg">
+    <div className="flex min-h-dvh flex-col bg-slate-50">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-4">
           <LogoMark className="size-8" />
           <div className="min-w-0 flex-1">
@@ -83,12 +83,12 @@ export function MobileShell({
             aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
             className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
           >
-            <Bell className="size-[18px]" />
+            <Bell className="size-[18px]" strokeWidth={1.75} />
             {unread > 0 && (
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white tabular"
+                className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular ring-2 ring-white"
               >
                 {unread > 9 ? '9+' : unread}
               </motion.span>
@@ -161,7 +161,8 @@ export function MobileShell({
                 )}
                 <Icon
                   name={item.icon}
-                  className={cn('size-5', active ? accents.text : 'text-slate-400')}
+                  className={cn('size-5', active ? accents.text : 'text-slate-500')}
+                  strokeWidth={1.75}
                 />
                 <span
                   className={cn(

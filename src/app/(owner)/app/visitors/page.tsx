@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
 import { addDays, cn, formatDateTime, formatPhone, startOfDay } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
@@ -174,8 +174,8 @@ export default async function VisitorsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-        <StatCard label="Today" value={todayCount} icon="userPlus" tone="blue" hint="Visitors signed in" />
+      <StatGrid cols={3}>
+        <StatCard label="Today" value={todayCount} icon="userPlus" hint="Visitors signed in" />
         <StatCard
           label="Still inside"
           value={insideNow}
@@ -183,11 +183,11 @@ export default async function VisitorsPage({
           tone={insideNow > 0 ? 'amber' : 'emerald'}
           hint="Not signed out yet"
         />
-        <StatCard label="All records" value={total} icon="clipboard" tone="violet" />
-      </div>
+        <StatCard label="All records" value={total} icon="clipboard" />
+      </StatGrid>
 
       {expected.length > 0 && (
-        <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 shadow-card">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
           <h2 className="font-display text-sm font-semibold text-slate-900">
             Expected today <span className="font-normal text-slate-500">· pre-approved by the PG</span>
           </h2>
@@ -300,7 +300,7 @@ export default async function VisitorsPage({
             {visitors.map((visitor) => (
               <li
                 key={visitor.id}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

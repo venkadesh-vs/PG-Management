@@ -234,8 +234,8 @@ export function PayRentButton({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-center">
-                      <p className="text-xs uppercase tracking-wide text-slate-500">Amount</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-center">
+                      <p className="text-xs font-medium text-slate-500">Amount</p>
                       <p className="font-display text-3xl font-semibold text-slate-900 tabular">
                         {formatMoney(order.amount)}
                       </p>
@@ -266,7 +266,7 @@ export function PayRentButton({
                     )}
 
                     {(order.upiLink || order.upiId) && order.mode === 'razorpay' && (
-                      <p className="text-center text-[11px] uppercase tracking-wide text-slate-400">
+                      <p className="text-center text-xs text-slate-500">
                         or pay by UPI yourself
                       </p>
                     )}
@@ -276,8 +276,8 @@ export function PayRentButton({
                         href={order.upiLink}
                         className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition-colors hover:bg-slate-50"
                       >
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-50">
-                          <Smartphone className="size-4 text-emerald-600" />
+                        <div className="flex size-9 items-center justify-center rounded-lg bg-slate-100">
+                          <Smartphone className="size-4 text-slate-600" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-800">Pay by UPI app</p>
@@ -294,8 +294,8 @@ export function PayRentButton({
                         onClick={copyUpi}
                         className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition-colors hover:bg-slate-50"
                       >
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-sky-50">
-                          <QrCode className="size-4 text-sky-600" />
+                        <div className="flex size-9 items-center justify-center rounded-lg bg-slate-100">
+                          <QrCode className="size-4 text-slate-600" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-800">Copy UPI ID</p>

@@ -30,7 +30,7 @@ type QuickActionDef = {
   label: string
   hint: string
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   tone: string
   module?: string
   permission?: string
@@ -39,16 +39,16 @@ type QuickActionDef = {
 }
 
 const ACTIONS: QuickActionDef[] = [
-  { key: 'checkin', label: 'Add resident', hint: 'Check in — bed, rent and deposit', href: '/app/residents/new', icon: UserPlus, tone: 'bg-blue-50 text-blue-600', module: 'residents', permission: 'residents.manage' },
+  { key: 'checkin', label: 'Add resident', hint: 'Check in — bed, rent and deposit', href: '/app/residents/new', icon: UserPlus, tone: 'bg-slate-100 text-slate-600', module: 'residents', permission: 'residents.manage' },
   // The payments page has no ?record=1 hook yet, so this lands on the page
   // where the "Record payment" button lives.
-  { key: 'payment', label: 'Collect rent', hint: 'Record cash, UPI or bank payment', href: '/app/payments', icon: Wallet, tone: 'bg-emerald-50 text-emerald-600', module: 'rent', permission: 'payments.record' },
-  { key: 'expense', label: 'Add expense', hint: 'Bills, groceries, repairs', href: '/app/expenses?new=1', icon: Receipt, tone: 'bg-red-50 text-red-600', module: 'expenses', permission: 'expenses.manage' },
-  { key: 'complaint', label: 'Complaint', hint: 'Log an issue and assign it', href: '/app/complaints?new=1', icon: Wrench, tone: 'bg-amber-50 text-amber-600', module: 'complaints', permission: 'complaints.manage' },
-  { key: 'visitor', label: 'Visitor', hint: 'Sign a guest in', href: '/app/visitors?new=1', icon: UserCheck, tone: 'bg-sky-50 text-sky-600', module: 'visitors', permission: 'visitors.manage' },
-  { key: 'checkout', label: 'Checkout', hint: 'Pick a resident and settle their deposit', href: '/app/residents', icon: DoorOpen, tone: 'bg-rose-50 text-rose-600', module: 'residents', permission: 'residents.checkout', picker: 'checkout' },
-  { key: 'announcement', label: 'Announcement', hint: 'Notify residents of a PG', href: '/app/announcements', icon: Megaphone, tone: 'bg-indigo-50 text-indigo-600', module: 'announcements', permission: 'announcements.send' },
-  { key: 'enquiry', label: 'Add enquiry', hint: 'Someone asked about a bed', href: '/app/leads?new=1', icon: ClipboardList, tone: 'bg-violet-50 text-violet-600', module: 'leads', permission: 'leads.manage' },
+  { key: 'payment', label: 'Collect rent', hint: 'Record cash, UPI or bank payment', href: '/app/payments', icon: Wallet, tone: 'bg-slate-100 text-slate-600', module: 'rent', permission: 'payments.record' },
+  { key: 'expense', label: 'Add expense', hint: 'Bills, groceries, repairs', href: '/app/expenses?new=1', icon: Receipt, tone: 'bg-slate-100 text-slate-600', module: 'expenses', permission: 'expenses.manage' },
+  { key: 'complaint', label: 'Complaint', hint: 'Log an issue and assign it', href: '/app/complaints?new=1', icon: Wrench, tone: 'bg-slate-100 text-slate-600', module: 'complaints', permission: 'complaints.manage' },
+  { key: 'visitor', label: 'Visitor', hint: 'Sign a guest in', href: '/app/visitors?new=1', icon: UserCheck, tone: 'bg-slate-100 text-slate-600', module: 'visitors', permission: 'visitors.manage' },
+  { key: 'checkout', label: 'Checkout', hint: 'Pick a resident and settle their deposit', href: '/app/residents', icon: DoorOpen, tone: 'bg-slate-100 text-slate-600', module: 'residents', permission: 'residents.checkout', picker: 'checkout' },
+  { key: 'announcement', label: 'Announcement', hint: 'Notify residents of a PG', href: '/app/announcements', icon: Megaphone, tone: 'bg-slate-100 text-slate-600', module: 'announcements', permission: 'announcements.send' },
+  { key: 'enquiry', label: 'Add enquiry', hint: 'Someone asked about a bed', href: '/app/leads?new=1', icon: ClipboardList, tone: 'bg-slate-100 text-slate-600', module: 'leads', permission: 'leads.manage' },
 ]
 
 /** The quick actions this person may take (owners hold every permission). */
@@ -71,7 +71,12 @@ function withProperty(href: string, propertyId: string | null) {
  * header button on desktop. Both open the same staggered list; it closes on
  * navigation, Escape or a tap outside.
  */
-export function QuickAction({ access, variant }: { access: ShellAccess; variant: 'fab' | 'header' }) {
+/**
+ * `tab` renders the + as the centre slot of the phone bottom nav (it never
+ * floats over page content); `fab` is the older floating button, kept for
+ * compatibility.
+ */
+export function QuickAction({ access, variant }: { access: ShellAccess; variant: 'fab' | 'header' | 'tab' }) {
   const actions = React.useMemo(() => quickActionsFor(access), [access])
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -157,7 +162,7 @@ export function QuickAction({ access, variant }: { access: ShellAccess; variant:
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-haspopup="menu"
-          className="flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-xs transition-colors hover:bg-blue-700"
         >
           <motion.span animate={{ rotate: open ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 22 }}>
             <Plus className="size-4" />
@@ -172,7 +177,7 @@ export function QuickAction({ access, variant }: { access: ShellAccess; variant:
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              className="absolute right-0 top-11 z-40 w-80 origin-top-right rounded-2xl border border-slate-200 bg-white p-2 shadow-elevated"
+              className="absolute right-0 top-11 z-40 w-80 origin-top-right rounded-xl border border-slate-200 bg-white p-1.5 shadow-elevated"
             >
               {content}
             </motion.div>
@@ -221,19 +226,31 @@ export function QuickAction({ access, variant }: { access: ShellAccess; variant:
         )}
       </AnimatePresence>
 
-      <motion.button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Quick action"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        whileTap={{ scale: 0.92 }}
-        transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.25rem)' }}
-        className="fixed right-4 z-30 flex size-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-elevated ring-4 ring-white/70 transition-colors active:bg-blue-700"
-      >
-        <Plus className="size-6" />
-      </motion.button>
+      {variant === 'tab' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Quick action"
+          aria-haspopup="dialog"
+          className="mx-auto -mt-3 flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_6px_16px_-6px_rgb(82_72_224/0.6)] ring-4 ring-white transition-colors active:bg-blue-700"
+        >
+          <Plus className="size-6" strokeWidth={2} />
+        </button>
+      ) : (
+        <motion.button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Quick action"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: 'spring', stiffness: 460, damping: 24 }}
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.25rem)' }}
+          className="fixed right-4 z-30 flex size-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-elevated ring-4 ring-white/70 transition-colors active:bg-blue-700"
+        >
+          <Plus className="size-6" />
+        </motion.button>
+      )}
     </div>
   )
 }
@@ -241,11 +258,11 @@ export function QuickAction({ access, variant }: { access: ShellAccess; variant:
 function ActionRow({ action }: { action: QuickActionDef }) {
   return (
     <>
-      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', action.tone)}>
-        <action.icon className="size-[18px]" />
+      <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', action.tone)}>
+        <action.icon className="size-[18px]" strokeWidth={1.75} />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-slate-800">{action.label}</span>
+        <span className="block truncate text-sm font-medium text-slate-900">{action.label}</span>
         <span className="block truncate text-xs text-slate-500">{action.hint}</span>
       </span>
     </>

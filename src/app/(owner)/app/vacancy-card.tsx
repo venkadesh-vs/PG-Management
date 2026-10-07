@@ -14,7 +14,7 @@ export function VacancyCard({ insight, showPerProperty }: { insight: VacancyInsi
     <Card className="h-full">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <TrendingDown className="size-4 text-amber-500" />
+          <TrendingDown className="size-4 text-slate-400" strokeWidth={1.75} />
           Vacancy intelligence
         </CardTitle>
       </CardHeader>
@@ -25,11 +25,11 @@ export function VacancyCard({ insight, showPerProperty }: { insight: VacancyInsi
           </p>
         ) : (
           <>
-            <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4">
+            <div className="rounded-lg border border-amber-200/70 bg-amber-50/50 p-4">
               <p className="text-sm text-slate-600">You are losing approximately</p>
-              <p className="font-display text-2xl font-semibold tracking-tight text-amber-700 sm:text-3xl">
+              <p className="font-display text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
                 <AnimatedNumber value={insight.monthlyLoss} format="money" />
-                <span className="text-base font-medium text-amber-600">/month</span>
+                <span className="text-base font-medium text-slate-500">/month</span>
               </p>
               <p className="text-sm text-slate-600">from vacant capacity.</p>
             </div>
@@ -85,8 +85,8 @@ export function VacancyCard({ insight, showPerProperty }: { insight: VacancyInsi
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+    <div className="rounded-lg bg-slate-50 px-3 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
       <p className="font-display text-base font-semibold text-slate-900 tabular">{value}</p>
     </div>
   )

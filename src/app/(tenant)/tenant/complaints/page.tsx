@@ -68,7 +68,7 @@ export default async function TenantComplaintsPage() {
             return (
               <li key={complaint.id}>
                 <Link href={`/tenant/complaints/${complaint.id}`}>
-                  <Card className="transition-shadow hover:shadow-elevated">
+                  <Card className="transition-shadow hover:shadow-sm">
                     <CardContent className="flex items-center gap-3 p-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">

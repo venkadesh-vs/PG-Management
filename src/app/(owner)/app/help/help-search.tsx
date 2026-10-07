@@ -48,7 +48,7 @@ export function HelpSearch({ articles, supportHref }: { articles: HelpArticle[];
           if (!rows.length) return null
           return (
             <section key={section} className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{section}</h2>
+              <h2 className="text-xs font-medium text-slate-500">{section}</h2>
               <div className="grid gap-2 md:grid-cols-2">
                 {rows.map((a) => (
                   <Link key={a.slug} href={`/app/help/${a.slug}`} className="block min-w-0">

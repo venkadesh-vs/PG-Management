@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { addDays } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Button } from '@/components/ui/button'
 import { leadScopeWhere, leadStats } from '@/server/services/leads'
 import { LeadsBoard } from './leads-board'
@@ -101,8 +101,8 @@ export default async function LeadsPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="New this week" value={stats.newThisWeek} icon="sparkles" tone="blue" hint={stats.dueToday ? `${stats.dueToday} to follow up today` : 'All caught up'} />
+      <StatGrid cols={4}>
+        <StatCard label="New this week" value={stats.newThisWeek} icon="sparkles" hint={stats.dueToday ? `${stats.dueToday} to follow up today` : 'All caught up'} />
         <StatCard label="Visits scheduled" value={stats.visitsScheduled} icon="calendar" tone="amber" hint="Upcoming" />
         <StatCard
           label="Conversion"
@@ -113,7 +113,7 @@ export default async function LeadsPage({
           hint={`${stats.checkedIn30} of ${stats.total30} checked in · 30 days`}
         />
         <StatCard label="Lost" value={stats.lost30} icon="trendingDown" tone="red" hint="Last 30 days" />
-      </div>
+      </StatGrid>
 
       <LeadsBoard
         leads={leads}

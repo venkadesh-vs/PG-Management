@@ -28,6 +28,8 @@ const WHATSAPP_MESSAGE = "Hi, I manage a PG and I'm interested in seeing a demo 
  */
 export function SiteHeader() {
   const [scrolled, setScrolled] = React.useState(false)
+  // The sticky phone CTA appears once the hero's own buttons have scrolled away.
+  const [pastHero, setPastHero] = React.useState(false)
   const [open, setOpen] = React.useState(false)
   const reduce = useReducedMotion()
   const wa = whatsappLink(WHATSAPP_MESSAGE)
@@ -35,6 +37,7 @@ export function SiteHeader() {
   React.useEffect(() => {
     function onScroll() {
       setScrolled(window.scrollY > 16)
+      setPastHero(window.scrollY > 560)
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -146,7 +149,7 @@ export function SiteHeader() {
                     hidden: reduce ? { opacity: 1 } : { opacity: 0, y: 18 },
                     show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT } },
                   }}
-                  className="border-b border-slate-200/70 py-4 font-display text-2xl font-bold tracking-tight text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                  className="border-b border-slate-200/70 py-4 font-display text-xl font-semibold tracking-tight text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                 >
                   {item.label}
                 </motion.a>
@@ -176,7 +179,13 @@ export function SiteHeader() {
 
       {/* Sticky phone CTA — the primary conversion path on a small screen. */}
       {!open && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/85 p-3 pb-safe backdrop-blur-xl sm:hidden">
+        <div
+          className={cn(
+            'fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/90 p-3 pb-safe backdrop-blur-xl transition-transform duration-300 sm:hidden',
+            pastHero ? 'translate-y-0' : 'pointer-events-none translate-y-full',
+          )}
+          inert={!pastHero}
+        >
           <div className="flex gap-2">
             <Button variant="primary" className="flex-1" asChild>
               <a href="/signup">Start free</a>
@@ -285,7 +294,7 @@ export function SiteFooter() {
 function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
     <nav aria-label={title} className="min-w-0">
-      <p className="text-xs font-semibold uppercase tracking-wider text-white/40">{title}</p>
+      <p className="text-sm font-medium text-white/45">{title}</p>
       <ul className="mt-4 space-y-2.5 text-sm">
         {links.map((link) => (
           <li key={link.href + link.label}>

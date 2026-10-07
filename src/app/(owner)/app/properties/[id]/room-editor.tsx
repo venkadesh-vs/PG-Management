@@ -395,7 +395,7 @@ export function RoomEditDialog({
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-medium text-slate-500">
                   Beds ({room.beds.length})
                 </p>
                 <Button
@@ -437,7 +437,7 @@ export function RoomEditDialog({
                         title={blocker ?? (room.beds.length <= 1 ? 'Last bed — delete the room instead' : 'Delete bed')}
                         disabled={busy || Boolean(blocker) || room.beds.length <= 1}
                         onClick={() => setBedToDelete(bed)}
-                        className={cn(!blocker && room.beds.length > 1 && 'text-red-600 hover:bg-red-50')}
+                        className={cn(!blocker && room.beds.length > 1 && 'text-rose-600 hover:bg-rose-50')}
                       >
                         <Trash2 className="size-4" />
                       </Button>

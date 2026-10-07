@@ -109,7 +109,7 @@ export const BED_STATUS_STYLE: Record<
   AVAILABLE: {
     label: 'Available',
     dot: 'bg-emerald-500',
-    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
     tile: 'bg-emerald-50 border-emerald-200 hover:border-emerald-400',
     tileText: 'text-emerald-700',
   },
@@ -123,16 +123,16 @@ export const BED_STATUS_STYLE: Record<
   RESERVED: {
     label: 'Reserved',
     dot: 'bg-amber-500',
-    chip: 'bg-amber-50 text-amber-700 border-amber-200',
+    chip: 'bg-amber-50 text-amber-800 border-amber-200/70',
     tile: 'bg-amber-50 border-amber-200 hover:border-amber-400',
     tileText: 'text-amber-700',
   },
   MAINTENANCE: {
     label: 'Maintenance',
-    dot: 'bg-orange-500',
-    chip: 'bg-orange-50 text-orange-700 border-orange-200',
-    tile: 'bg-orange-50 border-orange-200 hover:border-orange-400',
-    tileText: 'text-orange-700',
+    dot: 'bg-slate-500 ring-2 ring-slate-200',
+    chip: 'bg-slate-100 text-slate-600 border-slate-200',
+    tile: 'bg-slate-50 border-dashed border-slate-300 hover:border-slate-400',
+    tileText: 'text-slate-500',
   },
   BLOCKED: {
     label: 'Blocked',
@@ -145,55 +145,56 @@ export const BED_STATUS_STYLE: Record<
 
 export const INVOICE_STATUS_STYLE: Record<InvoiceStatus, { label: string; chip: string }> = {
   DRAFT: { label: 'Draft', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
-  PENDING: { label: 'Pending', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  PARTIALLY_PAID: { label: 'Part paid', chip: 'bg-sky-50 text-sky-700 border-sky-200' },
-  PAID: { label: 'Paid', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  OVERDUE: { label: 'Overdue', chip: 'bg-red-50 text-red-700 border-red-200' },
-  WAIVED: { label: 'Waived', chip: 'bg-violet-50 text-violet-700 border-violet-200' },
+  PENDING: { label: 'Pending', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  PARTIALLY_PAID: { label: 'Part paid', chip: 'bg-sky-50 text-sky-700 border-sky-200/70' },
+  PAID: { label: 'Paid', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/70' },
+  OVERDUE: { label: 'Overdue', chip: 'bg-rose-50 text-rose-700 border-rose-200/70' },
+  WAIVED: { label: 'Waived', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
   CANCELLED: { label: 'Cancelled', chip: 'bg-slate-100 text-slate-500 border-slate-200' },
 }
 
 export const COMPLAINT_STATUS_STYLE: Record<ComplaintStatus, { label: string; chip: string }> = {
-  OPEN: { label: 'Open', chip: 'bg-red-50 text-red-700 border-red-200' },
-  ASSIGNED: { label: 'Assigned', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  IN_PROGRESS: { label: 'In progress', chip: 'bg-sky-50 text-sky-700 border-sky-200' },
+  OPEN: { label: 'Open', chip: 'bg-rose-50 text-rose-700 border-rose-200/70' },
+  ASSIGNED: { label: 'Assigned', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  IN_PROGRESS: { label: 'In progress', chip: 'bg-sky-50 text-sky-700 border-sky-200/70' },
   ON_HOLD: { label: 'On hold', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
-  RESOLVED: { label: 'Resolved', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  RESOLVED: { label: 'Resolved', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/70' },
   CLOSED: { label: 'Closed', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
   REJECTED: { label: 'Rejected', chip: 'bg-slate-100 text-slate-500 border-slate-200' },
 }
 
 export const PRIORITY_STYLE: Record<string, { label: string; chip: string }> = {
   LOW: { label: 'Low', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
-  MEDIUM: { label: 'Medium', chip: 'bg-sky-50 text-sky-700 border-sky-200' },
-  HIGH: { label: 'High', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  URGENT: { label: 'Urgent', chip: 'bg-red-50 text-red-700 border-red-200' },
+  MEDIUM: { label: 'Medium', chip: 'bg-sky-50 text-sky-700 border-sky-200/70' },
+  HIGH: { label: 'High', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  URGENT: { label: 'Urgent', chip: 'bg-rose-50 text-rose-700 border-rose-200/70' },
 }
 
 export const RESIDENT_STATUS_STYLE: Record<string, { label: string; chip: string }> = {
-  PENDING: { label: 'Pending', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  ACTIVE: { label: 'Active', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  NOTICE: { label: 'On notice', chip: 'bg-orange-50 text-orange-700 border-orange-200' },
+  PENDING: { label: 'Pending', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  ACTIVE: { label: 'Active', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/70' },
+  NOTICE: { label: 'On notice', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
   CHECKED_OUT: { label: 'Checked out', chip: 'bg-slate-100 text-slate-600 border-slate-200' },
 }
 
 export const SUBSCRIPTION_STATUS_STYLE: Record<string, { label: string; chip: string }> = {
-  TRIALING: { label: 'Trial', chip: 'bg-violet-50 text-violet-700 border-violet-200' },
-  ACTIVE: { label: 'Active', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  PAST_DUE: { label: 'Past due', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  GRACE: { label: 'Grace period', chip: 'bg-orange-50 text-orange-700 border-orange-200' },
-  SUSPENDED: { label: 'Suspended', chip: 'bg-red-50 text-red-700 border-red-200' },
+  TRIALING: { label: 'Trial', chip: 'bg-blue-50 text-blue-700 border-blue-200/70' },
+  ACTIVE: { label: 'Active', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/70' },
+  PAST_DUE: { label: 'Past due', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  GRACE: { label: 'Grace period', chip: 'bg-amber-50 text-amber-800 border-amber-200/70' },
+  SUSPENDED: { label: 'Suspended', chip: 'bg-rose-50 text-rose-700 border-rose-200/70' },
   CANCELLED: { label: 'Cancelled', chip: 'bg-slate-100 text-slate-500 border-slate-200' },
 }
 
 /** Chart palette — brand-consistent, colour-blind safe ordering. */
 export const CHART_COLORS = [
-  '#2563eb',
-  '#db2777',
+  // Brand indigo first, then calm companions; red/amber are kept for meaning.
+  '#5248e0',
+  '#94a3b8',
   '#0d9488',
   '#f59e0b',
-  '#7c3aed',
-  '#ef4444',
+  '#8582f6',
+  '#e11d48',
   '#0ea5e9',
-  '#84cc16',
+  '#57524d',
 ]

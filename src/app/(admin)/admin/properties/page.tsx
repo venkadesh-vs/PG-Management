@@ -86,15 +86,14 @@ export default async function AdminPropertiesPage({
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'PG Properties' }]}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total PGs" value={total} icon="building" tone="blue" />
-        <StatCard label="Men's PGs" value={countType('MENS')} icon="users" tone="blue" />
-        <StatCard label="Women's PGs" value={countType('WOMENS')} icon="users" tone="pink" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard label="Total PGs" value={total} icon="building" />
+        <StatCard label="Men's PGs" value={countType('MENS')} icon="users" />
+        <StatCard label="Women's PGs" value={countType('WOMENS')} icon="users" />
         <StatCard
           label="Beds under management"
           value={totalBeds}
           icon="bed"
-          tone="violet"
           hint={`${percent(occupiedBeds, totalBeds)}% occupied`}
         />
       </div>
@@ -201,7 +200,7 @@ export default async function AdminPropertiesPage({
               return (
                 <li
                   key={property.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">

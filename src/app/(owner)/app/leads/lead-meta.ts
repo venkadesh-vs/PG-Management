@@ -62,7 +62,7 @@ export const BOOKING_STATUS: Record<string, { label: string; chip: string; dot: 
   CONFIRMED: { label: 'Confirmed', chip: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-600' },
   CHECKED_IN: { label: 'Checked in', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
   CANCELLED: { label: 'Cancelled', chip: 'bg-slate-100 text-slate-500 border-slate-200', dot: 'bg-slate-400' },
-  EXPIRED: { label: 'Expired', chip: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+  EXPIRED: { label: 'Expired', chip: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
 }
 
 export const TOKEN_METHODS = [

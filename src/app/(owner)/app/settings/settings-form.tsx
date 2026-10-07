@@ -333,7 +333,7 @@ export function SettingsForm({
               </label>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-medium text-slate-500">
                   With these settings a resident receives
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-slate-600">
@@ -503,7 +503,7 @@ function Detail({
 }) {
   return (
     <div className={className}>
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-0.5 text-sm capitalize text-slate-800">{value || '—'}</dd>
     </div>
   )

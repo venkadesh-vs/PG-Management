@@ -4,7 +4,7 @@ import { CardSkeleton, Skeleton } from '@/components/ui/feedback'
 export default function Loading() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading">
-      <Skeleton className="h-32 w-full rounded-3xl" />
+      <Skeleton className="h-32 w-full rounded-xl" />
       <CardSkeleton />
       <CardSkeleton />
     </div>

@@ -126,15 +126,15 @@ export function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
       className={cn(
-        'flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 text-center',
+        'flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white text-center',
         compact ? 'gap-2 p-6' : 'gap-3 p-10',
         className,
       )}
     >
       {Icon && (
         <div className="relative">
-          <div className="absolute inset-0 animate-pulse-ring rounded-2xl bg-blue-500/10" />
-          <div className="relative flex size-12 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+          
+          <div className="relative flex size-11 items-center justify-center rounded-xl bg-slate-50 ring-1 ring-inset ring-slate-200">
             <Icon className="size-5 text-slate-400" />
           </div>
         </div>

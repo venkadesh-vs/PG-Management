@@ -77,7 +77,7 @@ export function MealServedCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+              <p className="text-sm font-semibold capitalize text-slate-900">
                 {meal.type.toLowerCase()}
               </p>
               <span className="text-[11px] text-slate-400">{MEAL_TIME[meal.type]}</span>
@@ -101,7 +101,7 @@ export function MealServedCard({
             <p className={cn('font-display text-2xl font-semibold tabular', theme.text)}>
               {meal.expected}
             </p>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">expected</p>
+            <p className="text-[11px] font-medium text-slate-500">Expected</p>
           </div>
         </div>
 

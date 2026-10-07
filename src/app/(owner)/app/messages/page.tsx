@@ -13,7 +13,7 @@ import { CENTRE_CHANNELS, CENTRE_CHANNEL_LABEL, CENTRE_STATUSES, CENTRE_STATUS_L
 import { MESSAGE_GROUPS } from '@/lib/notification-prefs'
 import { formatDateTime, relativeTime } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -112,23 +112,23 @@ export default async function MessagesPage({
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <StatGrid cols={4}>
         <StatCard
           label={live ? 'Sent by WhatsApp / email' : 'Held in demo'}
           value={live ? centre.stats.sent : centre.stats.demo}
           icon={live ? 'check' : 'warning'}
           tone={live ? 'emerald' : 'amber'}
         />
-        <StatCard label="Read on WhatsApp" value={centre.stats.read} icon="messages" tone="blue" />
+        <StatCard label="Read on WhatsApp" value={centre.stats.read} icon="messages" />
         <StatCard label="Failed" value={centre.stats.failed} icon="warning" tone={centre.stats.failed ? 'red' : 'emerald'} />
         <StatCard
           label="In-app to residents"
           value={centre.stats.inAppAll}
           hint={`${centre.stats.inAppUnread} unread`}
           icon="bell"
-          tone="violet"
+         
         />
-      </div>
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
@@ -255,7 +255,7 @@ function MessageCard({ row, canRetry }: { row: CentreRow; canRetry: boolean }) {
 
         {row.source === 'outbound' && row.channel === 'WHATSAPP' ? (
           // Rendered as a WhatsApp bubble so the owner sees exactly what the resident reads.
-          <div className="mt-3 max-w-lg rounded-2xl rounded-tl-sm border border-emerald-100 bg-[#dcf8c6]/60 p-3">
+          <div className="mt-3 max-w-lg rounded-xl rounded-tl-sm border border-emerald-100 bg-[#dcf8c6]/60 p-3">
             <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-800">{row.body}</p>
           </div>
         ) : row.source === 'outbound' ? (
@@ -284,14 +284,14 @@ function MessageCard({ row, canRetry }: { row: CentreRow; canRetry: boolean }) {
 
         {row.source === 'outbound' && row.status === 'FAILED' && !row.isDemo ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <p className="min-w-0 flex-1 break-words text-xs text-red-600">
+            <p className="min-w-0 flex-1 break-words text-xs text-rose-600">
               {row.error ?? 'Not delivered'}
               {row.attempts > 0 && ` · ${row.attempts} attempt${row.attempts === 1 ? '' : 's'}`}
             </p>
             {row.retryable && canRetry && <RetryButton messageId={row.id} />}
           </div>
         ) : (
-          row.source === 'outbound' && row.error && <p className="mt-2 break-words text-xs text-red-600">{row.error}</p>
+          row.source === 'outbound' && row.error && <p className="mt-2 break-words text-xs text-rose-600">{row.error}</p>
         )}
       </CardContent>
     </Card>

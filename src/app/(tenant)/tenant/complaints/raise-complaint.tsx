@@ -177,7 +177,7 @@ export function RaiseComplaintButton({
               <div className="space-y-4">
                 <div>
                   <p className="mb-2 text-sm font-medium text-slate-700">Category</p>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {categories.map((item) => {
                       const Icon = CATEGORY_ICON[item.value] ?? Wrench
                       const active = category === item.value
@@ -187,7 +187,7 @@ export function RaiseComplaintButton({
                           type="button"
                           onClick={() => setCategory(item.value)}
                           className={cn(
-                            'flex flex-col items-center gap-1 rounded-xl border p-2.5 transition-all',
+                            'flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 transition-all',
                             active
                               ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-500/15'
                               : 'border-slate-200 hover:border-slate-300',
@@ -198,7 +198,7 @@ export function RaiseComplaintButton({
                           />
                           <span
                             className={cn(
-                              'text-[10px] font-medium',
+                              'text-center text-[11px] font-medium leading-tight',
                               active ? 'text-blue-700' : 'text-slate-600',
                             )}
                           >

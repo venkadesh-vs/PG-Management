@@ -75,7 +75,7 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
 
       {related.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Related</h2>
+          <h2 className="text-xs font-medium text-slate-500">Related</h2>
           <ul className="space-y-1">
             {related.map((a) => (
               <li key={a.slug}>

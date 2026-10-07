@@ -117,7 +117,7 @@ export function SetupWizard({ snapshot, initialStep }: { snapshot: WizardSnapsho
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-brand">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
               <Sparkles className="size-4" />
             </span>
             <div className="min-w-0">
@@ -172,7 +172,7 @@ export function SetupWizard({ snapshot, initialStep }: { snapshot: WizardSnapsho
       </div>
 
       {/* Step body */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <AnimatePresence mode="wait" initial={false} custom={direction}>
           <motion.div
             key={step}

@@ -453,7 +453,7 @@ function InviteManagerDialog({
                 </div>
               )}
             </div>
-            {error && <p className="text-xs font-medium text-red-600 sm:col-span-2">{error}</p>}
+            {error && <p className="text-xs font-medium text-rose-600 sm:col-span-2">{error}</p>}
           </div>
         )}
 

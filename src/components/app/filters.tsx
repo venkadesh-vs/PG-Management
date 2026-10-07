@@ -58,7 +58,7 @@ export function SearchInput({
   }, [value, paramKey, searchParams, write])
 
   return (
-    <div className={cn('relative min-w-0 flex-1 sm:max-w-xs', className)}>
+    <div className={cn('relative col-span-2 w-full min-w-0 sm:col-span-1 sm:w-auto sm:flex-1 sm:max-w-xs', className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
       <Input
         value={value}
@@ -100,7 +100,11 @@ export function FilterSelect({
     <Select
       value={value}
       onChange={(e) => write({ [paramKey]: e.target.value || null })}
-      className={cn('w-auto min-w-[9rem]', value && 'border-blue-300 bg-blue-50/50 text-blue-800', className)}
+      className={cn(
+        'w-full min-w-0 sm:w-auto sm:min-w-[9rem]',
+        value && 'border-blue-300 bg-blue-50/60 text-blue-800',
+        className,
+      )}
       aria-label={placeholder}
     >
       <option value="">{placeholder}</option>
@@ -132,13 +136,14 @@ export function FilterBar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // Phones: search on its own row, selects two per row. Wider: one wrapping line.
+    <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
       {children}
       {activeCount > 0 && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
+        <Button variant="ghost" size="sm" onClick={clearAll} className="col-span-2 justify-self-start sm:col-span-1">
           <X className="size-3.5" />
           Clear filters
-          <span className="ml-0.5 rounded-full bg-slate-200 px-1.5 text-[10px] font-semibold">
+          <span className="ml-0.5 rounded-md bg-slate-200 px-1.5 text-[10px] font-semibold tabular-nums">
             {activeCount}
           </span>
         </Button>

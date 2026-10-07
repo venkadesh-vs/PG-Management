@@ -206,7 +206,7 @@ export function RecordPaymentButton({ residents }: { residents: ResidentOption[]
                           <span
                             className={cn(
                               'shrink-0 text-sm font-semibold tabular',
-                              resident.outstanding > 0 ? 'text-red-600' : 'text-emerald-600',
+                              resident.outstanding > 0 ? 'text-rose-600' : 'text-emerald-600',
                             )}
                           >
                             {resident.outstanding > 0

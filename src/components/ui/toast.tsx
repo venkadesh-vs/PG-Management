@@ -162,7 +162,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className={cn(
-        'pointer-events-auto relative w-full max-w-sm cursor-grab overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-float ring-4 backdrop-blur-xl active:cursor-grabbing',
+        'pointer-events-auto relative w-full max-w-sm cursor-grab overflow-hidden rounded-xl border border-slate-200 bg-white shadow-float ring-4 backdrop-blur-xl active:cursor-grabbing',
         tone.ring,
       )}
       role="status"

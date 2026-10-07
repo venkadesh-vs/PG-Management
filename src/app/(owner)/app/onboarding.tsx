@@ -100,8 +100,15 @@ export async function Onboarding({ user }: { user: SessionUser & { organizationI
   return (
     <>
       {!emailVerified && me && <VerifyEmailBanner email={me.email} />}
-      {showContinue && <ContinueSetupCard percent={onboarding.percent} step={onboarding.step} />}
-      {items.some((i) => !i.done) && <OnboardingChecklist items={items} />}
+      {/* One progress figure only: when the checklist shows, "Continue setup" lives inside it. */}
+      {items.some((i) => !i.done) ? (
+        <OnboardingChecklist
+          items={items}
+          continueHref={showContinue ? `/app/setup?step=${encodeURIComponent(onboarding.step)}` : undefined}
+        />
+      ) : (
+        showContinue && <ContinueSetupCard percent={onboarding.percent} step={onboarding.step} />
+      )}
     </>
   )
 }

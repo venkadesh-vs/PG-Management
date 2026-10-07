@@ -95,7 +95,7 @@ export default async function HealthPage() {
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'System health' }]}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label="Database"
           value={db.ms}
@@ -108,7 +108,7 @@ export default async function HealthPage() {
           label="Last automation run"
           value={lastRun ? Math.round((now.getTime() - lastRun.startedAt.getTime()) / 3600_000) : 0}
           icon="clock"
-          tone={!lastRun || lastRun.status === 'FAILED' ? 'red' : lastRun.status === 'PARTIAL' || lastRunStale ? 'amber' : 'emerald'}
+          tone={!lastRun || lastRun.status === 'FAILED' ? 'red' : lastRun.status === 'PARTIAL' || lastRunStale ? 'amber' : undefined}
           suffix={<span className="text-sm text-slate-500"> h ago</span>}
           hint={lastRun ? `${lastRun.status.toLowerCase()} · ${formatDateTime(lastRun.startedAt)}` : 'No run recorded yet'}
         />
@@ -116,14 +116,14 @@ export default async function HealthPage() {
           label="Webhooks failed (7 days)"
           value={webhookCount('FAILED')}
           icon="warning"
-          tone={webhookCount('FAILED') ? 'red' : 'emerald'}
+          tone={webhookCount('FAILED') ? 'red' : undefined}
           hint={`${webhookCount('IGNORED')} ignored · ${webhookCount('PROCESSED')} processed`}
         />
         <StatCard
           label="Messages failed (24 h)"
           value={failedBy('WHATSAPP') + failedBy('EMAIL') + failedBy('SMS')}
           icon="messages"
-          tone={failedBy('WHATSAPP') + failedBy('EMAIL') + failedBy('SMS') ? 'amber' : 'emerald'}
+          tone={failedBy('WHATSAPP') + failedBy('EMAIL') + failedBy('SMS') ? 'amber' : undefined}
           hint={`WhatsApp ${failedBy('WHATSAPP')} · Email ${failedBy('EMAIL')}${failedBy('SMS') ? ` · SMS ${failedBy('SMS')}` : ''}`}
         />
       </div>
@@ -157,7 +157,7 @@ export default async function HealthPage() {
                   <div
                     className={cn(
                       'flex size-9 shrink-0 items-center justify-center rounded-xl',
-                      tone === 'red' && 'bg-red-50',
+                      tone === 'red' && 'bg-rose-50',
                       tone === 'amber' && 'bg-amber-50',
                       tone === 'emerald' && 'bg-emerald-50',
                       tone === 'slate' && 'bg-slate-100',
@@ -166,7 +166,7 @@ export default async function HealthPage() {
                     <Icon
                       className={cn(
                         'size-4',
-                        tone === 'red' && 'text-red-600',
+                        tone === 'red' && 'text-rose-600',
                         tone === 'amber' && 'text-amber-600',
                         tone === 'emerald' && 'text-emerald-600',
                         tone === 'slate' && 'text-slate-500',
@@ -191,7 +191,7 @@ export default async function HealthPage() {
                   </div>
                   <div className="rounded-lg bg-slate-50 p-2">
                     <dt className="text-slate-500">Last failure</dt>
-                    <dd className={cn('font-medium', p.lastFailureAt ? 'text-red-600' : 'text-slate-800')}>{when(p.lastFailureAt)}</dd>
+                    <dd className={cn('font-medium', p.lastFailureAt ? 'text-rose-600' : 'text-slate-800')}>{when(p.lastFailureAt)}</dd>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-2">
                     <dt className="text-slate-500">OK (7 days)</dt>
@@ -199,10 +199,10 @@ export default async function HealthPage() {
                   </div>
                   <div className="rounded-lg bg-slate-50 p-2">
                     <dt className="text-slate-500">Failed (7 days)</dt>
-                    <dd className={cn('font-medium tabular', p.failures ? 'text-red-600' : 'text-slate-800')}>{p.failures}</dd>
+                    <dd className={cn('font-medium tabular', p.failures ? 'text-rose-600' : 'text-slate-800')}>{p.failures}</dd>
                   </div>
                 </dl>
-                {p.lastError && <p className="line-clamp-2 break-words text-xs text-red-600">{p.lastError}</p>}
+                {p.lastError && <p className="line-clamp-2 break-words text-xs text-rose-600">{p.lastError}</p>}
                 <p className="text-[11px] text-slate-400">{p.note}</p>
               </CardContent>
             </Card>
@@ -239,13 +239,13 @@ export default async function HealthPage() {
                   <TableCell className="text-sm text-slate-600">{run.job}</TableCell>
                   <TableCell>
                     <Badge variant={CRON_VARIANT[run.status] ?? 'info'} size="sm">
-                      {run.status.toLowerCase()}
+                      {run.status.charAt(0) + run.status.slice(1).toLowerCase().replace(/_/g, ' ')}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm tabular text-slate-600">{duration(run.startedAt, run.finishedAt)}</TableCell>
                   <TableCell className="max-w-md">
                     {run.error ? (
-                      <p className="line-clamp-3 whitespace-pre-line text-xs text-red-600">{run.error}</p>
+                      <p className="line-clamp-3 whitespace-pre-line text-xs text-rose-600">{run.error}</p>
                     ) : (
                       <span className="text-xs text-slate-400">None</span>
                     )}
@@ -283,7 +283,7 @@ export default async function HealthPage() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <Badge variant={w.status === 'FAILED' ? 'danger' : 'default'} size="sm">
-                      {w.status.toLowerCase()}
+                      {w.status.charAt(0) + w.status.slice(1).toLowerCase().replace(/_/g, ' ')}
                     </Badge>
                     <span className="text-[11px] text-slate-400">
                       {w.attempts} attempt{w.attempts === 1 ? '' : 's'} · {relativeTime(w.receivedAt)}
@@ -307,8 +307,8 @@ export default async function HealthPage() {
           <dl className="grid grid-cols-3 gap-3 text-center">
             {(['WHATSAPP', 'EMAIL', 'SMS'] as const).map((c) => (
               <div key={c} className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-[11px] uppercase tracking-wide text-slate-500">{c === 'WHATSAPP' ? 'WhatsApp' : c.toLowerCase()}</dt>
-                <dd className={cn('font-display text-xl font-semibold tabular', failedBy(c) ? 'text-red-600' : 'text-slate-900')}>
+                <dt className="text-xs font-medium text-slate-500">{c === 'WHATSAPP' ? 'WhatsApp' : c === 'SMS' ? 'SMS' : 'Email'}</dt>
+                <dd className={cn('font-display text-xl font-semibold tabular', failedBy(c) ? 'text-rose-600' : 'text-slate-900')}>
                   {failedBy(c)}
                 </dd>
               </div>

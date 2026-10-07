@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
 import { addDays, cn, formatDate, formatMoney, formatPhone, initials, startOfDay, toISODate } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
@@ -183,8 +183,8 @@ export default async function StaffPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Team size" value={staff.length} icon="users" tone="blue" hint="Active staff" />
+      <StatGrid cols={4}>
+        <StatCard label="Team size" value={staff.length} icon="users" hint="Active staff" />
         <StatCard
           label="Present today"
           value={presentToday}
@@ -192,9 +192,9 @@ export default async function StaffPage({
           tone={presentToday >= staff.length ? 'emerald' : 'amber'}
           hint={`of ${staff.length} staff`}
         />
-        <StatCard label="Monthly salary" value={salaryTotal} format="money" icon="wallet" tone="violet" />
+        <StatCard label="Monthly salary" value={salaryTotal} format="money" icon="wallet" />
         <StatCard label="Open tasks" value={openTasks} icon="clipboard" tone={openTasks > 0 ? 'amber' : 'emerald'} />
-      </div>
+      </StatGrid>
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>

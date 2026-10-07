@@ -93,7 +93,7 @@ export default async function TenantComplaintPage({
       {/* --------------------------------------------------- Progress rail */}
       <Card>
         <CardContent className="p-5">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mb-4 text-sm font-semibold text-slate-900">
             Progress
           </p>
           <ol className="space-y-4">
@@ -159,7 +159,7 @@ export default async function TenantComplaintPage({
 
           {complaint.resolutionNote && (
             <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              <p className="text-sm font-semibold text-emerald-700">
                 What was done
               </p>
               <p className="mt-1 text-sm text-emerald-900">{complaint.resolutionNote}</p>
@@ -177,8 +177,8 @@ export default async function TenantComplaintPage({
       {complaint.assignedStaff && (
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-50">
-              <UserCog className="size-5 text-amber-600" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100">
+              <UserCog className="size-5 text-slate-600" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-800">
@@ -200,7 +200,7 @@ export default async function TenantComplaintPage({
 
       <Card>
         <CardContent className="p-5">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mb-4 text-sm font-semibold text-slate-900">
             Updates
           </p>
           <ComplaintThread

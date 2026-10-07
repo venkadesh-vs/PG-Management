@@ -7,7 +7,7 @@ import { themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney } from '@/lib/utils'
 import { LONG_VACANT_DAYS, vacancyDetails } from '@/server/services/analytics'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
-import { StatCard } from '@/components/app/stat-card'
+import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
@@ -56,9 +56,9 @@ export default async function VacancyPage({
       />
 
       {money && v.monthlyLoss > 0 && (
-        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4 sm:p-5">
+        <div className="rounded-xl border border-amber-200/70 bg-amber-50/50 p-4 sm:p-5">
           <p className="flex items-center gap-2 text-sm text-slate-600">
-            <TrendingDown className="size-4 text-amber-500" />
+            <TrendingDown className="size-4 text-amber-600" strokeWidth={1.75} />
             Estimated monthly vacancy loss
           </p>
           <p className="font-display text-2xl font-semibold tracking-tight text-amber-700 sm:text-3xl">
@@ -72,22 +72,22 @@ export default async function VacancyPage({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total beds" value={t.total} icon="bed" tone="blue" hint={`${t.rate}% occupied`} />
+      <StatGrid cols={4}>
+        <StatCard label="Total beds" value={t.total} icon="bed" hint={`${t.rate}% occupied`} />
         <StatCard label="Occupied" value={t.occupied} icon="user" tone="emerald" />
         <StatCard label="Available" value={t.available} icon="door" tone="amber" hint={v.longVacant ? `${v.longVacant} empty ${LONG_VACANT_DAYS}+ days` : undefined} />
-        <StatCard label="Reserved" value={t.reserved} icon="calendar" tone="violet" hint="Held by bookings" />
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <StatCard label="Reserved" value={t.reserved} icon="calendar" hint="Held by bookings" />
+      </StatGrid>
+      <StatGrid cols={4}>
         <StatCard label="Under maintenance" value={t.maintenance} icon="wrench" tone="red" />
         <StatCard label="Blocked" value={t.blocked} icon="warning" tone="red" />
-        <StatCard label="Occupancy" value={t.rate} format="percent" icon="chart" tone="blue" />
+        <StatCard label="Occupancy" value={t.rate} format="percent" icon="chart" />
         {money ? (
           <StatCard label="Avg. rent per bed" value={v.averageRent} format="money" icon="money" tone="emerald" />
         ) : (
           <StatCard label="Rooms with space" value={v.rooms.length} icon="door" tone="emerald" />
         )}
-      </div>
+      </StatGrid>
 
       {actions.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -95,7 +95,7 @@ export default async function VacancyPage({
             <Link
               key={a.href}
               href={a.href}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-card hover:bg-slate-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50"
             >
               <a.icon className="size-4 text-slate-500" />
               {a.label}
@@ -209,7 +209,7 @@ export default async function VacancyPage({
                 </TableWrap>
                 <ul className="space-y-2 md:hidden">
                   {v.beds.slice(0, BED_LIST_LIMIT).map((b) => (
-                    <li key={b.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+                    <li key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate font-medium text-slate-900">
@@ -246,7 +246,7 @@ export default async function VacancyPage({
               <SectionHeader title="Rooms with space" description="Ready to show a walk-in today." icon="door" />
               <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {v.rooms.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-card">
+                  <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-900">Room {r.number}</p>
                       <p className="truncate text-xs text-slate-500">

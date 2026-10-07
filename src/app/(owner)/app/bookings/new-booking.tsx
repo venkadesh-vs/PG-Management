@@ -269,7 +269,7 @@ export function NewBookingButton({
                 </Field>
               </div>
 
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                 <label className="flex items-center justify-between gap-3">
                   <span>
                     <span className="block text-sm font-semibold text-slate-800">Token received now?</span>
@@ -320,7 +320,7 @@ export function NewBookingButton({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-700">
-                    Free bed {values.confirm && <span className="text-red-500">*</span>}
+                    Free bed {values.confirm && <span className="text-rose-500">*</span>}
                   </p>
                   {selectedBed && (
                     <span className="text-xs font-semibold text-blue-700">
@@ -328,8 +328,8 @@ export function NewBookingButton({
                     </span>
                   )}
                 </div>
-                {errors.bedId && <p className="text-xs font-medium text-red-600">{errors.bedId}</p>}
-                <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-2 scrollbar-slim">
+                {errors.bedId && <p className="text-xs font-medium text-rose-600">{errors.bedId}</p>}
+                <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-2 scrollbar-slim">
                   {loadingBeds ? (
                     <p className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
                       <Loader2 className="size-4 animate-spin" /> Finding free beds…
@@ -375,7 +375,7 @@ export function NewBookingButton({
                   )}
                 </div>
               </div>
-              <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4">
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
                 <span>
                   <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
                     <BedDouble className="size-4 text-blue-600" /> Reserve the bed now
@@ -452,7 +452,7 @@ function LeadPicker({ leadId, name, onPick }: { leadId: string; name: string; on
       <Search className="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" />
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Link an enquiry (optional) — search name or phone" className="pl-9" />
       {(results.length > 0 || searching) && (
-        <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-elevated">
+        <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {searching && results.length === 0 ? (
             <p className="px-3 py-2 text-sm text-slate-500">Searching…</p>
           ) : (

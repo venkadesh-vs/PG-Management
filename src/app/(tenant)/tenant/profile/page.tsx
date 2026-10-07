@@ -12,7 +12,6 @@ import {
 } from 'lucide-react'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney, formatPhone, initials } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -35,15 +34,12 @@ export default async function TenantProfilePage() {
   })
   if (!resident) return null
 
-  const theme = themeFor(resident.property.type)
-
   return (
     <div className="space-y-5">
       {/* --------------------------------------------------------- Header */}
       <div
         className={cn(
-          'relative overflow-hidden rounded-3xl bg-gradient-to-br p-5 text-white shadow-elevated',
-          theme.gradient,
+          'relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 to-blue-600 p-5 text-white shadow-sm ring-1 ring-blue-900/10',
         )}
       >
         <div className="dot-grid absolute inset-0 opacity-[0.12]" />
@@ -71,7 +67,7 @@ export default async function TenantProfilePage() {
       {/* ----------------------------------------------------------- Stay */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your stay</p>
+          <p className="text-sm font-semibold text-slate-900">Your stay</p>
           <Row icon={Building2} label="PG" value={resident.property.name} />
           <Row
             icon={Bed}
@@ -109,7 +105,7 @@ export default async function TenantProfilePage() {
       {/* -------------------------------------------------------- Contact */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-sm font-semibold text-slate-900">
             Your details
           </p>
           <Row icon={Phone} label="Mobile" value={formatPhone(resident.phone)} />
@@ -132,7 +128,7 @@ export default async function TenantProfilePage() {
       {/* ------------------------------------------------------ PG contact */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-sm font-semibold text-slate-900">
             Your PG
           </p>
           <p className="text-sm text-slate-700">
@@ -152,7 +148,7 @@ export default async function TenantProfilePage() {
 
           {resident.property.rules.length > 0 && (
             <div className="border-t border-slate-100 pt-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-2 text-sm font-semibold text-slate-900">
                 House rules
               </p>
               <ul className="space-y-1">
@@ -167,7 +163,7 @@ export default async function TenantProfilePage() {
 
           {resident.property.amenities.length > 0 && (
             <div className="border-t border-slate-100 pt-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-2 text-sm font-semibold text-slate-900">
                 Amenities
               </p>
               <div className="flex flex-wrap gap-1.5">

@@ -55,7 +55,7 @@ export function LeadBoard(props: ViewProps) {
             const items = props.leads.filter((l) => l.status === status)
             const style = leadStyle(status)
             return (
-              <section key={status} className="flex w-60 shrink-0 flex-col rounded-2xl bg-slate-50/80 p-2">
+              <section key={status} className="flex w-60 shrink-0 flex-col rounded-xl bg-slate-50/80 p-2">
                 <header className="flex items-center justify-between px-1.5 py-1">
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                     <span className={cn('size-2 rounded-full', style.dot)} />
@@ -72,7 +72,7 @@ export function LeadBoard(props: ViewProps) {
                       <button
                         type="button"
                         onClick={() => open(lead.id)}
-                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-card transition hover:border-blue-300 hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-card transition hover:border-blue-300 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                       >
                         <p className="truncate text-sm font-medium text-slate-900">{lead.name}</p>
                         <p className="truncate text-xs text-slate-500">
@@ -180,7 +180,7 @@ export function LeadTable(props: ViewProps) {
               <button
                 type="button"
                 onClick={() => open(lead.id)}
-                className="block w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-card"
+                className="block w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-card"
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="truncate font-medium text-slate-900">{lead.name}</p>

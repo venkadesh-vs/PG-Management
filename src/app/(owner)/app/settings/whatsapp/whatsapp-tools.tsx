@@ -105,7 +105,7 @@ export function TestMessageForm({ templates, mode }: { templates: TemplateInfo[]
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : result.demo
                 ? 'border-amber-200 bg-amber-50 text-amber-800'
-                : 'border-red-200 bg-red-50 text-red-700'
+                : 'border-rose-200 bg-rose-50 text-rose-700'
           }`}
         >
           {result.text}
@@ -176,7 +176,7 @@ function TemplateCard({ template: t }: { template: TemplateInfo }) {
           </div>
           <div className="min-w-0">
             <p className="mb-1 text-xs font-medium text-slate-500">What the resident sees</p>
-            <div className="rounded-2xl rounded-tl-sm border border-emerald-100 bg-[#dcf8c6]/60 p-3">
+            <div className="rounded-xl rounded-tl-sm border border-emerald-100 bg-[#dcf8c6]/60 p-3">
               <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-800">{fill(t.body, values)}</p>
             </div>
           </div>

@@ -70,7 +70,7 @@ export function FollowUpChip({
   if (state === 'none') return null
   const style =
     state === 'overdue'
-      ? 'border-red-200 bg-red-50 text-red-700'
+      ? 'border-rose-200 bg-rose-50 text-rose-700'
       : state === 'today'
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -296,14 +296,14 @@ export function LeadCard({
 
               {lead.message && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What they said</p>
+                  <p className="text-sm font-semibold text-slate-900">What they said</p>
                   <p className="mt-1 text-sm text-slate-700">{lead.message}</p>
                 </div>
               )}
 
               {lead.notes.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Timeline</p>
+                  <p className="text-sm font-semibold text-slate-900">Timeline</p>
                   <ol className="relative space-y-2 border-l border-slate-200 pl-4">
                     {lead.notes.map((n) => (
                       <li key={n.id} className="relative">
@@ -444,7 +444,7 @@ function Metric({ icon: Icon, label, value }: { icon: React.ElementType; label: 
     <div className="rounded-lg bg-slate-50 px-2 py-1.5">
       <Icon className="mx-auto size-3 text-slate-400" />
       <p className="mt-0.5 font-display text-sm font-semibold text-slate-900">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
     </div>
   )
 }

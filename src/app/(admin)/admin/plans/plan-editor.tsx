@@ -122,14 +122,14 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
         {plans.map((plan) => (
           <Card
             key={plan.id}
-            className={cn(plan.isDefault && 'border-violet-200', plan.highlighted && 'ring-2 ring-blue-200')}
+            className={cn(plan.isDefault && 'border-blue-200', plan.highlighted && 'ring-2 ring-blue-200')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <CardTitle className="flex items-center gap-1.5 text-sm">
                     {plan.name}
-                    {plan.isDefault && <Star className="size-3.5 fill-violet-500 text-violet-500" />}
+                    {plan.isDefault && <Star className="size-3.5 fill-amber-400 text-amber-400" />}
                   </CardTitle>
                   <p className="text-xs text-slate-500">
                     {plan.slug} · order {plan.sortOrder}
@@ -148,7 +148,7 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
               )}
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-sm font-semibold text-slate-900">
                   Pricing rule
                 </p>
                 <p className="mt-1 text-sm font-medium text-slate-800">
@@ -216,7 +216,7 @@ function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-50 px-1.5 py-1.5">
       <p className="font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
     </div>
   )
 }
@@ -359,7 +359,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
             </Field>
 
             <div className="rounded-xl border border-slate-200 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-3 text-sm font-semibold text-slate-900">
                 {BASIS_LABEL[form.pricingBasis]}
               </p>
               {form.pricingBasis === 'STANDARD_RENT' && (
@@ -447,7 +447,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
             </div>
 
             <div className="rounded-xl border border-slate-200 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-3 text-sm font-semibold text-slate-900">
                 Limits (blank = unlimited)
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -467,7 +467,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
 
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Features included</p>
+                <p className="text-sm font-semibold text-slate-900">Features included</p>
                 <label className="flex items-center gap-2 text-xs text-slate-600">
                   Everything
                   <Switch checked={form.allFeatures} onCheckedChange={(c) => set('allFeatures', c)} />
@@ -529,8 +529,8 @@ function PlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
 
           {/* --------------------------------------------- Live calculator */}
           <div className="space-y-3">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800">
                 <Calculator className="size-3.5" />
                 What a PG would pay
               </p>

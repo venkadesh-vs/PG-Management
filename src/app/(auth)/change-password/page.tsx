@@ -32,7 +32,7 @@ export default async function ChangePasswordPage() {
               : 'Use at least 8 characters with letters and numbers. Other devices will be signed out.'}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-elevated sm:p-6">
           <ChangePasswordForm
             cancelHref={user.mustChangePassword ? null : HOME_FOR_ROLE[user.role]}
           />

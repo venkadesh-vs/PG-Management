@@ -54,7 +54,10 @@ function describe(access: AccessLinkResult, name: string) {
   if (access.kind === 'PASSWORD_RESET') {
     return `${name} already has an account — a password reset link was sent${via ? ` via ${via}` : ''}`
   }
-  return via ? `Invite sent to ${name} via ${via}` : `Copy the invite link and share it with ${name}`
+  if (via) return `Invite sent to ${name} via ${via}`
+  return access.inviteUrl
+    ? `Copy the invite link and share it with ${name}`
+    : `A new invite link was created for ${name}. Ask the PG owner to share it — it isn't shown to managers.`
 }
 
 /**
@@ -79,6 +82,7 @@ export const POST = route(
           phone: body.phone,
           propertyIds: body.propertyIds ?? [],
           orgRoleId: body.orgRoleId ?? null,
+          actorAccess: user,
         })
         return {
           kind: result.kind,
@@ -91,13 +95,19 @@ export const POST = route(
 
       case 'SET_MEMBER_ROLE': {
         requirePermission(user, 'team.manage')
-        const result = await setMemberRole({ organizationId, actor, userId: body.userId, orgRoleId: body.orgRoleId })
+        const result = await setMemberRole({
+          organizationId,
+          actor,
+          userId: body.userId,
+          orgRoleId: body.orgRoleId,
+          actorAccess: user,
+        })
         return { success: true, message: `${result.name} is now ${result.roleName}` }
       }
 
       case 'RESEND_TEAM_INVITE': {
         requirePermission(user, 'team.manage')
-        const result = await resendTeamInvite({ organizationId, userId: body.userId })
+        const result = await resendTeamInvite({ organizationId, userId: body.userId, actor })
         return { ...result, message: describe(result, 'them') }
       }
 

@@ -1,61 +1,75 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSessionUser } from '@/lib/auth'
-import { fail, handleError, ok } from '@/lib/api-helpers'
-import { assertResidentAccess, requireModule, requirePermission, withMaskedId } from '@/lib/tenancy'
+import { parseBody, route } from '@/lib/api-helpers'
+import {
+  assertResidentAccess,
+  ForbiddenError,
+  NotFoundError,
+  requireModule,
+  requirePermission,
+  withMaskedId,
+} from '@/lib/tenancy'
 import { residentUpdateSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 import { reviseRent } from '@/server/services/billing'
 
-type Params = { params: Promise<{ id: string }> }
+/**
+ * /api/residents/<id>
+ *   GET   — the full record: owner/manager with residents.view, or the resident themselves
+ *   PATCH — edit details (residents.manage; a rent change also needs rent.manage)
+ *
+ * Both go through route(), so sign-in, the must-change-password gate and the
+ * suspended-subscription read-only rule apply.
+ */
 
-export async function GET(_request: Request, { params }: Params) {
-  try {
-    const user = await getSessionUser()
-    if (!user) return fail('Please sign in', 401)
-    // The full record carries ID numbers, documents and the money trail —
-    // only the owner/manager, or the resident themselves, may read it.
-    if (user.role === 'TENANT') requireModule(user, 'residentApp')
-    else requirePermission(user, 'residents.view')
-    const { id } = await params
-    await assertResidentAccess(user, id)
-
-    const resident = await prisma.resident.findUnique({
-      where: { id },
-      include: {
-        property: true,
-        room: true,
-        bed: true,
-        deposit: true,
-        documents: true,
-        foodSubscription: { include: { foodPlan: true } },
-        invoices: { orderBy: { periodStart: 'desc' }, include: { lines: true } },
-        payments: { orderBy: { paidAt: 'desc' } },
-        ledger: { orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }] },
-      },
-    })
-    if (!resident) return fail('Resident not found', 404)
-    return ok({ resident: withMaskedId(resident, user.role) })
-  } catch (error) {
-    return handleError(error)
-  }
+function idFrom(request: Request) {
+  const parts = new URL(request.url).pathname.split('/').filter(Boolean)
+  return decodeURIComponent(parts[parts.length - 1] ?? '')
 }
 
-export async function PATCH(request: Request, { params }: Params) {
-  try {
-    const user = await getSessionUser()
-    if (!user) return fail('Please sign in', 401)
-    if (user.role === 'TENANT') return fail('Not allowed', 403)
-    requirePermission(user, 'residents.manage')
-    const { id } = await params
+export const GET = route(async ({ user, request }) => {
+  // The full record carries ID numbers, documents and the money trail —
+  // only the owner/manager, or the resident themselves, may read it.
+  if (user.role === 'TENANT') requireModule(user, 'residentApp')
+  else {
+    requireModule(user, 'residents')
+    requirePermission(user, 'residents.view')
+  }
+  const id = idFrom(request)
+  await assertResidentAccess(user, id)
+
+  const resident = await prisma.resident.findUnique({
+    where: { id },
+    include: {
+      property: true,
+      room: true,
+      bed: true,
+      deposit: true,
+      documents: true,
+      foodSubscription: { include: { foodPlan: true } },
+      invoices: { orderBy: { periodStart: 'desc' }, include: { lines: true } },
+      payments: { orderBy: { paidAt: 'desc' } },
+      ledger: { orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }] },
+    },
+  })
+  if (!resident) throw new NotFoundError('Resident not found')
+  return { resident: withMaskedId(resident, user.role) }
+})
+
+export const PATCH = route(
+  async ({ user, request }) => {
+    if (user.role === 'TENANT') throw new ForbiddenError('Not allowed')
+    const id = idFrom(request)
     await assertResidentAccess(user, id)
 
-    const body = residentUpdateSchema.parse(await request.json())
+    const body = await parseBody(request, residentUpdateSchema)
 
     // Rent never changes silently: a new amount is a dated rent revision
     // (history, audit, notes on months already invoiced).
     if (body.rentAmount !== undefined) {
-      const current = await prisma.resident.findUnique({ where: { id }, select: { rentAmount: true } })
+      const current = await prisma.resident.findUnique({
+        where: { id },
+        select: { rentAmount: true },
+      })
       if (current && current.rentAmount !== body.rentAmount) {
         requirePermission(user, 'rent.manage')
         await reviseRent({
@@ -78,15 +92,11 @@ export async function PATCH(request: Request, { params }: Params) {
         ...(body.email !== undefined ? { email: body.email || null } : {}),
         ...(body.bloodGroup !== undefined ? { bloodGroup: body.bloodGroup || null } : {}),
         ...(body.qualification !== undefined ? { qualification: body.qualification || null } : {}),
-        ...(body.permanentAddress !== undefined
-          ? { permanentAddress: body.permanentAddress || null }
-          : {}),
+        ...(body.permanentAddress !== undefined ? { permanentAddress: body.permanentAddress || null } : {}),
         ...(body.city !== undefined ? { city: body.city || null } : {}),
         ...(body.guardianName !== undefined ? { guardianName: body.guardianName || null } : {}),
         ...(body.guardianPhone !== undefined ? { guardianPhone: body.guardianPhone || null } : {}),
-        ...(body.guardianRelation !== undefined
-          ? { guardianRelation: body.guardianRelation || null }
-          : {}),
+        ...(body.guardianRelation !== undefined ? { guardianRelation: body.guardianRelation || null } : {}),
         ...(body.companyName !== undefined ? { companyName: body.companyName || null } : {}),
         ...(body.designation !== undefined ? { designation: body.designation || null } : {}),
         ...(body.idType !== undefined ? { idType: body.idType || null } : {}),
@@ -115,7 +125,10 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.foodOptIn !== undefined) {
       await prisma.foodSubscription.updateMany({
         where: { residentId: id },
-        data: { active: body.foodOptIn, endDate: body.foodOptIn ? null : new Date() },
+        data: {
+          active: body.foodOptIn,
+          endDate: body.foodOptIn ? null : new Date(),
+        },
       })
     }
 
@@ -131,8 +144,7 @@ export async function PATCH(request: Request, { params }: Params) {
       summary: `${resident.fullName}'s details updated`,
     })
 
-    return NextResponse.json({ resident: withMaskedId(resident, user.role) })
-  } catch (error) {
-    return handleError(error)
-  }
-}
+    return { resident: withMaskedId(resident, user.role) }
+  },
+  { module: 'residents', permission: 'residents.manage' },
+)

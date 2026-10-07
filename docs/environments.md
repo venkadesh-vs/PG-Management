@@ -45,6 +45,7 @@ Integrations (each falls back to an honest demo mode when empty):
 | GST | `PLATFORM_GSTIN`, `PLATFORM_LEGAL_NAME`, `PLATFORM_STATE_CODE`, `PLATFORM_ADDRESS` |
 | Legal identity | `NEXT_PUBLIC_LEGAL_NAME`, `NEXT_PUBLIC_BUSINESS_ADDRESS`, `NEXT_PUBLIC_JURISDICTION_CITY`, `NEXT_PUBLIC_GRIEVANCE_OFFICER`, `NEXT_PUBLIC_GRIEVANCE_EMAIL`, `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_PHONE` |
 | Alerts | `ERROR_WEBHOOK_URL` (Slack/Discord/Google Chat incoming webhook) |
+| Proxy | `TRUST_PROXY_HEADERS` — leave unset on Netlify (its `x-nf-client-connection-ip` header is always used). Set to `true` only when self-hosting behind a proxy you control that overwrites `x-real-ip` / `x-forwarded-for`. Without either, per-IP rate limits are skipped (per-email limits still apply) and audit rows record no IP. |
 
 Each client's own Razorpay and WhatsApp credentials are entered in their Settings and stored
 encrypted with `DATA_ENCRYPTION_KEY`; they are not environment variables.

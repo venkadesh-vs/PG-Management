@@ -322,6 +322,8 @@ function InviteManagerDialog({
       setError(null)
       setResult(null)
     }
+    // Reset only when the dialog opens; a later roles refresh must not wipe the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   function toggle(id: string, checked: boolean) {

@@ -5,6 +5,19 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./lib/timezone')
+    // A client deployment with no payment gateway cannot take subscription
+    // payments, and demo payments stay off (DEMO_MODE is not true). Not fatal —
+    // owners can still pay by bank transfer — but it must be noticed.
+    const provider = (process.env.PAYMENT_PROVIDER ?? 'demo').toLowerCase()
+    const paymentLive = provider !== 'demo' && Boolean(process.env.PAYMENT_KEY_ID) && Boolean(process.env.PAYMENT_KEY_SECRET)
+    if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE !== 'true' && !paymentLive) {
+      const { log } = await import('./lib/logger')
+      log('error', 'config.payments_not_live', {
+        code: 'INTEGRATION_FAILED',
+        detail:
+          'PAYMENT_PROVIDER/PAYMENT_KEY_ID/PAYMENT_KEY_SECRET are not set and DEMO_MODE is not true: online subscription payments are unavailable and demo payments are disabled.',
+      })
+    }
   }
 }
 

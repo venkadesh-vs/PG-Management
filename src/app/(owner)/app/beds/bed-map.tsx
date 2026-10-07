@@ -83,7 +83,6 @@ const STATUSES: BedStatus[] = ['AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE
 export function BedMap({
   floors,
   property,
-  themeKey,
   focusRoomId,
   canManage = true,
   canCheckIn = true,

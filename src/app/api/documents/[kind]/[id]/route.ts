@@ -5,6 +5,33 @@ import { assertResidentAccess, requirePermission } from '@/lib/tenancy'
 import { formatDate, formatMonth } from '@/lib/utils'
 import { renderDocument, rs } from '@/server/documents/pdf'
 import { openItems, readChecklist } from '@/lib/checkout-checklist'
+import { recordActivity } from '@/server/events'
+import type { SessionUser } from '@/lib/auth'
+
+/**
+ * Platform staff can open any customer's resident documents (for support), so
+ * every such download leaves an ADMIN_ACTION row in that customer's log.
+ */
+async function auditAdminDownload(user: SessionUser, residentId: string, what: string) {
+  if (user.role !== 'SUPER_ADMIN') return
+  const resident = await prisma.resident.findUnique({
+    where: { id: residentId },
+    select: { organizationId: true, propertyId: true, fullName: true },
+  })
+  if (!resident) return
+  await recordActivity({
+    organizationId: resident.organizationId,
+    propertyId: resident.propertyId,
+    actorId: user.id,
+    actorName: user.name,
+    actorRole: user.role,
+    event: 'ADMIN_ACTION',
+    entityType: 'Resident',
+    entityId: residentId,
+    summary: `StayFlow support downloaded ${what} for ${resident.fullName}`,
+    meta: { action: 'DOCUMENT_DOWNLOAD', document: what },
+  })
+}
 
 /**
  * GET /api/documents/rent-invoice/<id>.pdf
@@ -35,6 +62,7 @@ export const GET = route(
       })
       if (!invoice) return fail('Invoice not found', 404)
       await assertResidentAccess(user, invoice.resident.id)
+      await auditAdminDownload(user, invoice.resident.id, `rent invoice ${invoice.number}`)
 
       const pdf = await renderDocument({
         title: 'Rent invoice',
@@ -83,6 +111,7 @@ export const GET = route(
       })
       if (!payment) return fail('Receipt not found', 404)
       await assertResidentAccess(user, payment.resident.id)
+      await auditAdminDownload(user, payment.resident.id, `receipt ${payment.receiptNumber}`)
 
       const allocated = payment.allocations.reduce((s, a) => s + a.amount, 0)
       const items =
@@ -151,6 +180,7 @@ export const GET = route(
 
     if (kind === 'checkout-settlement') {
       await assertResidentAccess(user, id)
+      await auditAdminDownload(user, id, 'the checkout settlement')
       const resident = await prisma.resident.findUnique({
         where: { id },
         include: {

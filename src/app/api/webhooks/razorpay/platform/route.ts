@@ -19,7 +19,8 @@ import { runLoggedWebhook, webhookEventKey } from '@/server/services/webhook-log
  * second line of defence.
  *
  * Events: subscription.authenticated | activated | charged | pending | halted
- * | cancelled | completed, payment.captured, payment.failed.
+ * | cancelled | completed, payment.captured, payment.failed, refund.processed
+ * (refunds are flagged for Super Admin review, never applied automatically).
  */
 export async function POST(request: Request) {
   if (paymentMode() === 'demo') {

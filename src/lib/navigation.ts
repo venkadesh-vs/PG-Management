@@ -1,4 +1,3 @@
-import type { UserRole } from '@prisma/client'
 import type { IconName } from './icons'
 import type { ModuleKey } from './modules'
 
@@ -149,11 +148,6 @@ export function filterNavSections(sections: NavSection[], access: Access): NavSe
 /** The phone-app tabs this person should see. */
 export function filterNavItems(items: NavItem[], access: Access): NavItem[] {
   return items.filter((i) => visible(i, access))
-}
-
-export function navForRole(role: UserRole): NavSection[] {
-  if (role === 'SUPER_ADMIN') return ADMIN_NAV
-  return OWNER_NAV
 }
 
 export function isActive(pathname: string, item: NavItem): boolean {

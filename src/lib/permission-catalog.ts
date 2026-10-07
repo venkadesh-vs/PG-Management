@@ -128,7 +128,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     module: 'whatsapp',
     label: 'WhatsApp messages',
-    permissions: [{ key: 'messages.view', label: 'See sent messages and retry failed ones' }],
+    permissions: [{ key: 'messages.view', label: 'See sent messages (retrying a failed one also needs “Send announcements”)' }],
   },
   {
     module: 'reports',

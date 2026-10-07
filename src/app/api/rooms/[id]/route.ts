@@ -25,7 +25,7 @@ import {
  *            tasks) is refused so nothing traceable is lost.
  */
 
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000, 'Amount is too large')
 
 const updateSchema = z.object({
   number: z.string().trim().min(1, 'Room number is required').max(12).optional(),

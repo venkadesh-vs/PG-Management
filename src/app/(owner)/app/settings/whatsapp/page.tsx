@@ -22,6 +22,8 @@ export default async function WhatsAppSettingsPage() {
   if (!user.organizationId) redirect('/login')
   const organizationId = user.organizationId
   const moduleOn = user.modules.includes('whatsapp')
+  // Server component: renders once per request, so reading the clock here is fine.
+  // eslint-disable-next-line react-hooks/purity
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const [connection, prefs, week, lastFailure, lastSent, optOuts, residents] = await Promise.all([

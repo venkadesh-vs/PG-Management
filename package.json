@@ -8,6 +8,7 @@
     "build": "prisma generate && next build",
     "start": "next start -p 3100",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -16,7 +17,7 @@
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "cron": "tsx --conditions=react-server scripts/run-automation.ts",
-    "verify": "npm run typecheck && npm run build",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "smoke": "node scripts/smoke.mjs",
     "test": "vitest run"
   },

@@ -49,11 +49,47 @@ export const CENTRE_PAGE_SIZE = 25
 /** Merging two tables page by page reads page × size rows from each. */
 export const CENTRE_MAX_PAGE = 40
 
-type Viewer = { id: string; role: UserRole; organizationId: string }
+type Viewer = {
+  id: string
+  role: UserRole
+  organizationId: string
+  /** PGs a manager is limited to. Empty = every PG. */
+  propertyIds?: string[]
+}
+
+/**
+ * A PG-limited viewer only sees messages to residents of their PGs (and
+ * their own in-app alerts). Outbound rows carry no PG, so they are matched
+ * by the resident's phone / email; rows to nobody in those PGs stay hidden.
+ */
+export async function viewerScope(viewer: Viewer) {
+  const limited = viewer.role !== 'OWNER' && (viewer.propertyIds?.length ?? 0) > 0
+  if (!limited) return { limited: false, outbound: {}, inApp: {} }
+  const propertyIds = viewer.propertyIds!
+  const residents = await prisma.resident.findMany({
+    where: { organizationId: viewer.organizationId, propertyId: { in: propertyIds } },
+    select: { phone: true, whatsappPhone: true, email: true },
+  })
+  const addresses = [
+    ...new Set(
+      residents.flatMap((r) =>
+        [normalisePhone(r.phone), r.whatsappPhone ? normalisePhone(r.whatsappPhone) : '', r.email ?? ''].filter(Boolean),
+      ),
+    ),
+  ]
+  return {
+    limited: true,
+    outbound: { toAddress: { in: addresses } } satisfies Prisma.OutboundMessageWhereInput,
+    inApp: {
+      OR: [{ user: { role: 'TENANT', resident: { propertyId: { in: propertyIds } } } }, { userId: viewer.id }],
+    } satisfies Prisma.NotificationWhereInput,
+  }
+}
 
 export async function loadMessageCentre(viewer: Viewer, raw: Record<string, string | undefined>) {
   const f: CentreFilters = centreFilters(raw)
   const organizationId = viewer.organizationId
+  const scope = await viewerScope(viewer)
   const page = Math.min(f.page, CENTRE_MAX_PAGE)
   const take = page * CENTRE_PAGE_SIZE
 
@@ -61,7 +97,11 @@ export async function loadMessageCentre(viewer: Viewer, raw: Record<string, stri
   let resident: { id: string; fullName: string; userId: string | null; addresses: string[] } | null = null
   if (f.resident) {
     const r = await prisma.resident.findFirst({
-      where: { id: f.resident, organizationId },
+      where: {
+        id: f.resident,
+        organizationId,
+        ...(scope.limited ? { propertyId: { in: viewer.propertyIds } } : {}),
+      },
       select: { id: true, fullName: true, userId: true, phone: true, whatsappPhone: true, email: true },
     })
     if (r) {
@@ -82,6 +122,7 @@ export async function loadMessageCentre(viewer: Viewer, raw: Record<string, stri
 
   const outboundWhere: Prisma.OutboundMessageWhereInput = {
     organizationId,
+    AND: [scope.outbound],
     ...(f.channel && f.channel !== 'IN_APP' ? { channel: f.channel } : {}),
     ...(f.status === 'RETRIED' ? { attempts: { gte: 2 } } : f.status ? { status: f.status } : {}),
     ...(group ? { template: { in: [...group.templates] } } : {}),
@@ -117,19 +158,20 @@ export async function loadMessageCentre(viewer: Viewer, raw: Record<string, stri
     ...(group ? { kind: { in: [...group.kinds] as Prisma.EnumNotificationKindFilter['in'] } } : {}),
     ...(resident?.userId ? { userId: resident.userId } : {}),
     ...(createdAt ? { createdAt } : {}),
-    ...(f.q
-      ? {
-          AND: [
+    AND: [
+      scope.inApp,
+      ...(f.q
+        ? [
             {
               OR: [
-                { title: { contains: f.q, mode: 'insensitive' } },
-                { body: { contains: f.q, mode: 'insensitive' } },
-                { user: { name: { contains: f.q, mode: 'insensitive' } } },
+                { title: { contains: f.q, mode: 'insensitive' as const } },
+                { body: { contains: f.q, mode: 'insensitive' as const } },
+                { user: { name: { contains: f.q, mode: 'insensitive' as const } } },
               ],
             },
-          ],
-        }
-      : {}),
+          ]
+        : []),
+    ],
   }
 
   const [outbound, outboundTotal, inApp, inAppTotal, statusCounts, inAppUnread, inAppAll] = await Promise.all([
@@ -146,9 +188,9 @@ export async function loadMessageCentre(viewer: Viewer, raw: Record<string, stri
         })
       : Promise.resolve([]),
     includeInApp ? prisma.notification.count({ where: inAppWhere }) : Promise.resolve(0),
-    prisma.outboundMessage.groupBy({ by: ['status'], where: { organizationId }, _count: { _all: true } }),
-    prisma.notification.count({ where: { organizationId, readAt: null, user: { role: 'TENANT' } } }),
-    prisma.notification.count({ where: { organizationId, user: { role: 'TENANT' } } }),
+    prisma.outboundMessage.groupBy({ by: ['status'], where: { organizationId, AND: [scope.outbound] }, _count: { _all: true } }),
+    prisma.notification.count({ where: { organizationId, readAt: null, user: { role: 'TENANT' }, AND: [scope.inApp] } }),
+    prisma.notification.count({ where: { organizationId, user: { role: 'TENANT' }, AND: [scope.inApp] } }),
   ])
 
   const rows: CentreRow[] = [

@@ -61,7 +61,7 @@ export function LoginForm({
     }
   }
 
-  function useDemo(email: string) {
+  function fillDemo(email: string) {
     form.setValue('email', email)
     form.setValue('password', demoPassword)
     form.clearErrors()
@@ -155,7 +155,7 @@ export function LoginForm({
                 <button
                   key={user.email}
                   type="button"
-                  onClick={() => useDemo(user.email)}
+                  onClick={() => fillDemo(user.email)}
                   className="group flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5 text-left transition-all hover:border-blue-300 hover:shadow-sm"
                 >
                   <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg', meta.tone)}>

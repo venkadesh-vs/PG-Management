@@ -17,10 +17,11 @@ export const runtime = 'nodejs'
 const MAX_BYTES = 5 * 1024 * 1024
 const PURPOSES = ['KYC', 'COMPLAINT', 'TASK_PROOF', 'OTHER'] as const
 type Purpose = (typeof PURPOSES)[number]
-const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
+/** The only file types accepted; anything else is refused by sniff(). */
+type AllowedType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
 
 /** The real type, from the file's first bytes — the browser's header is only a hint. */
-function sniff(bytes: Buffer): (typeof ALLOWED)[number] | null {
+function sniff(bytes: Buffer): AllowedType | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
   if (
     bytes.length >= 8 &&

@@ -31,7 +31,7 @@ const schema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('APPLY_CREDIT'),
     subscriptionId: z.string().min(1),
-    amount: z.coerce.number().int().min(1),
+    amount: z.coerce.number().int().min(1).max(10_000_000, 'Amount is too large'),
     note: z.string().trim().max(200).optional(),
   }),
   z.object({

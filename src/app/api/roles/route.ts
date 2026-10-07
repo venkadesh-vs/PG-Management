@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { parseBody, route } from '@/lib/api-helpers'
 import { ALL_PERMISSIONS } from '@/lib/permission-catalog'
-import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { grantProblem, roleEditProblem } from '@/lib/role-guard'
 import { recordActivity } from '@/server/events'
 import { ensureOrgDefaults } from '@/server/services/org-defaults'
 import { ROLE_COLORS } from '@/components/settings/shared'
@@ -76,8 +77,12 @@ export const POST = route(
     const body = await parseBody(request, schema)
     const organizationId = user.organizationId!
     const actor = { actorId: user.id, actorName: user.name, actorRole: user.role }
+    const deny = (problem: string | null) => {
+      if (problem) throw new ForbiddenError(problem)
+    }
 
     if (body.action === 'CREATE') {
+      deny(grantProblem(user, body.permissions))
       await assertNameFree(organizationId, body.name)
       const role = await prisma.orgRole.create({
         data: {
@@ -106,7 +111,16 @@ export const POST = route(
     })
     if (!role) throw new NotFoundError('That role no longer exists')
 
+    // Nobody edits or deletes the role they hold — that is how access grows unnoticed.
+    if (user.role !== 'OWNER') {
+      const self = await prisma.user.findUnique({ where: { id: user.id }, select: { orgRoleId: true } })
+      if (self?.orgRoleId === role.id) {
+        throw new ForbiddenError('You cannot change your own role. Ask the PG owner.')
+      }
+    }
+
     if (body.action === 'UPDATE') {
+      deny(roleEditProblem(user, role.permissions, body.permissions ?? role.permissions))
       if (body.name && body.name !== role.name) await assertNameFree(organizationId, body.name, role.id)
       if (body.app && body.app !== role.app && role._count.users > 0) {
         throw new ValidationError(
@@ -137,15 +151,20 @@ export const POST = route(
     }
 
     // DELETE — never strand people without a role.
+    deny(roleEditProblem(user, role.permissions, []))
     if (role._count.users > 0) {
       if (!body.reassignToId) {
         throw new ValidationError(
           `${role._count.users} ${role._count.users === 1 ? 'person still has' : 'people still have'} this role. Move them to another role first.`,
         )
       }
-      const target = await prisma.orgRole.findFirst({ where: { id: body.reassignToId, organizationId }, select: { id: true, app: true, name: true } })
+      const target = await prisma.orgRole.findFirst({
+        where: { id: body.reassignToId, organizationId },
+        select: { id: true, app: true, name: true, permissions: true },
+      })
       if (!target || target.id === role.id) throw new ValidationError('Choose another role to move them to')
       if (target.app !== role.app) throw new ValidationError(`Choose a ${role.app === 'DASHBOARD' ? 'dashboard' : 'staff app'} role to move them to`)
+      deny(roleEditProblem(user, role.permissions, target.permissions))
       await prisma.$transaction([
         prisma.user.updateMany({ where: { organizationId, orgRoleId: role.id }, data: { orgRoleId: target.id } }),
         prisma.orgRole.delete({ where: { id: role.id } }),

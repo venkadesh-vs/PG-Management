@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
 import { cn, formatDate, startOfDay } from '@/lib/utils'
 import { MEAL_TYPES, expectedMealCount } from '@/server/services/kitchen'
-import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/feedback'
 import { MealServedCard } from './meal-served-card'
 

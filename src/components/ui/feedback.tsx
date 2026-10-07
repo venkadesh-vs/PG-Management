@@ -2,9 +2,7 @@
 
 import * as React from 'react'
 import { motion, useInView, useMotionValue, useSpring } from 'framer-motion'
-import { AlertCircle, RefreshCw } from 'lucide-react'
 import { cn, compactNumber, formatMoney, formatNumber } from '@/lib/utils'
-import { Button } from './button'
 import { resolveIcon, type IconLike } from '@/lib/icons'
 
 // ---------------------------------------------------- Animated counters -----
@@ -153,34 +151,6 @@ export function EmptyState({
 }
 
 // ---------------------------------------------------------- Error state -----
-
-export function ErrorState({
-  title = 'Something went wrong',
-  description,
-  onRetry,
-}: {
-  title?: string
-  description?: string
-  onRetry?: () => void
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-red-100 bg-red-50/50 p-8 text-center">
-      <div className="flex size-11 items-center justify-center rounded-2xl bg-white shadow-sm">
-        <AlertCircle className="size-5 text-red-500" />
-      </div>
-      <div className="space-y-1">
-        <p className="font-display text-sm font-semibold text-slate-900">{title}</p>
-        {description && <p className="max-w-sm text-sm text-slate-600">{description}</p>}
-      </div>
-      {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry}>
-          <RefreshCw className="size-3.5" />
-          Try again
-        </Button>
-      )}
-    </div>
-  )
-}
 
 // ----------------------------------------------------- Motion container -----
 

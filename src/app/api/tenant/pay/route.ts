@@ -1,14 +1,15 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import {
   confirmRentCheckout,
   createOrder,
   createRentOrder,
   getOrgRazorpay,
   noteOrgRazorpayError,
-  paymentMode,
+  demoPaymentsAllowed,
+  PAYMENT_NOT_SET_UP,
 } from '@/server/integrations/payments'
 import { RazorpayError, toPaise } from '@/server/integrations/razorpay'
 import { outstandingFor, recordPayment } from '@/server/services/billing'
@@ -97,6 +98,15 @@ export const POST = route(
         }
         throw error
       }
+      if (outcome.status === 'processing') {
+        // Authorised by the bank, not captured yet: the payment.captured
+        // webhook records it and the receipt appears on its own.
+        return ok({
+          processing: true,
+          demo: false,
+          message: 'Payment is processing — we will confirm it in a minute. Your receipt will appear automatically.',
+        })
+      }
       if (outcome.status !== 'recorded') throw new ValidationError(outcome.reason)
       return ok({
         receiptNumber: outcome.receiptNumber,
@@ -108,7 +118,8 @@ export const POST = route(
     }
 
     const target = await resolveTarget(resident.id, body.invoiceId)
-    const demo = paymentMode() === 'demo'
+    // Simulated payments only on a demo deployment (DEMO_MODE=true, no live keys).
+    const demo = demoPaymentsAllowed()
 
     // --- START --------------------------------------------------------------
     if (body.action === 'START') {
@@ -169,7 +180,8 @@ export const POST = route(
         }
       }
 
-      if (demo) {
+      // A PG with its own Razorpay never gets a simulated payment, even on a demo deployment.
+      if (demo && !creds) {
         const order = await createOrder({
           amount: target.amount,
           receipt: target.invoice?.number ?? resident.code,
@@ -204,9 +216,11 @@ export const POST = route(
     }
 
     // --- CONFIRM (demo only) -------------------------------------------------
-    if (!demo) {
-      // Never trust the browser for a real payment.
-      throw new ValidationError(
+    // Never trust the browser for a real payment: a demo confirmation is only
+    // accepted on a demo deployment, for a PG without its own gateway.
+    if (!demo) throw new ConflictError(PAYMENT_NOT_SET_UP)
+    if (await getOrgRazorpay(resident.organizationId)) {
+      throw new ConflictError(
         'This payment must be confirmed by the payment gateway. Complete the checkout and your receipt will appear automatically.',
       )
     }

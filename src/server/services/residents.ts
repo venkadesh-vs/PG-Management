@@ -1996,20 +1996,6 @@ export async function snapshotOccupancy(propertyIds?: string[]) {
   return { snapshots: properties.length, date }
 }
 
-/** Residents whose deposit is still uncollected — an ops nudge. */
-export async function pendingDeposits(organizationId: string, propertyIds: string[]) {
-  return prisma.securityDeposit.findMany({
-    where: {
-      organizationId,
-      status: 'PENDING',
-      resident: { propertyId: { in: propertyIds }, status: { in: ['ACTIVE', 'NOTICE'] } },
-    },
-    include: { resident: { include: { property: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  })
-}
-
 export async function endOfMonthUtilitySplit(params: {
   propertyId: string
   month: Date

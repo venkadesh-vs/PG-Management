@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { randomBytes } from 'node:crypto'
 import type { UserRole } from '@prisma/client'
 
 import { prisma } from './prisma'
@@ -52,15 +51,6 @@ export function scopeWhere(scope: PropertyScope) {
     organizationId: scope.organizationId,
     propertyId: scope.propertyId ?? { in: scope.allowedPropertyIds },
   }
-}
-
-/** Same, for models that key off propertyId alone (Floor, Room, Bed…). */
-export function propertyWhere(scope: PropertyScope) {
-  return scope.propertyId ? { id: scope.propertyId } : { id: { in: scope.allowedPropertyIds } }
-}
-
-export function propertyIdFilter(scope: PropertyScope) {
-  return scope.propertyId ?? { in: scope.allowedPropertyIds }
 }
 
 /** The property a WORKER is assigned to (null when unassigned). */
@@ -287,22 +277,6 @@ export function maskIdNumber(value: string | null | undefined, role: UserRole): 
 export function withMaskedId<T extends { idNumber?: string | null }>(record: T, role: UserRole): T {
   if (!('idNumber' in record)) return record
   return { ...record, idNumber: maskIdNumber(record.idNumber, role) }
-}
-
-const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-
-/** A random password from a readable alphabet (no 0/O, 1/l/I look-alikes). */
-export function generatePassword(length = 10) {
-  // Rejection sampling keeps every character equally likely.
-  const limit = 256 - (256 % PASSWORD_ALPHABET.length)
-  let out = ''
-  while (out.length < length) {
-    for (const byte of randomBytes(length * 2)) {
-      if (byte < limit) out += PASSWORD_ALPHABET[byte % PASSWORD_ALPHABET.length]
-      if (out.length === length) break
-    }
-  }
-  return out
 }
 
 export class ForbiddenError extends Error {

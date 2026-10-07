@@ -32,6 +32,15 @@ export const serverEnv = {
   get demoMode() {
     return process.env.DEMO_MODE === 'true'
   },
+  /**
+   * Simulated (no-money) payments: resident demo pay, demo Pay now and demo
+   * AutoPay. Allowed only on an explicit demo deployment (DEMO_MODE=true) —
+   * a client deployment without gateway keys must never mark rent or a
+   * subscription as paid without real money.
+   */
+  get demoPaymentsAllowed() {
+    return process.env.DEMO_MODE === 'true'
+  },
   get sessionHours() {
     return Number(process.env.AUTH_SESSION_HOURS ?? 12)
   },

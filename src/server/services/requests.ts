@@ -496,11 +496,6 @@ export async function decideRequest(user: SessionUser, id: string, input: Decide
 // Queries
 // --------------------------------------------------------------------------
 
-/** For the dashboard: requests waiting for an answer in this scope. */
-export async function pendingRequestCount(scope: PropertyScope) {
-  return prisma.residentRequest.count({ where: { ...scopeWhere(scope), status: 'PENDING' } })
-}
-
 export type RequestTab = 'pending' | 'approved' | 'all'
 
 export async function listRequests(

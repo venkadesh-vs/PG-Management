@@ -10,6 +10,7 @@ import type { OrgStatus, UserRole } from '@prisma/client'
 import { prisma } from './prisma'
 import { serverEnv } from './env'
 import { resolveAccess } from './access'
+import { ipFromHeaders } from './client-ip'
 import { planExcludedModules } from './plan-entitlements'
 import type { ModuleKey } from './modules'
 
@@ -73,7 +74,7 @@ export async function createSession(userId: string) {
       tokenHash: hashToken(raw),
       expiresAt,
       userAgent: hdrs.get('user-agent')?.slice(0, 250) ?? null,
-      ip: (hdrs.get('x-forwarded-for') ?? '').split(',')[0]?.trim() || null,
+      ip: ipFromHeaders((name) => hdrs.get(name)),
     },
   })
 

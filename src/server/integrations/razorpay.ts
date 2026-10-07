@@ -49,6 +49,18 @@ export type RazorpayPayment = {
   error_description: string | null
   error_reason?: string | null
   captured?: boolean
+  /** Paise refunded so far (Razorpay's running total). */
+  amount_refunded?: number
+  created_at: number
+}
+
+export type RazorpayRefund = {
+  id: string
+  entity: 'refund'
+  amount: number
+  currency: string
+  payment_id: string
+  status: 'pending' | 'processed' | 'failed'
   created_at: number
 }
 
@@ -176,6 +188,9 @@ export function createOrder(
     // Razorpay caps receipt at 40 characters.
     receipt: params.receipt.slice(0, 40),
     notes: params.notes,
+    // Capture on authorisation: StayFlow records only captured payments, so an
+    // authorised-but-never-captured payment can never settle an invoice.
+    payment_capture: 1,
   })
 }
 
@@ -324,6 +339,7 @@ export type RazorpayWebhookEvent = {
   created_at?: number
   payload?: {
     payment?: { entity?: RazorpayPayment }
+    refund?: { entity?: RazorpayRefund }
     order?: { entity?: RazorpayOrder }
     subscription?: { entity?: RazorpaySubscription }
   }

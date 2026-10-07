@@ -4,7 +4,8 @@ import { ensureOrgDefaults } from './org-defaults'
 import type { AuthTokenKind, Prisma, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateTempPassword, hashPassword } from '@/lib/password'
-import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { grantProblem, memberActionProblem, pgScopeProblem } from '@/lib/role-guard'
 import { slugify } from '@/lib/utils'
 import { issueAuthToken, consumeAuthToken, peekAuthToken } from '../auth-tokens'
 import { recordActivity } from '../events'
@@ -507,6 +508,12 @@ export async function verifyEmailToken(token: string) {
 // --------------------------------------------------------------------------
 
 type Actor = { id: string; name: string; role: UserRole }
+/** What the person acting holds; limits what they may hand out (lib/role-guard). */
+type ActorAccess = { role: UserRole; permissions: string[]; propertyIds: string[] }
+
+function deny(problem: string | null) {
+  if (problem) throw new ForbiddenError(problem)
+}
 
 /**
  * Invites a MANAGER. An empty `propertyIds` means every PG (no
@@ -521,9 +528,12 @@ export async function inviteManager(params: {
   propertyIds: string[]
   /** Dashboard role for them; defaults to the organization's "Manager" role. */
   orgRoleId?: string | null
+  /** The inviter's own access. Omitted only by trusted callers (owner flows, scripts). */
+  actorAccess?: ActorAccess
 }) {
   const email = normaliseEmail(params.email)
   const propertyIds = [...new Set(params.propertyIds)]
+  if (params.actorAccess) deny(pgScopeProblem(params.actorAccess.propertyIds, propertyIds))
   const passwordHash = await unusablePasswordHash()
 
   const manager = await prisma.$transaction(async (tx) => {
@@ -545,6 +555,7 @@ export async function inviteManager(params: {
     if (orgRole && orgRole.app !== 'DASHBOARD') {
       throw new ValidationError(`${orgRole.name} is a staff app role. Choose a dashboard role for a manager.`)
     }
+    if (params.actorAccess) deny(grantProblem(params.actorAccess, orgRole?.permissions ?? []))
     const user = await tx.user.create({
       data: {
         organizationId: params.organizationId,
@@ -592,10 +603,14 @@ async function teamMember(organizationId: string, userId: string) {
   return member
 }
 
-export async function resendTeamInvite(params: { organizationId: string; userId: string }) {
+export async function resendTeamInvite(params: { organizationId: string; userId: string; actor?: Actor }) {
   const member = await teamMember(params.organizationId, params.userId)
+  if (params.actor) deny(memberActionProblem(params.actor, member))
   if (member.status === 'SUSPENDED') throw new ValidationError('Reactivate this person first')
-  return sendAccessLink(member.id)
+  const access = await sendAccessLink(member.id)
+  // The raw invite link sets that person's password, so only an owner gets to see it.
+  if (params.actor && params.actor.role !== 'OWNER') return { ...access, inviteUrl: null }
+  return access
 }
 
 /**
@@ -607,7 +622,11 @@ export async function setMemberRole(params: {
   actor: Actor
   userId: string
   orgRoleId: string
+  actorAccess?: ActorAccess
 }) {
+  if (params.actor.role !== 'OWNER' && params.userId === params.actor.id) {
+    throw new ForbiddenError('You cannot change your own role. Ask the PG owner.')
+  }
   const [member, role] = await Promise.all([
     prisma.user.findFirst({
       where: { id: params.userId, organizationId: params.organizationId, archivedAt: null },
@@ -618,6 +637,7 @@ export async function setMemberRole(params: {
   if (!member) throw new NotFoundError('Team member not found')
   if (!role) throw new NotFoundError('That role no longer exists')
   if (member.role === 'OWNER') throw new ValidationError('Owners always have full access — no role needed')
+  if (params.actorAccess) deny(grantProblem(params.actorAccess, role.permissions))
   if (member.role !== 'MANAGER' && member.role !== 'WORKER') {
     throw new ValidationError('Only managers and staff app logins can have a role')
   }
@@ -659,6 +679,7 @@ export async function setTeamMemberActive(params: {
     throw new ValidationError('You cannot deactivate your own login')
   }
   const member = await teamMember(params.organizationId, params.userId)
+  deny(memberActionProblem(params.actor, member))
 
   if (!params.active && member.role === 'OWNER' && member.status === 'ACTIVE') {
     const owners = await prisma.user.count({

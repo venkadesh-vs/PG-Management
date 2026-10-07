@@ -18,7 +18,7 @@ export const optionalPhone = z
   .or(z.literal(''))
 
 const optionalString = z.string().trim().optional().or(z.literal(''))
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000, 'Amount is too large')
 
 // ------------------------------------------------------------- resident ----
 
@@ -384,22 +384,6 @@ export const settingsSchema = z.object({
   receiptPrefix: z.string().trim().min(1).max(6),
 })
 
-export const planSchema = z.object({
-  name: z.string().trim().min(2),
-  slug: z.string().trim().min(2).regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers and dashes'),
-  description: optionalString,
-  pricingBasis: z.enum(['STANDARD_RENT', 'PER_BED', 'FLAT']),
-  multiplier: z.coerce.number().int().min(1).max(500),
-  perBedPrice: rupees,
-  flatPrice: rupees,
-  minAmount: rupees,
-  maxAmount: rupees,
-  trialDays: z.coerce.number().int().min(0).max(90),
-  graceDays: z.coerce.number().int().min(0).max(60),
-  active: z.boolean().default(true),
-  isDefault: z.boolean().default(false),
-})
-
 // ---------------------------------------------------------------- leads ----
 
 export const leadSchema = z.object({
@@ -417,15 +401,6 @@ export const leadSchema = z.object({
   preferredDemoAt: optionalString,
   message: optionalString,
   source: z.string().default('website'),
-})
-
-export const leadUpdateSchema = z.object({
-  leadId: z.string().min(1),
-  status: z
-    .enum(['NEW', 'CONTACTED', 'DEMO_SCHEDULED', 'DEMO_COMPLETED', 'TRIAL', 'CONVERTED', 'LOST'])
-    .optional(),
-  note: optionalString,
-  demoAt: optionalString,
 })
 
 // ------------------------------------------------------------- accounts ----

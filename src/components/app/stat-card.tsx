@@ -110,33 +110,3 @@ export function StatCard({
   )
 }
 
-/** A compact metric row used inside cards and the tenant/worker apps. */
-export function MiniStat({
-  label,
-  value,
-  icon,
-  tone = 'default',
-}: {
-  label: string
-  value: string
-  icon?: IconLike
-  tone?: StatTone
-}) {
-  const tokens = TONE[tone]
-  const Icon = resolveIcon(icon)
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200/70 bg-white p-3">
-      {Icon && (
-        <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg', tokens.icon)}>
-          <Icon className="size-4" />
-        </div>
-      )}
-      <div className="min-w-0">
-        <p className="truncate text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          {label}
-        </p>
-        <p className="truncate font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
-      </div>
-    </div>
-  )
-}

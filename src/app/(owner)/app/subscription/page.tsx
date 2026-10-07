@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { paymentMode } from '@/server/integrations/payments'
+import { demoPaymentsAllowed, paymentMode } from '@/server/integrations/payments'
 import { SUBSCRIPTION_STATUS_STYLE, INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, formatDate, formatMoney } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
@@ -115,6 +115,8 @@ export default async function SubscriptionPage() {
     .filter((i) => i.status === 'PAID')
     .reduce((sum, i) => sum + i.total, 0)
   const demo = paymentMode() === 'demo'
+  // No platform gateway and not a demo deployment: nothing can be paid online yet.
+  const payUnavailable = demo && !demoPaymentsAllowed()
   const atRisk = subscriptions.some((s) => s.status === 'GRACE' || s.status === 'PAST_DUE')
 
   return (
@@ -126,7 +128,22 @@ export default async function SubscriptionPage() {
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Subscription' }]}
       />
 
-      {demo && (
+      {payUnavailable && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="flex items-start gap-3 p-5">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Online payment is not set up yet</p>
+              <p className="mt-1 text-sm leading-relaxed text-amber-800/80">
+                Pay now and AutoPay will appear here once StayFlow&apos;s payment gateway is live. Until
+                then, pay open invoices by bank transfer or UPI and contact support — we mark them paid.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {demo && !payUnavailable && (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="flex items-start gap-3 p-5">
             <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
@@ -328,6 +345,7 @@ export default async function SubscriptionPage() {
                     mandateStatus={subscription.mandateStatus}
                     methodLabel={subscription.paymentMethods[0]?.label ?? null}
                     demo={demo}
+                    unavailable={payUnavailable}
                     authUrl={subscription.gatewayAuthUrl}
                   />
 
@@ -581,7 +599,7 @@ export default async function SubscriptionPage() {
                             Receipt
                           </a>
                         )}
-                        {PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
+                        {!payUnavailable && PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
                           <PayInvoiceButton
                             invoiceId={invoice.id}
                             number={invoice.number}
@@ -641,7 +659,7 @@ export default async function SubscriptionPage() {
                     </span>
                     <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
                   </div>
-                  {PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
+                  {!payUnavailable && PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
                     <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
                       <PayInvoiceButton
                         invoiceId={invoice.id}

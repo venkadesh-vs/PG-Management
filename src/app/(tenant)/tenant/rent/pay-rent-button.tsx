@@ -95,11 +95,20 @@ export function PayRentButton({
         color: brand,
       })
       setOpen(true)
-      const verified = await api.post<{ receiptNumber: string; amount: number; message: string }>(
-        '/api/tenant/pay',
-        { action: 'VERIFY', ...result },
-      )
-      setReceipt({ receiptNumber: verified.receiptNumber, amount: verified.amount, demo: false })
+      const verified = await api.post<{
+        receiptNumber?: string
+        amount?: number
+        message: string
+        processing?: boolean
+      }>('/api/tenant/pay', { action: 'VERIFY', ...result })
+      if (verified.processing || !verified.receiptNumber) {
+        // Bank authorised it; Razorpay's capture webhook records the receipt.
+        setOpen(false)
+        toast.success('Payment processing', verified.message)
+        router.refresh()
+        return
+      }
+      setReceipt({ receiptNumber: verified.receiptNumber, amount: verified.amount ?? 0, demo: false })
       toast.success('Payment received', verified.message)
       router.refresh()
     } catch (error) {

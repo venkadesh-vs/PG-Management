@@ -165,9 +165,9 @@ export function SiteHeader() {
                 </a>
               </Button>
               <Button variant="outline" size="xl" className="w-full" asChild>
-                <a href="/#demo" onClick={() => setOpen(false)}>
+                <Link href="/#demo" onClick={() => setOpen(false)}>
                   Book a demo
-                </a>
+                </Link>
               </Button>
             </motion.div>
           </motion.div>
@@ -182,7 +182,7 @@ export function SiteHeader() {
               <a href="/signup">Start free</a>
             </Button>
             <Button variant="outline" asChild className="flex-1">
-              <a href="/#demo">Book a demo</a>
+              <Link href="/#demo">Book a demo</Link>
             </Button>
             {wa && (
               <Button variant="outline" size="icon" asChild>

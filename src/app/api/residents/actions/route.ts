@@ -22,7 +22,7 @@ import { lockCheckout, updateCheckoutChecklists } from '@/server/services/checko
  * post-checkout checklist update and lock, paying out a pending refund and
  * collecting a deposit that was not taken at check-in.
  */
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Amounts cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Amounts cannot be negative').max(10_000_000, 'Amount is too large')
 const text = (max: number) => z.string().trim().max(max).optional().or(z.literal(''))
 
 const deductions = z
@@ -47,7 +47,7 @@ const schema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('TRANSFER'),
-      newRent: z.coerce.number().int('Enter a whole rupee amount').positive('Enter the new rent').optional(),
+      newRent: z.coerce.number().int('Enter a whole rupee amount').positive('Enter the new rent').max(10_000_000, 'Amount is too large').optional(),
       rentReason: text(200),
     })
     .merge(transferSchema),

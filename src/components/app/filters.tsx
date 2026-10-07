@@ -199,35 +199,3 @@ export function Pagination({
   )
 }
 
-/** Sortable table header cell driven by ?sort=field&dir=asc|desc */
-export function SortHeader({
-  field,
-  label,
-  className,
-}: {
-  field: string
-  label: string
-  className?: string
-}) {
-  const searchParams = useSearchParams()
-  const write = useParamWriter()
-  const active = searchParams.get('sort') === field
-  const dir = searchParams.get('dir') === 'asc' ? 'asc' : 'desc'
-
-  return (
-    <button
-      type="button"
-      onClick={() => write({ sort: field, dir: active && dir === 'desc' ? 'asc' : 'desc' })}
-      className={cn(
-        'inline-flex items-center gap-1 transition-colors hover:text-slate-900',
-        active && 'text-slate-900',
-        className,
-      )}
-    >
-      {label}
-      <span className={cn('text-[9px]', active ? 'opacity-100' : 'opacity-30')}>
-        {active && dir === 'asc' ? '▲' : '▼'}
-      </span>
-    </button>
-  )
-}

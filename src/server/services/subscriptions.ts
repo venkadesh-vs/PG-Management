@@ -9,8 +9,10 @@ import { computeGst, financialYear } from '@/lib/gst'
 import { platformEnv } from '@/lib/platform-env'
 import {
   createOrder,
+  demoPaymentsAllowed,
   getOrgRazorpay,
   handleOrgWebhook,
+  PAYMENT_NOT_SET_UP,
   platformRazorpay,
   simulateAutopayDebit,
   paymentMode,
@@ -309,7 +311,8 @@ export async function setupAutopay(params: {
   const creds = platformRazorpay()
   if (creds) return setupGatewayAutopay(creds, subscription)
 
-  // Demo: the mandate is local and clearly labelled.
+  // Demo: the mandate is local and clearly labelled — demo deployments only.
+  if (!demoPaymentsAllowed()) throw new ConflictError(PAYMENT_NOT_SET_UP)
   const demo = true
 
   const [updated] = await prisma.$transaction([
@@ -849,7 +852,7 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
     // No usable mandate (or a legacy live "mandate" with no gateway behind
     // it): the owner pays the invoice with Pay now. PAST_DUE ("payment due")
     // until the due date, then GRACE until graceEndsAt, then SUSPENDED.
-    if (!demo || !mandateActive) {
+    if (!demo || !mandateActive || !demoPaymentsAllowed()) {
       const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
       await prisma.subscription.update({
         where: { id: subscription.id },
@@ -927,7 +930,12 @@ async function attemptOwnCharge(params: {
   if (due <= 0 || invoice.status === 'PAID') return { success: true }
 
   const demo = paymentMode() === 'demo'
-  const attempt = simulateAutopayDebit(params.attempt === 1 ? invoice.id : `${invoice.id}:${params.attempt}`)
+  // The simulated debit settles invoices without money, so it runs only on a
+  // demo deployment. Elsewhere a leftover demo mandate simply fails the
+  // attempt, and the owner pays with Pay now before grace ends.
+  const attempt = demoPaymentsAllowed()
+    ? simulateAutopayDebit(params.attempt === 1 ? invoice.id : `${invoice.id}:${params.attempt}`)
+    : { success: false as const, reason: 'AutoPay is not available on this deployment — please use Pay now' }
 
   if (attempt.success) {
     await prisma.$transaction(async (tx) => {
@@ -1331,7 +1339,8 @@ export async function startInvoiceCheckout(params: {
 }
 
 export type SettleOutcome = {
-  status: 'paid' | 'duplicate' | 'ignored'
+  /** processing: authorised, not captured yet — the payment.captured webhook settles it. */
+  status: 'paid' | 'duplicate' | 'processing' | 'ignored'
   invoiceNumber?: string
   reactivated?: boolean
   reason?: string
@@ -1347,7 +1356,9 @@ async function settleInvoiceFromPlatformPayment(
   payment: RazorpayPayment,
   expect?: { invoiceId: string; organizationId: string; orderId: string },
 ): Promise<SettleOutcome> {
-  if (payment.status !== 'captured' && payment.status !== 'authorized') {
+  // Only captured money settles an invoice; an authorised payment can still be voided.
+  if (payment.status === 'authorized') return { status: 'processing' }
+  if (payment.status !== 'captured') {
     return { status: 'ignored', reason: `Payment is ${payment.status}` }
   }
   if (!payment.order_id) return { status: 'ignored', reason: 'Payment has no order' }
@@ -1434,9 +1445,7 @@ export async function payInvoiceDemo(params: {
   organizationId: string
   actor: { id?: string; name: string }
 }): Promise<SettleOutcome> {
-  if (paymentMode() !== 'demo') {
-    throw new ValidationError('Demo payments are disabled once a real gateway is configured')
-  }
+  if (!demoPaymentsAllowed()) throw new ConflictError(PAYMENT_NOT_SET_UP)
   const { invoice, due } = await loadPayableInvoice(params.invoiceId, params.organizationId)
   const result = await prisma.$transaction((tx) =>
     settleSubscriptionInvoice(tx, {
@@ -1486,6 +1495,9 @@ async function handleSubscriptionCharged(
   payment: RazorpayPayment | undefined,
 ): Promise<WebhookResult> {
   if (!payment?.id) return { handled: false, note: 'charged event without a payment' }
+  if (payment.status && payment.status !== 'captured') {
+    return { handled: false, note: `charged event with a ${payment.status} payment` }
+  }
   const found = await subscriptionForRemote(remote)
   if (!found) return { handled: false, note: 'unknown subscription' }
   const { subscription } = found
@@ -1674,6 +1686,7 @@ async function handleSubscriptionEnded(remote: RazorpaySubscription): Promise<We
  * notes {invoiceId, residentId}. Still recorded so nothing paid is lost.
  */
 async function handleLegacyRentPayment(payment: RazorpayPayment, notes: Record<string, string>) {
+  if (payment.status !== 'captured') return { handled: false, note: `payment is ${payment.status}` }
   const invoice = await prisma.rentInvoice.findUnique({
     where: { id: notes.invoiceId },
     select: { id: true, residentId: true },
@@ -1757,12 +1770,19 @@ export async function handlePlatformWebhook(event: RazorpayWebhookEvent): Promis
     }
     if (notes.kind === 'subscription_invoice') {
       const outcome = await settleInvoiceFromPlatformPayment(creds, payment)
-      return { handled: outcome.status !== 'ignored', note: outcome.reason ?? outcome.status }
+      return {
+        handled: outcome.status === 'paid' || outcome.status === 'duplicate',
+        note: outcome.reason ?? outcome.status,
+      }
     }
     if (notes.invoiceId && notes.residentId && (!notes.kind || notes.kind === 'rent')) {
       return handleLegacyRentPayment(payment, notes)
     }
     return { handled: false, note: 'payment not for StayFlow invoices' }
+  }
+
+  if ((name === 'refund.processed' || name === 'payment.refunded') && (payment?.id || event.payload?.refund?.entity)) {
+    return flagPlatformRefund(event)
   }
 
   if (name === 'payment.failed' && payment?.id) {
@@ -2629,4 +2649,39 @@ export async function replayFailedWebhooks() {
     }
   }
   return { processed, failed }
+}
+
+/**
+ * A refund made on the PLATFORM Razorpay account (a subscription payment).
+ * Subscription money is never changed automatically: the refund is recorded in
+ * the audit log and Super Admins are asked to adjust the invoice by hand.
+ * Duplicate deliveries are stopped by the webhook event log.
+ */
+async function flagPlatformRefund(event: RazorpayWebhookEvent): Promise<WebhookResult> {
+  const refund = event.payload?.refund?.entity
+  const paymentId = refund?.payment_id ?? event.payload?.payment?.entity?.id ?? null
+  if (!paymentId) return { handled: false, note: 'refund event without a payment id' }
+  const local = await prisma.subscriptionPayment.findUnique({
+    where: { gatewayPaymentId: paymentId },
+    include: { subscription: { select: { organizationId: true, propertyId: true } }, invoice: { select: { number: true } } },
+  })
+  if (!local) return { handled: false, note: 'refund for a payment StayFlow did not record' }
+  const amount = fromPaise(refund?.amount ?? event.payload?.payment?.entity?.amount_refunded ?? 0)
+  await recordActivity({
+    organizationId: local.subscription.organizationId,
+    propertyId: local.subscription.propertyId,
+    actorName: 'Razorpay',
+    event: 'ADMIN_ACTION',
+    entityType: 'SubscriptionPayment',
+    entityId: local.id,
+    summary: `Razorpay refunded ${formatMoney(amount)} of subscription payment ${paymentId}${local.invoice ? ` (${local.invoice.number})` : ''}${refund?.id ? ` — ${refund.id}` : ''}. Adjust the invoice by hand.`,
+    meta: { paymentId, refundId: refund?.id ?? null, amount, needsReview: true },
+  })
+  await notifySuperAdmins({
+    kind: 'SUBSCRIPTION',
+    title: 'Subscription refund needs review',
+    body: `${formatMoney(amount)} refunded on Razorpay for payment ${paymentId}${local.invoice ? ` (${local.invoice.number})` : ''}.`,
+    link: '/admin/payments',
+  }).catch(() => undefined)
+  return { handled: true, note: 'refund flagged for review' }
 }

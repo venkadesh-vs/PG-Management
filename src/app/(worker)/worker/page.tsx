@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIORITY_STYLE, themeFor } from '@/lib/theme'
 import {
   startOfDay,
 } from '@/lib/utils'

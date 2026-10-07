@@ -4,8 +4,10 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { serverEnv } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { decryptJson } from '@/lib/crypto'
-import { recordActivity } from '../events'
-import { recordGatewayPayment } from '../services/billing'
+import { planGatewayRefund } from '@/lib/gateway-refund'
+import { unallocatedOf } from '@/lib/billing-calc'
+import { notifyOrgAdmins, recordActivity } from '../events'
+import { recordGatewayPayment, refundPayment, reversePayment } from '../services/billing'
 import {
   createOrder as rzpCreateOrder,
   fetchOrder,
@@ -19,6 +21,7 @@ import {
   type RazorpayNotes,
   type RazorpayOrder,
   type RazorpayPayment,
+  type RazorpayRefund,
 } from './razorpay'
 
 /**
@@ -51,6 +54,19 @@ export type GatewayOrder = {
 export function paymentMode(): 'demo' | 'live' {
   return serverEnv.payment.isLive ? 'live' : 'demo'
 }
+
+/**
+ * True only where simulated payments may settle invoices: a DEMO_MODE
+ * deployment without live platform keys. Every demo payment path checks this,
+ * not paymentMode() — "no keys" alone is a real deployment that is simply
+ * not set up yet.
+ */
+export function demoPaymentsAllowed(): boolean {
+  return serverEnv.demoPaymentsAllowed && !serverEnv.payment.isLive
+}
+
+/** Shown wherever a payment cannot be taken because no gateway is configured. */
+export const PAYMENT_NOT_SET_UP = 'Online payment is not set up yet. Please pay by bank transfer or UPI, or contact support.'
 
 /** The platform's own Razorpay keys, or null in demo mode. */
 export function platformRazorpay(): RazorpayCredentials | null {
@@ -178,6 +194,8 @@ export async function createRentOrder(params: {
 
 export type RentGatewayOutcome =
   | { status: 'recorded'; receiptNumber: string; amount: number; duplicate: boolean }
+  /** Authorised but not yet captured: the payment.captured webhook records it. */
+  | { status: 'processing' }
   | { status: 'ignored'; reason: string }
 
 /**
@@ -199,7 +217,10 @@ export async function recordRentGatewayPayment(params: {
   expectResidentId?: string
 }): Promise<RentGatewayOutcome> {
   const { payment } = params
-  if (payment.status !== 'captured' && payment.status !== 'authorized') {
+  // Only captured money is real. An authorised payment can still be voided by
+  // the bank, so it waits for the payment.captured webhook.
+  if (payment.status === 'authorized') return { status: 'processing' }
+  if (payment.status !== 'captured') {
     return { status: 'ignored', reason: `Payment is ${payment.status}` }
   }
   if (!payment.order_id) return { status: 'ignored', reason: 'Payment has no order' }
@@ -321,13 +342,27 @@ export async function logRentPaymentFailure(organizationId: string, payment: Raz
 export async function handleOrgWebhook(
   organizationId: string,
   creds: OrgRazorpay,
-  event: { event?: string; payload?: { payment?: { entity?: RazorpayPayment } } },
+  event: {
+    event?: string
+    payload?: { payment?: { entity?: RazorpayPayment }; refund?: { entity?: RazorpayRefund } }
+  },
 ): Promise<{ handled: boolean; note: string }> {
+  if (event.event === 'refund.processed' || event.event === 'payment.refunded') {
+    const paymentId = event.payload?.refund?.entity?.payment_id ?? event.payload?.payment?.entity?.id
+    if (!paymentId) return { handled: false, note: 'refund event without a payment id' }
+    return applyRentGatewayRefund({
+      organizationId,
+      creds,
+      paymentId,
+      refundId: event.payload?.refund?.entity?.id ?? null,
+    })
+  }
   const payment = event.payload?.payment?.entity
   if (!payment?.id) return { handled: false, note: 'no payment entity' }
   if (event.event === 'payment.captured') {
     const outcome = await recordRentGatewayPayment({ organizationId, creds, payment, source: 'webhook' })
     if (outcome.status === 'ignored') return { handled: false, note: outcome.reason }
+    if (outcome.status === 'processing') return { handled: false, note: 'payment not captured yet' }
     return {
       handled: true,
       note: outcome.duplicate ? 'duplicate' : `receipt ${outcome.receiptNumber}`,
@@ -338,4 +373,78 @@ export async function handleOrgWebhook(
     return { handled: true, note: 'failure logged' }
   }
   return { handled: false, note: `ignored ${event.event ?? 'unknown event'}` }
+}
+
+/**
+ * Reflects a refund made on the PG's Razorpay account. Razorpay's running
+ * total (fetched, not taken from the event) is authoritative, and only the part
+ * StayFlow does not show yet is applied — so retries and duplicate events are
+ * no-ops. Money applied to invoices is never moved silently: a full refund
+ * reverses the payment (reopening its invoices); anything else is flagged for
+ * the owner to settle with a credit note or reversal.
+ */
+export async function applyRentGatewayRefund(params: {
+  organizationId: string
+  creds: OrgRazorpay
+  paymentId: string
+  refundId: string | null
+}): Promise<{ handled: boolean; note: string }> {
+  const local = await prisma.rentPayment.findFirst({
+    where: { gatewayPaymentId: params.paymentId, organizationId: params.organizationId },
+    include: { allocations: { select: { amount: true } } },
+  })
+  if (!local) return { handled: false, note: 'refund for a payment StayFlow did not record' }
+
+  const remote = await fetchPayment(params.creds, params.paymentId)
+  const plan = planGatewayRefund({
+    paymentAmount: local.amount,
+    alreadyRefunded: local.refundedAmount,
+    gatewayRefunded: fromPaise(remote.amount_refunded ?? 0),
+    unallocated: unallocatedOf(local),
+    status: local.status,
+  })
+  const ref = params.refundId ? ` (${params.refundId})` : ''
+  const actor = { name: 'Razorpay' }
+
+  if (plan.action === 'none') return { handled: true, note: plan.reason }
+  if (plan.action === 'refund') {
+    await refundPayment({
+      organizationId: params.organizationId,
+      paymentId: local.id,
+      amount: plan.amount,
+      method: 'GATEWAY',
+      reference: params.refundId ?? undefined,
+      reason: `Refunded on Razorpay${ref}`,
+      actor,
+    })
+    return { handled: true, note: `refunded ₹${plan.amount} of ${local.receiptNumber}` }
+  }
+  if (plan.action === 'reverse') {
+    await reversePayment({
+      organizationId: params.organizationId,
+      paymentId: local.id,
+      reason: `Fully refunded on Razorpay${ref}`,
+      actor,
+    })
+    return { handled: true, note: `reversed ${local.receiptNumber} after a full refund` }
+  }
+
+  // Applied money went back to the resident: tell the owner, change nothing.
+  await recordActivity({
+    organizationId: params.organizationId,
+    propertyId: local.propertyId,
+    actorName: 'Razorpay',
+    event: 'PAYMENT_FAILED',
+    entityType: 'RentPayment',
+    entityId: local.id,
+    summary: `Razorpay refunded ₹${plan.amount} of ${local.receiptNumber}${ref}, but that money is applied to invoices. Raise a credit note or reverse the payment.`,
+    meta: { residentId: local.residentId, refundId: params.refundId, amount: plan.amount, needsReview: true },
+  })
+  await notifyOrgAdmins(params.organizationId, {
+    kind: 'PAYMENT',
+    title: 'Razorpay refund needs review',
+    body: `₹${plan.amount} of ${local.receiptNumber} was refunded on Razorpay but is applied to invoices. Open the payment to raise a credit note or reverse it.`,
+    link: '/app/payments',
+  }).catch(() => undefined)
+  return { handled: true, note: `refund of ₹${plan.amount} on ${local.receiptNumber} flagged for review` }
 }

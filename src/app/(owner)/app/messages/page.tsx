@@ -42,7 +42,10 @@ export default async function MessagesPage({
   const scope = await resolveScope(user, params.property)
 
   const [centre, channel, residents] = await Promise.all([
-    loadMessageCentre({ id: user.id, role: user.role, organizationId: user.organizationId }, params),
+    loadMessageCentre(
+      { id: user.id, role: user.role, organizationId: user.organizationId, propertyIds: user.propertyIds },
+      params,
+    ),
     resolveWhatsAppChannel(user.organizationId),
     prisma.resident.findMany({
       where: {
@@ -56,6 +59,8 @@ export default async function MessagesPage({
   ])
 
   const whatsappOn = user.modules.includes('whatsapp')
+  // Retrying re-sends to a resident, so it needs the send permission too.
+  const canRetry = whatsappOn && (user.role === 'OWNER' || user.permissions.includes('announcements.send'))
   const live = channel.mode !== 'demo'
   const f = centre.filters
   const activeFilters = [f.q, f.channel, f.status, f.group, f.resident, f.from, f.to].filter(Boolean).length
@@ -169,7 +174,7 @@ export default async function MessagesPage({
         <>
           <div className="space-y-3">
             {centre.rows.map((row) => (
-              <MessageCard key={`${row.source}-${row.id}`} row={row} />
+              <MessageCard key={`${row.source}-${row.id}`} row={row} canRetry={canRetry} />
             ))}
           </div>
           {centre.totalUncapped > CENTRE_MAX_PAGE * CENTRE_PAGE_SIZE && centre.page >= CENTRE_MAX_PAGE && (
@@ -194,7 +199,7 @@ function ChannelIcon({ channel }: { channel: string }) {
   return <Bell className={`${cls} text-slate-500`} />
 }
 
-function MessageCard({ row }: { row: CentreRow }) {
+function MessageCard({ row, canRetry }: { row: CentreRow; canRetry: boolean }) {
   const channelLabel = CENTRE_CHANNEL_LABEL[row.channel as keyof typeof CENTRE_CHANNEL_LABEL] ?? row.channel
   return (
     <Card>
@@ -283,7 +288,7 @@ function MessageCard({ row }: { row: CentreRow }) {
               {row.error ?? 'Not delivered'}
               {row.attempts > 0 && ` · ${row.attempts} attempt${row.attempts === 1 ? '' : 's'}`}
             </p>
-            {row.retryable && <RetryButton messageId={row.id} />}
+            {row.retryable && canRetry && <RetryButton messageId={row.id} />}
           </div>
         ) : (
           row.source === 'outbound' && row.error && <p className="mt-2 break-words text-xs text-red-600">{row.error}</p>

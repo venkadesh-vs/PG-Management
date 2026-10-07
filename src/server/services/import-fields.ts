@@ -202,12 +202,6 @@ export function parseAmount(value: string): AmountResult {
   return { ok: true, value: Math.round(Number(clean)) }
 }
 
-/** Kept for the legacy API: a valid non-negative amount, or null. */
-export function parseRupees(value: string): number | null {
-  const r = parseAmount(value)
-  return r.ok ? r.value : null
-}
-
 export function parseYesNo(value: string): boolean | null {
   const v = value.trim().toLowerCase()
   if (!v) return null

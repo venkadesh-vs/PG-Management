@@ -130,8 +130,11 @@ export function PhotoUpload({
   const toast = useToast()
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [pending, setPending] = React.useState<Pending[]>([])
+  // Latest value for upload callbacks that finish after a re-render.
   const valueRef = React.useRef(value)
-  valueRef.current = value
+  React.useLayoutEffect(() => {
+    valueRef.current = value
+  }, [value])
 
   React.useEffect(() => {
     onBusyChange?.(pending.length > 0)

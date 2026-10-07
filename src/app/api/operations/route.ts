@@ -10,7 +10,6 @@ import {
   assertInScope,
   assertPropertyAccess,
   assertResidentInProperty,
-  assertRoomInProperty,
   ForbiddenError,
   NotFoundError,
   requireModule,
@@ -33,12 +32,13 @@ import {
 } from '@/lib/validation'
 import { notifyResident, recordActivity } from '@/server/events'
 import { markMealServed, recordPurchase, upsertMeal } from '@/server/services/kitchen'
-import { formatMoney, startOfDay } from '@/lib/utils'
+import { startOfDay } from '@/lib/utils'
 import { sendWhatsApp } from '@/server/integrations/whatsapp'
 import { channelEnabled } from '@/server/services/notification-settings'
 import { createWorkerLogin, sendAccessLink } from '@/server/services/accounts'
 import { assertWithinPlan } from '@/server/services/plan-limits'
 import type { ModuleKey } from '@/lib/modules'
+import { grantProblem } from '@/lib/role-guard'
 
 /**
  * Day-to-day operational writes, grouped behind one endpoint so every module
@@ -133,9 +133,12 @@ export const POST = route(async ({ user, request }) => {
         if (body.orgRoleId) {
           const role = await prisma.orgRole.findFirst({
             where: { id: body.orgRoleId, organizationId, app: 'STAFF_APP' },
-            select: { id: true },
+            select: { id: true, permissions: true },
           })
           if (!role) throw new ValidationError('Choose a staff-app role for this login')
+          // Non-owners may only hand out access they hold themselves.
+          const problem = grantProblem(user, role.permissions)
+          if (problem) throw new ForbiddenError(problem)
           orgRoleId = role.id
         } else {
           const role = await prisma.orgRole.findFirst({

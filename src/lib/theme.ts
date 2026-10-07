@@ -186,19 +186,6 @@ export const SUBSCRIPTION_STATUS_STYLE: Record<string, { label: string; chip: st
   CANCELLED: { label: 'Cancelled', chip: 'bg-slate-100 text-slate-500 border-slate-200' },
 }
 
-export const LEAD_STATUS_STYLE: Record<string, { label: string; chip: string }> = {
-  NEW: { label: 'New', chip: 'bg-sky-50 text-sky-700 border-sky-200' },
-  FOLLOW_UP: { label: 'Follow-up', chip: 'bg-orange-50 text-orange-700 border-orange-200' },
-  CONTACTED: { label: 'Contacted', chip: 'bg-violet-50 text-violet-700 border-violet-200' },
-  DEMO_SCHEDULED: { label: 'Demo scheduled', chip: 'bg-amber-50 text-amber-700 border-amber-200' },
-  DEMO_COMPLETED: { label: 'Demo done', chip: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  TRIAL: { label: 'On trial', chip: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
-  ACTIVE_CUSTOMER: { label: 'Active customer', chip: 'bg-green-50 text-green-700 border-green-200' },
-  CONVERTED: { label: 'Converted', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  LOST: { label: 'Lost', chip: 'bg-slate-100 text-slate-500 border-slate-200' },
-  DISQUALIFIED: { label: 'Disqualified', chip: 'bg-rose-50 text-rose-700 border-rose-200' },
-}
-
 /** Chart palette — brand-consistent, colour-blind safe ordering. */
 export const CHART_COLORS = [
   '#2563eb',

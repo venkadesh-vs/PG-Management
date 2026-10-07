@@ -575,7 +575,7 @@ function NoticeDialog({
   const router = useRouter()
   const toast = useToast()
   const [noticeDate, setNoticeDate] = React.useState(toISODate(new Date()))
-  const [exitDate, setExitDate] = React.useState(
+  const [exitDate, setExitDate] = React.useState(() =>
     toISODate(new Date(Date.now() + 30 * 86400000)),
   )
   const [busy, setBusy] = React.useState(false)

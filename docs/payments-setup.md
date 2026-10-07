@@ -44,7 +44,8 @@ If you rotate this key, every owner has to reconnect Razorpay.
      - `subscription.completed`
      - `payment.captured`
      - `payment.failed`
-3. **Auto-capture.** Account & Settings → Payment capture → set to automatic. Pay now accepts `authorized` payments too, but auto-capture means the money actually settles.
+     - `refund.processed` (refunds of subscription payments are flagged to Super Admins for manual adjustment; nothing changes automatically)
+3. **Capture.** StayFlow creates every order with `payment_capture: 1` and records a payment only once it is `captured`. An `authorized` payment shows as "processing" until the `payment.captured` webhook arrives.
 
 The old URL `/api/webhooks/payment` still works. It delegates to the platform handler, so existing configurations keep running. Prefer the new URL for new setups.
 
@@ -52,7 +53,7 @@ The old URL `/api/webhooks/payment` still works. It delegates to the platform ha
 
 - **Pay now.** Every unpaid invoice on `/app/subscription` gets a Pay now button.
   1. The button creates a platform order with notes `{kind: 'subscription_invoice', invoiceId, organizationId}` and opens Razorpay Checkout.
-  2. The server verifies the checkout signature, then fetches the payment and its order from Razorpay. It checks the status (`captured` or `authorized`), the order, the amount and the notes.
+  2. The server verifies the checkout signature, then fetches the payment and its order from Razorpay. It checks the status (`captured` only — `authorized` answers "processing"), the order, the amount and the notes.
   3. Only then is the invoice marked PAID.
   4. The `payment.captured` webhook does the same thing. Both paths are idempotent on the payment id, so whichever arrives second is a no-op.
 - **AutoPay.**
@@ -81,7 +82,8 @@ The owner does this once, at **Settings → Online payments** (`/app/settings/pa
 3. Go to **Account & Settings → Webhooks → Add new webhook**:
    - URL: shown on the StayFlow page. It looks like `https://<your-domain>/api/webhooks/razorpay/org/<organizationId>`.
    - Secret: any strong string you choose.
-   - Active events: `payment.captured`, `payment.failed`.
+   - Active events: `payment.captured`, `payment.failed`, `refund.processed`.
+   - A refund made on Razorpay is applied using Razorpay's running total, so repeats are harmless: money not applied to an invoice is refunded in StayFlow; a full refund of an applied payment reverses it (its invoices reopen); any other refund of applied money is flagged to the owner to settle with a credit note or reversal.
 4. Paste the Key ID, Key Secret and webhook secret into StayFlow and click **Verify & save**.
    - StayFlow makes a cheap API call (list one order) to prove the keys work before storing them.
    - Secrets are encrypted with AES-256-GCM. They are never sent back to the browser.
@@ -100,3 +102,7 @@ Once connected, a resident's **Pay** button works like this:
 - On a demo deployment, residents also get a clearly-labelled demo payment.
 
 Test keys (`rzp_test_…`) work too. The settings page shows a **Test mode** badge.
+
+## Demo payments
+
+Simulated payments (resident "demo pay", demo Pay now and demo AutoPay) settle invoices without any money, so they run only when `DEMO_MODE=true` **and** no live platform keys are set. On a client deployment without keys (`DEMO_MODE=false`), online payment shows "Online payment is not set up yet"; owners pay by bank transfer and a Super Admin marks the invoice paid. A PG that connected its own Razorpay never gets a simulated payment. In production, a missing gateway with `DEMO_MODE` off logs `config.payments_not_live` at start-up.

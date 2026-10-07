@@ -94,7 +94,9 @@ export const POST = route(
           message:
             outcome.status === 'duplicate'
               ? 'Payment already recorded'
-              : `Payment received for ${outcome.invoiceNumber}`,
+              : outcome.status === 'processing'
+                ? 'Payment is processing — we will confirm it in a minute.'
+                : `Payment received for ${outcome.invoiceNumber}`,
         })
       }
 

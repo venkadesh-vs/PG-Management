@@ -160,14 +160,6 @@ export function initials(name: string): string {
     .join('')
 }
 
-export function titleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .split(/[\s_]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
-
 export function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -192,6 +184,3 @@ export function formatPhone(phone?: string | null): string {
   return `+91 ${local.slice(0, 5)} ${local.slice(5)}`
 }
 
-export function pluralize(count: number, singular: string, plural?: string): string {
-  return count === 1 ? singular : (plural ?? `${singular}s`)
-}

@@ -448,17 +448,3 @@ function NotificationBell({ count }: { count: number }) {
   )
 }
 
-/** A profile chip used by the tenant and worker headers. */
-export function ProfileChip({ name, sub }: { name: string; sub?: string }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <Avatar className="size-9">
-        <AvatarFallback>{initials(name)}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
-        {sub && <p className="truncate text-xs text-slate-500">{sub}</p>}
-      </div>
-    </div>
-  )
-}

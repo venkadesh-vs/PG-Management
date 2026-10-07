@@ -60,6 +60,8 @@ export function BookingsList({
 }) {
   const router = useRouter()
   const toast = useToast()
+  // Read the clock once per mount so "expiring soon" is stable across renders.
+  const [now] = React.useState(() => Date.now())
   const [active, setActive] = React.useState<BookingRow | null>(null)
   const [dialog, setDialog] = React.useState<Dialogs>(null)
   const [busyId, setBusyId] = React.useState<string | null>(null)
@@ -104,7 +106,7 @@ export function BookingsList({
         {bookings.map((b, i) => {
           const meta = BOOKING_STATUS[b.status] ?? BOOKING_STATUS.PENDING
           const live = b.status === 'PENDING' || b.status === 'CONFIRMED'
-          const expiring = live && b.expiresAt && new Date(b.expiresAt).getTime() - Date.now() < 2 * 86400000
+          const expiring = live && b.expiresAt && new Date(b.expiresAt).getTime() - now < 2 * 86400000
           return (
             <motion.div
               key={b.id}

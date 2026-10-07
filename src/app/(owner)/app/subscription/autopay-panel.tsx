@@ -34,6 +34,7 @@ export function AutopayPanel({
   mandateStatus,
   methodLabel,
   demo,
+  unavailable = false,
   authUrl = null,
 }: {
   subscriptionId: string
@@ -43,6 +44,8 @@ export function AutopayPanel({
   mandateStatus: string
   methodLabel: string | null
   demo: boolean
+  /** No gateway and not a demo deployment: AutoPay cannot be set up yet. */
+  unavailable?: boolean
   /** Razorpay hosted authorisation link while the mandate is PENDING. */
   authUrl?: string | null
 }) {
@@ -193,6 +196,8 @@ export function AutopayPanel({
                 Cancel
               </Button>
             </div>
+          ) : unavailable ? (
+            <span className="shrink-0 text-xs text-slate-400">Not available yet</span>
           ) : (
             <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
               Set up

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { z } from 'zod'
-import type { Booking, PaymentMethodKind, Prisma } from '@prisma/client'
+import type { Booking, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SessionUser } from '@/lib/auth'
 import { assertPropertyAccess, ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
@@ -31,7 +31,7 @@ const phone = z
   .string()
   .trim()
   .regex(/^(\+?91[-\s]?)?[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number')
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000, 'Amount is too large')
 const optionalText = z.string().trim().max(1000).optional().or(z.literal(''))
 
 export const bookingCreateSchema = z.object({
@@ -485,7 +485,3 @@ export async function expireBookings(params?: { organizationId?: string; now?: D
   return { expired, released }
 }
 
-/** Token payment details for check-in conversion. */
-export function tokenPaymentMethod(method: string | null | undefined): PaymentMethodKind {
-  return (TOKEN_METHODS as readonly string[]).includes(method ?? '') ? (method as PaymentMethodKind) : 'CASH'
-}

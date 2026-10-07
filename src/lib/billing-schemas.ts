@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /** Request schemas for the rent & payments APIs. */
 
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000, 'Amount is too large')
 const positive = rupees.refine((v) => v > 0, 'Enter an amount greater than zero')
 const reason = z.string().trim().min(3, 'Add a short reason (at least 3 characters)').max(300, 'Keep the reason under 300 characters')
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'Pick a date')

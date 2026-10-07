@@ -26,7 +26,7 @@ const schema = z.discriminatedUnion('action', [
     count: z.coerce.number().int().min(1).max(40),
     capacity: z.coerce.number().int().min(1).max(12),
     type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'DORM']),
-    baseRent: z.coerce.number().int().min(0).optional(),
+    baseRent: z.coerce.number().int().min(0).max(10_000_000, 'Amount is too large').optional(),
     hasAC: z.boolean().default(false),
   }),
 ])

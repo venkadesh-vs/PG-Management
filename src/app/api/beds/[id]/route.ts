@@ -15,7 +15,7 @@ import { bedRemovalBlocker, loadRoomBeds } from '@/server/services/bed-layout'
  *            for a booking, or has any history (past stays or bookings).
  */
 
-const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative')
+const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000, 'Amount is too large')
 
 const updateSchema = z.object({
   label: z.string().trim().min(1, 'Give the bed a label').max(6).optional(),

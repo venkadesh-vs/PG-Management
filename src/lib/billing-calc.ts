@@ -133,9 +133,6 @@ export type ChargeLike = {
   voidedAt: Date | null
 }
 
-export const RECURRING_CATEGORIES = ['LAUNDRY', 'MAINTENANCE', 'ELECTRICITY', 'FOOD', 'OTHER'] as const
-export const ONE_TIME_CATEGORIES = ['JOINING', 'NOTICE', 'FINE', 'PENALTY', 'OTHER'] as const
-
 /** Invoice line kind for a charge category. */
 export function lineKindFor(category: string): InvoiceLineKind {
   switch (category) {

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -1044,10 +1045,10 @@ function SuccessPanel({
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button variant="primary" asChild>
-              <a href="/app/residents">
+              <Link href="/app/residents">
                 <Users className="size-4" />
                 View all residents
-              </a>
+              </Link>
             </Button>
             <Button variant="outline" onClick={onAddAnother}>
               Check in another

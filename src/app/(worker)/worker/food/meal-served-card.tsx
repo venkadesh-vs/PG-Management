@@ -24,7 +24,6 @@ const MEAL_TIME = {
  */
 export function MealServedCard({
   meal,
-  propertyName,
   propertyType,
   canManage = true,
 }: {

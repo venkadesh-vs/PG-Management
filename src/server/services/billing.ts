@@ -1998,15 +1998,3 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
   return { sent: sent.length, details: sent }
 }
 
-/** Convenience used by the dashboard "rent due today" card. */
-export async function dueTodayCount(organizationId: string, propertyIds: string[]) {
-  const today = startOfDay(new Date())
-  return prisma.rentInvoice.count({
-    where: {
-      organizationId,
-      propertyId: { in: propertyIds },
-      status: { in: ['PENDING', 'PARTIALLY_PAID'] },
-      dueDate: { gte: today, lt: addDays(today, 1) },
-    },
-  })
-}

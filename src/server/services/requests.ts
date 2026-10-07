@@ -480,6 +480,7 @@ export async function decideRequest(user: SessionUser, id: string, input: Decide
     await notifyResident(request.residentId, {
       organizationId: request.organizationId,
       kind: 'SYSTEM',
+      type: 'REQUEST_UPDATE',
       title: RESIDENT_MESSAGE[request.kind][to] ?? 'Your request was updated',
       body: [request.title, input.note].filter(Boolean).join(' · '),
       link: '/tenant/requests',

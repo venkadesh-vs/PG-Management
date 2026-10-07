@@ -12,10 +12,14 @@ import {
 } from '@/server/services/residents'
 import { formatMoney } from '@/lib/utils'
 import { ForbiddenError } from '@/lib/tenancy'
+import { assetDamageSchema, checklistSchema } from '@/lib/checkout-checklist'
+import { lockCheckout, updateCheckoutChecklists } from '@/server/services/checkouts'
 
 /**
- * Resident lifecycle actions in one endpoint: transfer, notice, the checkout
- * settlement preview, the checkout itself, paying out a pending refund and
+ * Resident lifecycle actions in one endpoint: transfer (optionally with a new
+ * rent from the move date), notice, the checkout settlement preview, the
+ * checkout itself (with inspection, clearance and asset damage), the
+ * post-checkout checklist update and lock, paying out a pending refund and
  * collecting a deposit that was not taken at check-in.
  */
 const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Amounts cannot be negative')
@@ -25,6 +29,8 @@ const deductions = z
   .array(z.object({ label: z.string().trim().max(80), amount: rupees }))
   .max(20, 'Add at most 20 deductions')
   .optional()
+
+const assetDamages = z.array(assetDamageSchema).max(30, 'Mark at most 30 items').optional()
 
 const refundMethod = z.enum(['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE'], {
   errorMap: () => ({ message: 'Choose how the refund was paid' }),
@@ -38,14 +44,34 @@ const refund = z.object({
 })
 
 const schema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('TRANSFER') }).merge(transferSchema),
+  z
+    .object({
+      action: z.literal('TRANSFER'),
+      newRent: z.coerce.number().int('Enter a whole rupee amount').positive('Enter the new rent').optional(),
+      rentReason: text(200),
+    })
+    .merge(transferSchema),
   z.object({ action: z.literal('NOTICE') }).merge(noticeSchema),
   z
-    .object({ action: z.literal('CHECKOUT_PREVIEW'), deductions })
+    .object({ action: z.literal('CHECKOUT_PREVIEW'), deductions, assetDamages })
     .merge(checkoutSchema.partial({ exitDate: true }).required({ residentId: true })),
   z
-    .object({ action: z.literal('CHECKOUT'), deductions, refund: refund.nullable().optional() })
+    .object({
+      action: z.literal('CHECKOUT'),
+      deductions,
+      assetDamages,
+      inspection: checklistSchema.nullable().optional(),
+      clearance: checklistSchema.nullable().optional(),
+      refund: refund.nullable().optional(),
+    })
     .merge(checkoutSchema),
+  z.object({
+    action: z.literal('CHECKOUT_CHECKLIST'),
+    residentId: z.string().min(1),
+    inspection: checklistSchema.optional(),
+    clearance: checklistSchema.optional(),
+  }),
+  z.object({ action: z.literal('CHECKOUT_LOCK'), residentId: z.string().min(1) }),
   z.object({
     action: z.literal('MARK_REFUND_PAID'),
     residentId: z.string().min(1),
@@ -73,6 +99,8 @@ export const POST = route(
     switch (body.action) {
       case 'CHECKOUT':
       case 'CHECKOUT_PREVIEW':
+      case 'CHECKOUT_CHECKLIST':
+      case 'CHECKOUT_LOCK':
       case 'MARK_REFUND_PAID':
         requirePermission(user, 'residents.checkout')
         break
@@ -88,14 +116,24 @@ export const POST = route(
 
     switch (body.action) {
       case 'TRANSFER': {
+        // A rent change touches money: it needs the rent permission too.
+        if (body.newRent != null) requirePermission(user, 'rent.manage')
         const result = await transferResident({
           residentId: body.residentId,
           toBedId: body.toBedId,
           effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : undefined,
+          newRent: body.newRent,
+          rentReason: body.rentReason || undefined,
           actor,
         })
+        const notes = result.rentChange?.adjustments ?? []
         return ok({
-          message: `Moved to Room ${result.bed.room.number}, Bed ${result.bed.label}`,
+          message: `Moved to Room ${result.bed.room.number}, Bed ${result.bed.label}${
+            result.rentChange ? ` · rent now ${formatMoney(body.newRent!)}` : ''
+          }${notes.length ? ` · ${notes.length} invoice note${notes.length === 1 ? '' : 's'} for the difference` : ''}`,
+          rentChange: result.rentChange
+            ? { revisionId: result.rentChange.revision.id, adjustments: notes }
+            : null,
         })
       }
 
@@ -116,8 +154,25 @@ export const POST = route(
           deductions: body.deductions,
           damageDeduction: body.damageDeduction,
           otherCharges: body.otherCharges,
+          assetDamages: body.assetDamages,
         })
         return ok({ preview })
+      }
+
+      case 'CHECKOUT_CHECKLIST': {
+        const result = await updateCheckoutChecklists({
+          organizationId: user.organizationId!,
+          residentId: body.residentId,
+          inspection: body.inspection,
+          clearance: body.clearance,
+          actor,
+        })
+        return ok(result)
+      }
+
+      case 'CHECKOUT_LOCK': {
+        const result = await lockCheckout({ organizationId: user.organizationId!, residentId: body.residentId, actor })
+        return ok(result)
       }
 
       case 'CHECKOUT': {
@@ -129,6 +184,9 @@ export const POST = route(
           damageDeduction: body.damageDeduction,
           otherCharges: body.otherCharges,
           settlementNote: body.settlementNote || undefined,
+          inspection: body.inspection ?? null,
+          clearance: body.clearance ?? null,
+          assetDamages: body.assetDamages,
           refund: body.refund
             ? {
                 method: body.refund.method,

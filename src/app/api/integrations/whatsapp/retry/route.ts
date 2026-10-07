@@ -26,5 +26,5 @@ export const POST = route(
     }
     return result
   },
-  { permission: 'messages.view' },
+  { permission: 'messages.view', module: 'whatsapp' },
 )

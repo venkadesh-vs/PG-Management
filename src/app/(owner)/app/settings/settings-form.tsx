@@ -293,6 +293,14 @@ export function SettingsForm({
                   disabled={!canEdit}
                 />
               </label>
+              <p className="text-xs text-slate-500">
+                Switch individual messages (reminders, receipts, complaint updates…) on or off per
+                channel in{' '}
+                <Link href="/app/settings/notifications" className="font-medium text-blue-700 hover:underline">
+                  Notification settings
+                </Link>
+                .
+              </p>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Days before the due date" hint="0 turns this reminder off">

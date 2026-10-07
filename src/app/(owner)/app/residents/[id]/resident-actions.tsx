@@ -19,6 +19,7 @@ import {
 import { api, ApiError } from '@/lib/client'
 import { InvoicePicker, ProofUpload } from '../../payments/payment-fields'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
+import { blankChecklist, type Checklist } from '@/lib/checkout-checklist'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -51,8 +52,14 @@ type Resident = {
 
 type Invoice = { id: string; number: string; balance: number; dueDate: string }
 
+type RoomAsset = { id: string; name: string; category: string; condition: string; status: string; value: number }
+
 type CheckoutPreview = {
   exitDate: string
+  oneTimeCharges: { label: string; amount: number }[]
+  oneTimeTotal: number
+  futureInvoices: { id: string; number: string; period: string; total: number; amountPaid: number }[]
+  roomAssets: RoomAsset[]
   openInvoices: { id: string; number: string; balance: number; dueDate: string }[]
   outstandingRent: number
   utilities: { id: string; label: string; amount: number }[]
@@ -97,9 +104,9 @@ export function ResidentActions({
 }: {
   resident: Resident
   openInvoices: Invoice[]
-  availableBeds: { id: string; label: string }[]
-  /** payments.record / residents.manage / residents.checkout */
-  can?: { recordPayment: boolean; manage: boolean; checkout: boolean }
+  availableBeds: { id: string; label: string; rent?: number }[]
+  /** payments.record / residents.manage / residents.checkout / rent.manage */
+  can?: { recordPayment: boolean; manage: boolean; checkout: boolean; rent?: boolean }
 }) {
   const [dialog, setDialog] = React.useState<'payment' | 'transfer' | 'notice' | 'checkout' | null>(
     null,
@@ -179,6 +186,7 @@ export function ResidentActions({
         onClose={() => setDialog(null)}
         resident={resident}
         beds={availableBeds}
+        canChangeRent={Boolean(can.rent)}
       />
       <NoticeDialog open={dialog === 'notice'} onClose={() => setDialog(null)} resident={resident} />
       <CheckoutDialog
@@ -384,20 +392,46 @@ function TransferDialog({
   onClose,
   resident,
   beds,
+  canChangeRent,
 }: {
   open: boolean
   onClose: () => void
   resident: Resident
-  beds: { id: string; label: string }[]
+  beds: { id: string; label: string; rent?: number }[]
+  canChangeRent: boolean
 }) {
   const router = useRouter()
   const toast = useToast()
   const [bedId, setBedId] = React.useState('')
+  const [moveDate, setMoveDate] = React.useState(toISODate(new Date()))
+  const [rentMode, setRentMode] = React.useState<'keep' | 'bed' | 'custom'>('keep')
+  const [customRent, setCustomRent] = React.useState('')
+  const [reason, setReason] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+
+  const bed = beds.find((b) => b.id === bedId)
+  const bedRent = bed?.rent ?? null
+  const newRent =
+    rentMode === 'bed' ? bedRent : rentMode === 'custom' ? Math.round(Number(customRent) || 0) : null
+  const changesRent = newRent != null && newRent > 0 && newRent !== resident.rentAmount
+
+  React.useEffect(() => {
+    if (open) {
+      setBedId('')
+      setRentMode('keep')
+      setCustomRent('')
+      setReason('')
+      setMoveDate(toISODate(new Date()))
+    }
+  }, [open])
 
   async function submit() {
     if (!bedId) {
       toast.error('Please select a valid bed', 'Choose where they are moving to.')
+      return
+    }
+    if (rentMode === 'custom' && !(newRent && newRent > 0)) {
+      toast.error('Enter the new rent', 'Or keep the current rent.')
       return
     }
     setBusy(true)
@@ -406,6 +440,8 @@ function TransferDialog({
         action: 'TRANSFER',
         residentId: resident.id,
         toBedId: bedId,
+        effectiveDate: moveDate,
+        ...(changesRent ? { newRent, rentReason: reason || undefined } : {}),
       })
       toast.success('Bed allocated successfully', result.message)
       onClose()
@@ -426,24 +462,92 @@ function TransferDialog({
         <DialogHeader>
           <DialogTitle>Move to another bed</DialogTitle>
           <DialogDescription>
-            The old bed becomes available and occupancy updates everywhere immediately.
+            The old bed becomes available and the move is kept in the resident&apos;s stay history.
           </DialogDescription>
         </DialogHeader>
-        <Field label="New bed" required>
-          <Select value={bedId} onChange={(e) => setBedId(e.target.value)}>
-            <option value="">Select an available bed</option>
-            {beds.map((bed) => (
-              <option key={bed.id} value={bed.id}>
-                {bed.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="New bed" required className="min-w-0">
+            <Select value={bedId} onChange={(e) => setBedId(e.target.value)}>
+              <option value="">Select an available bed</option>
+              {beds.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                  {b.rent ? ` · ${formatMoney(b.rent)}` : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Moving on" required className="min-w-0">
+            <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+          </Field>
+        </div>
         {beds.length === 0 && (
           <p className="text-xs text-amber-600">
             No vacant beds in this PG right now. Free one up from the bed map first.
           </p>
         )}
+
+        {canChangeRent && bed && (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rent after the move</p>
+            <div className="grid gap-2">
+              {(
+                [
+                  ['keep', `Keep current rent · ${formatMoney(resident.rentAmount)}`],
+                  ...(bedRent && bedRent !== resident.rentAmount
+                    ? [['bed', `Use the new bed's rent · ${formatMoney(bedRent)}`]]
+                    : []),
+                  ['custom', 'Set a different rent'],
+                ] as [typeof rentMode, string][]
+              ).map(([value, label]) => (
+                <label
+                  key={value}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm',
+                    rentMode === value ? 'border-slate-900 bg-white' : 'border-slate-200 bg-white/60',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="rent-mode"
+                    checked={rentMode === value}
+                    onChange={() => setRentMode(value)}
+                  />
+                  <span className="min-w-0">{label}</span>
+                </label>
+              ))}
+            </div>
+            {rentMode === 'custom' && (
+              <Field label="New monthly rent" required>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={customRent}
+                  onChange={(e) => setCustomRent(e.target.value)}
+                />
+              </Field>
+            )}
+            {changesRent && (
+              <>
+                <Field label="Reason" hint="Shown on the rent history and any invoice note">
+                  <Input
+                    placeholder="Moved to an AC room"
+                    value={reason}
+                    maxLength={200}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </Field>
+                <p className="text-xs text-slate-500">
+                  The new rent applies from {formatDate(moveDate)}. A month already invoiced gets a
+                  debit or credit note for the days at the new rate — the original invoice is not
+                  rewritten.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -540,7 +644,9 @@ const REFUND_METHODS = [
   { value: 'CHEQUE', label: 'Cheque' },
 ]
 
-const STEPS = ['Exit date', 'Settlement', 'Refund'] as const
+const STEPS = ['Exit date', 'Room check', 'Settlement', 'Refund'] as const
+
+type DamageRow = { outcome: 'OK' | 'DAMAGED' | 'MISSING'; amount: string; note: string }
 
 /** A rupee figure that counts to its new value instead of jumping. */
 function AnimatedMoney({ value, className }: { value: number; className?: string }) {
@@ -589,6 +695,9 @@ function CheckoutDialog({
   const [loading, setLoading] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [done, setDone] = React.useState<CheckoutResult | null>(null)
+  const [inspection, setInspection] = React.useState<Checklist>(() => blankChecklist('inspection'))
+  const [clearance, setClearance] = React.useState<Checklist>(() => blankChecklist('clearance'))
+  const [damages, setDamages] = React.useState<Record<string, DamageRow>>({})
   const nextKey = React.useRef(1)
 
   React.useEffect(() => {
@@ -596,8 +705,25 @@ function CheckoutDialog({
       setStep(0)
       setDone(null)
       setPreviewError(null)
+      setInspection(blankChecklist('inspection'))
+      setClearance(blankChecklist('clearance'))
+      setDamages({})
     }
   }, [open])
+
+  const assetDamages = React.useMemo(
+    () =>
+      Object.entries(damages)
+        .filter(([, d]) => d.outcome !== 'OK')
+        .map(([assetId, d]) => ({
+          assetId,
+          outcome: d.outcome as 'DAMAGED' | 'MISSING',
+          amount: Math.max(0, Math.round(Number(d.amount) || 0)),
+          note: d.note.trim() || undefined,
+        })),
+    [damages],
+  )
+  const damageKey = JSON.stringify(assetDamages)
 
   const deductions = React.useMemo(
     () =>
@@ -620,6 +746,7 @@ function CheckoutDialog({
           residentId: resident.id,
           exitDate,
           deductions: JSON.parse(deductionKey),
+          assetDamages: JSON.parse(damageKey),
         })
         .then((data) => {
           if (cancelled) return
@@ -639,7 +766,7 @@ function CheckoutDialog({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, resident.id, exitDate, deductionKey])
+  }, [open, resident.id, exitDate, deductionKey, damageKey])
 
   // Notice check
   const exit = new Date(`${exitDate}T00:00:00`)
@@ -661,6 +788,9 @@ function CheckoutDialog({
         exitDate,
         reason: reason || undefined,
         deductions,
+        assetDamages,
+        inspection,
+        clearance,
         settlementNote: note || undefined,
         refund:
           preview.refundable > 0 && refundMode === 'now'
@@ -689,7 +819,12 @@ function CheckoutDialog({
     }
   }
 
-  const canNext = step === 0 ? Boolean(exitDate) && !previewError : Boolean(preview) && !loading
+  const canNext =
+    step === 0
+      ? Boolean(exitDate) && !previewError
+      : step === 1
+        ? !previewError
+        : Boolean(preview) && !loading
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
@@ -799,6 +934,18 @@ function CheckoutDialog({
                 )}
 
                 {step === 1 && (
+                  <RoomCheckStep
+                    assets={preview?.roomAssets ?? null}
+                    inspection={inspection}
+                    onInspection={setInspection}
+                    clearance={clearance}
+                    onClearance={setClearance}
+                    damages={damages}
+                    onDamages={setDamages}
+                  />
+                )}
+
+                {step === 2 && (
                   <SettlementStep
                     preview={preview}
                     loading={loading}
@@ -809,7 +956,7 @@ function CheckoutDialog({
                   />
                 )}
 
-                {step === 2 && preview && (
+                {step === 3 && preview && (
                   <div className="space-y-4">
                     <SettlementResult preview={preview} />
 
@@ -887,7 +1034,7 @@ function CheckoutDialog({
                   Back
                 </Button>
               )}
-              {step < 2 ? (
+              {step < STEPS.length - 1 ? (
                 <Button variant="default" onClick={() => setStep(step + 1)} disabled={!canNext}>
                   Continue
                 </Button>
@@ -902,6 +1049,165 @@ function CheckoutDialog({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+const ASSET_OUTCOMES: { value: DamageRow['outcome']; label: string }[] = [
+  { value: 'OK', label: 'OK' },
+  { value: 'DAMAGED', label: 'Damaged' },
+  { value: 'MISSING', label: 'Missing' },
+]
+
+function RoomCheckStep({
+  assets,
+  inspection,
+  onInspection,
+  clearance,
+  onClearance,
+  damages,
+  onDamages,
+}: {
+  assets: RoomAsset[] | null
+  inspection: Checklist
+  onInspection: (c: Checklist) => void
+  clearance: Checklist
+  onClearance: (c: Checklist) => void
+  damages: Record<string, DamageRow>
+  onDamages: (d: Record<string, DamageRow>) => void
+}) {
+  const setDamage = (id: string, patch: Partial<DamageRow>) =>
+    onDamages({ ...damages, [id]: { ...(damages[id] ?? { outcome: 'OK', amount: '', note: '' }), ...patch } })
+
+  return (
+    <div className="max-h-[24rem] space-y-5 overflow-y-auto pr-1">
+      <ChecklistBlock title="Room inspection" list={inspection} onChange={onInspection} withNotes />
+      <ChecklistBlock title="Clearance" list={clearance} onChange={onClearance} />
+
+      <div>
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Items in the room
+        </p>
+        {assets === null ? (
+          <div className="skeleton h-5 w-full" />
+        ) : assets.length === 0 ? (
+          <p className="text-xs text-slate-500">
+            No inventory is recorded against this room or bed. Add any damage as a deduction in the next step.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {assets.map((asset) => {
+              const row = damages[asset.id] ?? { outcome: 'OK', amount: '', note: '' }
+              return (
+                <li key={asset.id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{asset.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {asset.category}
+                        {asset.value ? ` · value ${formatMoney(asset.value)}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      {ASSET_OUTCOMES.map((o) => (
+                        <button
+                          key={o.value}
+                          type="button"
+                          onClick={() => setDamage(asset.id, { outcome: o.value })}
+                          className={cn(
+                            'rounded-lg border px-2 py-1 text-xs font-medium transition-colors',
+                            row.outcome === o.value
+                              ? o.value === 'OK'
+                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                : 'border-red-600 bg-red-600 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                          )}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {row.outcome !== 'OK' && (
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        className="h-9 min-w-0 flex-1"
+                        placeholder="What happened"
+                        maxLength={200}
+                        value={row.note}
+                        onChange={(e) => setDamage(asset.id, { note: e.target.value })}
+                      />
+                      <Input
+                        className="h-9 w-28"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        placeholder="Deduct ₹"
+                        value={row.amount}
+                        onChange={(e) => setDamage(asset.id, { amount: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function ChecklistBlock({
+  title,
+  list,
+  onChange,
+  withNotes,
+  disabled,
+}: {
+  title: string
+  list: Checklist
+  onChange: (c: Checklist) => void
+  withNotes?: boolean
+  disabled?: boolean
+}) {
+  const done = list.items.filter((i) => i.ok).length
+  const update = (key: string, patch: Partial<Checklist['items'][number]>) =>
+    onChange({ ...list, items: list.items.map((i) => (i.key === key ? { ...i, ...patch } : i)) })
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+        <span className={cn('text-xs font-semibold tabular', done === list.items.length ? 'text-emerald-600' : 'text-slate-500')}>
+          {done}/{list.items.length}
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {list.items.map((item) => (
+          <li key={item.key} className="min-w-0">
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 accent-emerald-600"
+                checked={item.ok}
+                disabled={disabled}
+                onChange={(e) => update(item.key, { ok: e.target.checked })}
+              />
+              <span className="min-w-0">{item.label}</span>
+            </label>
+            {withNotes && !item.ok && (item.note !== undefined || !disabled) && (
+              <Input
+                className="mt-1 h-8 text-xs"
+                placeholder="Note (optional)"
+                maxLength={200}
+                disabled={disabled}
+                value={item.note ?? ''}
+                onChange={(e) => update(item.key, { note: e.target.value || undefined })}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -961,6 +1267,14 @@ function SettlementStep({
           )}
         </Section>
 
+        {preview.oneTimeCharges.length > 0 && (
+          <Section title="Unbilled charges" total={preview.oneTimeTotal}>
+            {preview.oneTimeCharges.map((c, i) => (
+              <Line key={`${c.label}-${i}`} label={c.label} value={c.amount} />
+            ))}
+          </Section>
+        )}
+
         {preview.utilities.length > 0 && (
           <Section title="Unbilled utilities" total={preview.utilityCharges}>
             {preview.utilities.map((u) => (
@@ -970,6 +1284,11 @@ function SettlementStep({
         )}
 
         <Section title="Deductions" total={preview.deductionsTotal}>
+          {preview.deductions
+            .filter((d) => /^(Damaged|Missing) — /.test(d.label))
+            .map((d) => (
+              <Line key={d.label} label={d.label} value={d.amount} />
+            ))}
           <AnimatePresence initial={false}>
             {rows.map((row) => (
               <motion.div
@@ -1020,6 +1339,21 @@ function SettlementStep({
             Add deduction
           </Button>
         </Section>
+
+        {preview.futureInvoices.length > 0 && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-2.5 text-xs text-sky-800">
+            <p className="font-medium">
+              {preview.futureInvoices.length} invoice{preview.futureInvoices.length === 1 ? '' : 's'} after the exit
+              month will be cancelled
+            </p>
+            <p className="mt-0.5 opacity-80">
+              {preview.futureInvoices.map((i) => `${i.number} (${i.period})`).join(', ')}
+              {preview.futureInvoices.some((i) => i.amountPaid > 0)
+                ? ' — money already paid on them counts as advance below.'
+                : '.'}
+            </p>
+          </div>
+        )}
 
         <Section title="Credits" total={-preview.credits} positive>
           <Line label="Security deposit held" value={-preview.depositHeld} positive />

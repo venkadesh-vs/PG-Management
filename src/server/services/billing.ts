@@ -11,6 +11,7 @@ import type {
 import { prisma } from '@/lib/prisma'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifyResident, recordActivity } from '../events'
+import { isChannelOn, parseNotificationPrefs } from '@/lib/notification-prefs'
 import {
   addDays,
   dayOfMonth,
@@ -1242,6 +1243,24 @@ export async function reviseRent(params: {
   reason: string
   actor?: Actor
 }) {
+  return prisma.$transaction((tx) => reviseRentTx(tx, params))
+}
+
+/**
+ * reviseRent inside a caller's transaction — a room transfer changes the bed
+ * and the rent together, or neither.
+ */
+export async function reviseRentTx(
+  tx: Tx,
+  params: {
+    organizationId: string
+    residentId: string
+    newRent: number
+    effectiveFrom: Date
+    reason: string
+    actor?: Actor
+  },
+) {
   if (!Number.isInteger(params.newRent) || params.newRent <= 0) {
     throw new ValidationError('Enter the new monthly rent')
   }
@@ -1249,7 +1268,7 @@ export async function reviseRent(params: {
   if (!reason) throw new ValidationError('Add a reason for the rent change')
   const effectiveFrom = startOfDay(params.effectiveFrom)
 
-  return prisma.$transaction(async (tx) => {
+  {
     const resident = await tx.resident.findFirst({
       where: { id: params.residentId, organizationId: params.organizationId },
     })
@@ -1342,7 +1361,7 @@ export async function reviseRent(params: {
       tx,
     )
     return { revision, adjustments: notes }
-  })
+  }
 }
 
 function formatDateShort(d: Date) {
@@ -1887,6 +1906,11 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
       stage = 'overdue'
     if (!stage) continue
 
+    // Both channels switched off for this reminder type: nothing to send.
+    const prefs = parseNotificationPrefs(settings?.notificationSettings)
+    const prefType = stage === 'overdue' ? 'RENT_OVERDUE' : 'RENT_REMINDER'
+    if (!isChannelOn(prefs, prefType, 'WHATSAPP') && !isChannelOn(prefs, prefType, 'IN_APP')) continue
+
     // Already reminded today?
     if (invoice.lastReminderAt && startOfDay(invoice.lastReminderAt).getTime() === today.getTime())
       continue
@@ -1962,6 +1986,7 @@ export async function sendRentReminders(params?: { organizationId?: string; now?
     await notifyResident(invoice.residentId, {
       organizationId: invoice.organizationId,
       kind: 'RENT',
+      type: stage === 'overdue' ? 'RENT_OVERDUE' : 'RENT_REMINDER',
       title: stage === 'overdue' ? 'Rent overdue' : 'Rent reminder',
       body: `${formatMoney(invoice.balance)} for ${formatMonth(invoice.periodStart)}.`,
       link: '/tenant/rent',

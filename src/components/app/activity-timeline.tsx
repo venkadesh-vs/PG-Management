@@ -1,5 +1,6 @@
 'use client'
 
+import type * as React from 'react'
 import { motion } from 'framer-motion'
 import type { ActivityLog, EventType } from '@prisma/client'
 import {
@@ -74,8 +75,12 @@ const TONE_CLASS = {
 
 type TimelineItem = Pick<
   ActivityLog,
-  'id' | 'event' | 'summary' | 'actorName' | 'createdAt' | 'entityType' | 'entityId'
->
+  'id' | 'event' | 'summary' | 'actorName' | 'entityType' | 'entityId'
+> & {
+  createdAt: Date | string
+  /** Small chip after the title, e.g. "3 fields changed". */
+  badge?: string
+}
 
 /**
  * The audit trail, rendered as a timeline. Same component on the owner
@@ -85,10 +90,13 @@ export function ActivityTimeline({
   items,
   compact,
   className,
+  onSelect,
 }: {
   items: TimelineItem[]
   compact?: boolean
   className?: string
+  /** Makes each entry a button (the audit log opens its details). */
+  onSelect?: (id: string) => void
 }) {
   if (!items.length) {
     return (
@@ -126,10 +134,33 @@ export function ActivityTimeline({
             >
               <Icon className="size-4" />
             </span>
-            <div className="min-w-0 flex-1 pt-0.5">
+            <div
+              className={cn(
+                'min-w-0 flex-1 pt-0.5',
+                onSelect && '-mx-2 -my-1 cursor-pointer rounded-lg px-2 py-1 transition-colors hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30',
+              )}
+              {...(onSelect
+                ? {
+                    role: 'button',
+                    tabIndex: 0,
+                    onClick: () => onSelect(item.id),
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSelect(item.id)
+                      }
+                    },
+                  }
+                : {})}
+            >
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <p className="text-sm font-medium text-slate-800">{EVENT_LABEL[item.event]}</p>
                 <time className="text-xs text-slate-400">{relativeTime(item.createdAt)}</time>
+                {item.badge && (
+                  <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                    {item.badge}
+                  </span>
+                )}
               </div>
               <p className={cn('text-sm leading-relaxed text-slate-500', compact && 'truncate')}>
                 {item.summary}

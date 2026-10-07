@@ -302,6 +302,14 @@ export const assetSchema = z.object({
   purchaseCost: rupees.optional(),
   serialNumber: optionalString,
   notes: optionalString,
+  /** Where it sits: '' (the PG), 'floor:<id>', 'room:<id>' or 'bed:<id>'. Overrides roomId. */
+  placement: z
+    .string()
+    .trim()
+    .regex(/^((floor|room|bed):[A-Za-z0-9_-]+)?$/, 'Choose where the item is')
+    .optional(),
+  status: z.enum(['IN_USE', 'IN_STORE', 'UNDER_REPAIR', 'DISPOSED', 'MISSING']).optional(),
+  currentValue: z.union([z.literal(''), rupees]).optional(),
 })
 
 export const announcementSchema = z.object({

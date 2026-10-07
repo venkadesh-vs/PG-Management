@@ -1,19 +1,17 @@
 import { prisma } from '@/lib/prisma'
 import type { SessionUser } from '@/lib/auth'
 import { ok, parseBody, route } from '@/lib/api-helpers'
-import {
-  assertPropertyAccess,
-  assertRoomInProperty,
-  NotFoundError,
-  ValidationError,
-} from '@/lib/tenancy'
+import { assertPropertyAccess, NotFoundError, ValidationError } from '@/lib/tenancy'
+import { resolveAssetLocation } from '@/server/services/assets'
 import { assetSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 
 /**
  * /api/assets/<id>  (inventory.manage)
- *   PATCH  — edit an inventory item. Disposing is `condition: 'DISPOSED'`,
- *            which keeps the record (and its cost) on file.
+ *   PATCH  — edit an inventory item, including where it sits (`placement`:
+ *            floor / room / bed), its status and current value. Disposing is
+ *            `condition: 'DISPOSED'` or `status: 'DISPOSED'`, which keeps the
+ *            record (and its cost) on file. Audited with before/after.
  *   DELETE — remove an item entered by mistake.
  */
 
@@ -45,13 +43,16 @@ export const PATCH = route(
     const asset = await loadAsset(user, idFrom(request))
     const body = await parseBody(request, updateSchema)
 
-    if (body.roomId) await assertRoomInProperty(body.roomId, asset.propertyId)
+    const where = await resolveAssetLocation(asset.propertyId, { placement: body.placement, roomId: body.roomId })
     const purchaseDate = optionalDate(body.purchaseDate)
+    const disposing = body.condition === 'DISPOSED' || body.status === 'DISPOSED'
 
     const updated = await prisma.asset.update({
       where: { id: asset.id },
       data: {
-        ...(body.roomId !== undefined ? { roomId: body.roomId || null } : {}),
+        ...(where ?? {}),
+        ...(body.status !== undefined ? { status: body.status } : disposing ? { status: 'DISPOSED' } : {}),
+        ...(body.currentValue !== undefined ? { currentValue: body.currentValue === '' ? null : body.currentValue } : {}),
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.category !== undefined ? { category: body.category } : {}),
         ...(body.quantity !== undefined ? { quantity: body.quantity } : {}),
@@ -64,17 +65,32 @@ export const PATCH = route(
       },
     })
 
-    const disposed = body.condition === 'DISPOSED' && asset.condition !== 'DISPOSED'
+    const disposed = disposing && asset.status !== 'DISPOSED' && asset.condition !== 'DISPOSED'
+    const pick = (a: typeof asset) => ({
+      name: a.name,
+      category: a.category,
+      quantity: a.quantity,
+      condition: a.condition,
+      status: a.status,
+      floorId: a.floorId,
+      roomId: a.roomId,
+      bedId: a.bedId,
+      location: a.location,
+      purchaseCost: a.purchaseCost,
+      currentValue: a.currentValue,
+    })
     await recordActivity({
       organizationId: asset.organizationId,
       propertyId: asset.propertyId,
       actorId: user.id,
       actorName: user.name,
       actorRole: user.role,
-      event: 'PROPERTY_UPDATED',
+      event: 'ASSET_UPDATED',
       entityType: 'Asset',
       entityId: asset.id,
       summary: disposed ? `${updated.name} marked disposed` : `Inventory item ${updated.name} updated`,
+      before: pick(asset),
+      after: pick(updated),
     })
 
     return ok({

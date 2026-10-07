@@ -17,6 +17,8 @@ import { SlaChip } from '@/components/app/sla-chip'
 import { PhotoGallery } from '@/components/app/photo-upload'
 import { refreshSlaBreaches } from '@/server/services/complaints'
 import { formatSpan } from '@/lib/sla'
+import { canApproveExpenses } from '@/server/services/expense-rules'
+import { RepairCard } from './repair-card'
 
 export const metadata: Metadata = { title: 'Complaint' }
 
@@ -46,7 +48,7 @@ export default async function ComplaintDetailPage({
   if (complaint.organizationId !== user.organizationId) notFound()
   if (!inScope(user, complaint.propertyId)) notFound()
 
-  const [staff, categoryLabels, roleLabels] = await Promise.all([
+  const [staff, categoryLabels, roleLabels, expenseCategories] = await Promise.all([
     prisma.staff.findMany({
       where: {
         organizationId: user.organizationId,
@@ -58,7 +60,16 @@ export default async function ComplaintDetailPage({
     }),
     getLookupLabels(user.organizationId, 'COMPLAINT_CATEGORY'),
     getLookupLabels(user.organizationId, 'STAFF_ROLE'),
+    user.modules.includes('expenses')
+      ? prisma.expenseCategory.findMany({
+          where: { organizationId: user.organizationId! },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : Promise.resolve([]),
   ])
+  const repairTask = complaint.tasks.find((t) => t.status !== 'CANCELLED') ?? complaint.tasks[0] ?? null
+  const canManage = user.permissions.includes('complaints.manage')
 
   const theme = themeFor(complaint.property.type)
   const statusStyle = COMPLAINT_STATUS_STYLE[complaint.status]
@@ -250,6 +261,33 @@ export default async function ComplaintDetailPage({
               )}
             </CardContent>
           </Card>
+
+          <RepairCard
+            complaintId={complaint.id}
+            categories={expenseCategories}
+            task={
+              repairTask
+                ? {
+                    id: repairTask.id,
+                    status: repairTask.status,
+                    vendorName: repairTask.vendorName,
+                    vendorPhone: repairTask.vendorPhone,
+                    estimateAmount: repairTask.estimateAmount,
+                    estimateApprovedAt: repairTask.estimateApprovedAt?.toISOString() ?? null,
+                    estimateApprovedBy: repairTask.estimateApprovedBy,
+                    actualCost: repairTask.actualCost,
+                    expenseId: repairTask.expenseId,
+                  }
+                : null
+            }
+            can={{
+              manage: canManage,
+              approve: canManage && canApproveExpenses(user),
+              recordCost:
+                canManage && (!user.modules.includes('expenses') || user.permissions.includes('expenses.manage')),
+              expenses: user.modules.includes('expenses'),
+            }}
+          />
 
           <Card>
             <CardHeader className="pb-3">

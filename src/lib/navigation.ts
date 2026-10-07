@@ -59,7 +59,7 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Announcements', href: '/app/announcements', icon: 'megaphone', module: 'announcements', permission: 'announcements.send' },
       { label: 'Reports', href: '/app/reports', icon: 'chart', module: 'reports', permission: 'reports.view' },
       { label: 'Activity', href: '/app/activity', icon: 'history', module: 'activity', permission: 'activity.view' },
-      { label: 'WhatsApp Outbox', href: '/app/messages', icon: 'messages', module: 'whatsapp', permission: 'messages.view' },
+      { label: 'Message centre', href: '/app/messages', icon: 'messages', permission: 'messages.view' },
     ],
   },
   {

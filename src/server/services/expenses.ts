@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { z } from 'zod'
-import type { Expense } from '@prisma/client'
+import type { Expense, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { SessionUser } from '@/lib/auth'
 import { expenseSchema } from '@/lib/validation'
@@ -102,7 +102,7 @@ function snapshot(e: Expense) {
   }
 }
 
-async function notifyApprovers(organizationId: string, expense: { title: string; amount: number }, by: string) {
+export async function notifyApprovers(organizationId: string, expense: { title: string; amount: number }, by: string) {
   const owners = await prisma.user.findMany({
     where: { organizationId, role: 'OWNER', status: 'ACTIVE' },
     select: { id: true },
@@ -119,15 +119,27 @@ async function notifyApprovers(organizationId: string, expense: { title: string;
   )
 }
 
-export async function createExpense(user: SessionUser, body: ExpenseInput) {
+export async function createExpense(
+  user: SessionUser,
+  body: ExpenseInput,
+  opts: {
+    /** Run inside the caller's transaction (approvers are then notified by the caller). */
+    tx?: Prisma.TransactionClient
+    /** The maintenance task this cost belongs to. */
+    maintenanceTaskId?: string
+    /** Already approved elsewhere (a maintenance estimate approved by this person). */
+    preApprovedBy?: string
+  } = {},
+) {
   const organizationId = user.organizationId!
+  const db = opts.tx ?? prisma
   await assertPropertyAccess(user, body.propertyId)
   const category = await assertCategory(organizationId, body.categoryId)
   const receiptUrl = await assertReceipt(organizationId, body.receiptUrl)
   const approver = canApproveExpenses(user)
-  const approvalStatus = initialApprovalStatus(body.amount, approver)
+  const approvalStatus = opts.preApprovedBy ? 'APPROVED' : initialApprovalStatus(body.amount, approver)
 
-  const expense = await prisma.expense.create({
+  const expense = await db.expense.create({
     data: {
       organizationId,
       propertyId: body.propertyId,
@@ -144,9 +156,12 @@ export async function createExpense(user: SessionUser, body: ExpenseInput) {
       recordedBy: user.name,
       ...recurrenceOf(body.isRecurring, body.recurrence),
       approvalStatus,
-      ...(approvalStatus === 'APPROVED' && approver && body.amount >= APPROVAL_THRESHOLD
-        ? { approvedBy: user.name, approvedAt: new Date() }
-        : {}),
+      maintenanceTaskId: opts.maintenanceTaskId ?? null,
+      ...(opts.preApprovedBy
+        ? { approvedBy: opts.preApprovedBy, approvedAt: new Date() }
+        : approvalStatus === 'APPROVED' && approver && body.amount >= APPROVAL_THRESHOLD
+          ? { approvedBy: user.name, approvedAt: new Date() }
+          : {}),
     },
   })
 
@@ -161,8 +176,8 @@ export async function createExpense(user: SessionUser, body: ExpenseInput) {
     entityId: expense.id,
     summary: `${expense.title} · ${formatMoney(expense.amount)} (${category.name})${approvalStatus === 'PENDING' ? ' — waiting for approval' : ''}`,
     after: snapshot(expense),
-  })
-  if (approvalStatus === 'PENDING') {
+  }, opts.tx)
+  if (approvalStatus === 'PENDING' && !opts.tx) {
     await notifyApprovers(organizationId, expense, user.name).catch(() => undefined)
   }
 

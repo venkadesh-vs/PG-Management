@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { EventType, NotificationKind, Prisma, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isChannelOn, parseNotificationPrefs, typeForKind, type NotificationType } from '@/lib/notification-prefs'
 
 /**
  * Event + audit architecture.
@@ -76,6 +77,11 @@ export type NotificationInput = {
   title: string
   body: string
   link?: string
+  /**
+   * Which owner switch (Settings → Notifications) governs this message to a
+   * resident. Defaults from `kind`. Only notifyResident consults it.
+   */
+  type?: NotificationType
 }
 
 /** Deliver an in-app notification to specific users. */
@@ -135,6 +141,15 @@ export async function notifyResident(
     select: { userId: true, organizationId: true },
   })
   if (!resident?.userId) return
+  // The owner may have switched this type off for the in-app channel.
+  const type = input.type ?? typeForKind(input.kind)
+  if (type) {
+    const settings = await tx.orgSetting.findUnique({
+      where: { organizationId: resident.organizationId },
+      select: { notificationSettings: true },
+    })
+    if (!isChannelOn(parseNotificationPrefs(settings?.notificationSettings), type, 'IN_APP')) return
+  }
   await notifyUsers(
     [resident.userId],
     { ...input, organizationId: input.organizationId ?? resident.organizationId },

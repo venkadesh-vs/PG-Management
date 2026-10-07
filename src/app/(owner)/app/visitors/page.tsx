@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { requireAccess } from '@/lib/auth'
 import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor } from '@/lib/theme'
 import { addDays, cn, formatDateTime, formatPhone, startOfDay } from '@/lib/utils'
@@ -24,6 +24,7 @@ import { QuickForm } from '@/components/app/quick-form'
 import { SignOutVisitorButton } from './sign-out-button'
 import { SignInExpectedButton } from './expected-visitor-button'
 import { expectedVisitorsToday } from '@/server/services/requests'
+import { ExportButton } from '@/components/app/export-button'
 
 export const metadata: Metadata = { title: 'Visitors' }
 
@@ -35,6 +36,7 @@ export default async function VisitorsPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireAccess({ module: 'visitors', permission: 'visitors.view' })
+  const canExport = hasPermission(user, 'reports.export')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -116,7 +118,13 @@ export default async function VisitorsPage({
         icon="userPlus"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Visitors' }]}
         actions={
-          canManage && (
+          <>
+            {canExport && (
+              <Suspense fallback={null}>
+                <ExportButton kind="visitors" />
+              </Suspense>
+            )}
+          {canManage && (
           <QuickForm
             trigger="Sign in a visitor"
             title="Sign in a visitor"
@@ -161,7 +169,8 @@ export default async function VisitorsPage({
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
-          )
+          )}
+          </>
         }
       />
 

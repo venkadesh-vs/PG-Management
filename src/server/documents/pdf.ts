@@ -42,7 +42,7 @@ export async function renderDocument(spec: DocSpec): Promise<Uint8Array> {
   const pdf = await PDFDocument.create()
   pdf.setTitle(safe(`${spec.title} ${spec.reference}`))
   pdf.setProducer('StayFlow')
-  const page = pdf.addPage([A4.w, A4.h])
+  let page = pdf.addPage([A4.w, A4.h])
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const text = (p: PDFPage, s: string, x: number, y: number, size = 10, f: PDFFont = font, color = INK) =>
@@ -86,7 +86,17 @@ export async function renderDocument(spec: DocSpec): Promise<Uint8Array> {
   right(page, 'QTY', A4.w - M - 110, y, 8, bold, MUTED)
   right(page, 'AMOUNT', A4.w - M - 8, y, 8, bold, MUTED)
   y -= 24
+  // Long documents (a settlement with many lines) continue on a new page.
+  const room = (needed: number) => {
+    if (y - needed > M + 30) return
+    page = pdf.addPage([A4.w, A4.h])
+    page.drawRectangle({ x: 0, y: A4.h - 6, width: A4.w, height: 6, color: BRAND })
+    y = A4.h - M
+    text(page, `${spec.title} ${spec.reference} (continued)`, M, y, 9, font, MUTED)
+    y -= 24
+  }
   for (const item of spec.items) {
+    room(24)
     text(page, item.label.slice(0, 80), M + 8, y, 10)
     right(page, String(item.qty ?? 1), A4.w - M - 110, y, 10)
     right(page, rs(item.amount), A4.w - M - 8, y, 10)
@@ -97,6 +107,7 @@ export async function renderDocument(spec: DocSpec): Promise<Uint8Array> {
 
   // Totals
   y -= 4
+  room(spec.totals.length * 16 + 40)
   for (const [label, value, strong] of spec.totals) {
     right(page, label, A4.w - M - 120, y, strong ? 11 : 10, strong ? bold : font, strong ? INK : MUTED)
     right(page, value, A4.w - M - 8, y, strong ? 11 : 10, strong ? bold : font)
@@ -116,12 +127,13 @@ export async function renderDocument(spec: DocSpec): Promise<Uint8Array> {
   if (spec.notes?.length) {
     y -= 16
     for (const note of spec.notes) {
+      room(14)
       text(page, note.slice(0, 110), M, y, 9, font, MUTED)
       y -= 13
     }
   }
 
-  // Footer
+  // Footer (last page)
   page.drawLine({ start: { x: M, y: M + 18 }, end: { x: A4.w - M, y: M + 18 }, thickness: 0.6, color: LINE })
   text(page, spec.footer, M, M, 8, font, MUTED)
 

@@ -1,20 +1,27 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import type { EventType, Prisma } from '@prisma/client'
+import type { EventType } from '@prisma/client'
 import { requireAccess } from '@/lib/auth'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { EVENT_GROUPS, EVENT_LABEL } from '@/lib/events-meta'
-import { addDays, formatDate, startOfDay } from '@/lib/utils'
+import { AUDIT_FILTER_KEYS, activeAuditFilterCount, parseAuditFilters } from '@/lib/audit-filters'
+import { addDays } from '@/lib/utils'
+import { loadAuditPage, orgAuditWhere } from '@/server/services/audit-log'
 import { PageHeader } from '@/components/app/page-header'
-import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
-import { ActivityTimeline } from '@/components/app/activity-timeline'
+import { AuditLogView } from '@/components/app/audit-log-view'
+import { ExportButton } from '@/components/app/export-button'
+import { DateRange } from '../expenses/date-range'
 
 export const metadata: Metadata = { title: 'Activity' }
 
 const PAGE_SIZE = 40
+
+const EVENT_OPTIONS = (Object.keys(EVENT_LABEL) as EventType[])
+  .map((e) => ({ value: e, label: EVENT_LABEL[e] }))
+  .sort((a, b) => a.label.localeCompare(b.label))
 
 export default async function ActivityPage({
   searchParams,
@@ -24,75 +31,48 @@ export default async function ActivityPage({
   const user = await requireAccess({ module: 'activity', permission: 'activity.view' })
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
+  const filters = parseAuditFilters(params)
 
-  const page = Math.max(1, Number(params.page) || 1)
-  const q = params.q?.trim() ?? ''
-  const group = params.group
-  const range = params.range ?? '30'
+  const where = orgAuditWhere(user, scope, filters)
+  // Facets (actors, record types) come from the same PGs, ignoring the other filters.
+  const facetWhere = orgAuditWhere(user, scope, parseAuditFilters({ range: 'all' }))
 
-  const groupEvents = EVENT_GROUPS.find((g) => g.label === group)?.events
-
-  const where: Prisma.ActivityLogWhereInput = {
-    organizationId: scope.organizationId,
-    ...(scope.propertyId ? { OR: [{ propertyId: scope.propertyId }, { propertyId: null }] } : {}),
-    ...(groupEvents ? { event: { in: groupEvents } } : {}),
-    ...(range !== 'all' ? { createdAt: { gte: addDays(startOfDay(new Date()), -Number(range)) } } : {}),
-    ...(q ? { summary: { contains: q, mode: 'insensitive' } } : {}),
-  }
-
-  const [logs, total, byEvent] = await Promise.all([
-    prisma.activityLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.activityLog.count({ where }),
+  const [{ entries, total, actors, entities }, byEvent] = await Promise.all([
+    loadAuditPage('org', where, facetWhere, filters.page, PAGE_SIZE),
     prisma.activityLog.groupBy({
       by: ['event'],
-      where: {
-        organizationId: scope.organizationId,
-        createdAt: { gte: addDays(new Date(), -30) },
-      },
+      where: { ...facetWhere, createdAt: { gte: addDays(new Date(), -30) } },
       _count: { _all: true },
       orderBy: { _count: { event: 'desc' } },
       take: 6,
     }),
   ])
 
-  // Group the page of logs by day so the timeline reads like a diary.
-  const byDay = new Map<string, typeof logs>()
-  for (const log of logs) {
-    const key = startOfDay(log.createdAt).toISOString()
-    const bucket = byDay.get(key) ?? []
-    bucket.push(log)
-    byDay.set(key, bucket)
-  }
-
-  const activeFilters = [q, group, params.range].filter(Boolean).length
+  const activeFilters = activeAuditFilterCount(filters, params)
+  const canExport = hasPermission(user, 'reports.export')
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Activity"
-        subtitle="Every check-in, payment, complaint and configuration change, with who did it and when."
+        subtitle="Every check-in, payment, complaint and configuration change, with who did it and when. Tap an entry to see exactly what changed."
         icon="history"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Activity' }]}
+        actions={
+          canExport && (
+            <Suspense fallback={null}>
+              <ExportButton kind="activity" carry={AUDIT_FILTER_KEYS} />
+            </Suspense>
+          )
+        }
       />
 
       {byEvent.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {byEvent.map((entry) => (
-            <div
-              key={entry.event}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-card"
-            >
-              <p className="font-display text-lg font-semibold text-slate-900 tabular">
-                {entry._count._all}
-              </p>
-              <p className="truncate text-[11px] text-slate-500">
-                {EVENT_LABEL[entry.event as EventType]}
-              </p>
+            <div key={entry.event} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-card">
+              <p className="font-display text-lg font-semibold text-slate-900 tabular">{entry._count._all}</p>
+              <p className="truncate text-[11px] text-slate-500">{EVENT_LABEL[entry.event as EventType]}</p>
             </div>
           ))}
         </div>
@@ -100,12 +80,21 @@ export default async function ActivityPage({
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>
-          <SearchInput placeholder="Search the log…" />
+          <SearchInput placeholder="Search summary, person, IP…" />
           <FilterSelect
             paramKey="group"
             placeholder="All activity"
             options={EVENT_GROUPS.map((g) => ({ value: g.label, label: g.label }))}
           />
+          <FilterSelect paramKey="event" placeholder="Any event" options={EVENT_OPTIONS} />
+          {actors.length > 0 && (
+            <FilterSelect
+              paramKey="actor"
+              placeholder="Anyone"
+              options={[{ value: 'system', label: 'System (automation)' }, ...actors]}
+            />
+          )}
+          {entities.length > 0 && <FilterSelect paramKey="entity" placeholder="Any record" options={entities} />}
           <FilterSelect
             paramKey="range"
             placeholder="Last 30 days"
@@ -116,10 +105,11 @@ export default async function ActivityPage({
               { value: 'all', label: 'All time' },
             ]}
           />
+          <DateRange />
         </FilterBar>
       </Suspense>
 
-      {logs.length === 0 ? (
+      {entries.length === 0 ? (
         <EmptyState
           icon="history"
           title={activeFilters ? 'Nothing matches these filters' : 'No activity recorded yet'}
@@ -127,33 +117,9 @@ export default async function ActivityPage({
         />
       ) : (
         <>
-          <div className="space-y-5">
-            {[...byDay.entries()].map(([day, entries]) => (
-              <div key={day}>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {formatDate(day)}
-                </p>
-                <Card>
-                  <CardContent className="p-5">
-                    <ActivityTimeline
-                      items={entries.map((log) => ({
-                        id: log.id,
-                        event: log.event,
-                        summary: log.summary,
-                        actorName: log.actorName,
-                        createdAt: log.createdAt,
-                        entityType: log.entityType,
-                        entityId: log.entityId,
-                      }))}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
-          </div>
-
+          <AuditLogView entries={entries} />
           <Suspense fallback={null}>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={total} />
+            <Pagination page={filters.page} pageSize={PAGE_SIZE} total={total} />
           </Suspense>
         </>
       )}

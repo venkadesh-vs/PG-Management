@@ -1,10 +1,11 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { BookingStatus, Prisma } from '@prisma/client'
 import { ClipboardList } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { addDays, cn } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
@@ -13,6 +14,7 @@ import { getLeadForUser } from '@/server/services/leads'
 import { BOOKING_STATUS } from '../leads/lead-meta'
 import { BookingsList, type BookingRow } from './bookings-list'
 import { NewBookingButton, type BookingPrefill } from './new-booking'
+import { ExportButton } from '@/components/app/export-button'
 
 export const metadata: Metadata = { title: 'Bookings' }
 
@@ -32,6 +34,7 @@ export default async function BookingsPage({
   searchParams: Promise<{ property?: string; status?: string; q?: string; new?: string; lead?: string }>
 }) {
   const user = await requireAccess({ module: 'leads', permission: 'leads.view' })
+  const canExport = hasPermission(user, 'reports.export')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -135,6 +138,11 @@ export default async function BookingsPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Bookings' }]}
         actions={
           <>
+            {canExport && (
+              <Suspense fallback={null}>
+                <ExportButton kind="bookings" />
+              </Suspense>
+            )}
             <Button variant="outline" asChild>
               <Link href="/app/leads">
                 <ClipboardList /> Enquiries

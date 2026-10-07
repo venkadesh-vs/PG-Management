@@ -10,6 +10,7 @@ import {
   type WhatsAppTemplateDef,
   type WhatsAppTemplateName,
 } from './whatsapp-templates'
+import { isChannelOn, parseNotificationPrefs, typeForTemplate } from '@/lib/notification-prefs'
 
 /**
  * WhatsApp Business delivery.
@@ -43,6 +44,8 @@ export type WhatsAppRequest = {
   variables?: string[]
   refType?: string
   refId?: string
+  /** Test messages from Settings ignore the per-type switches. */
+  ignorePreferences?: boolean
 }
 
 /** 'disabled' — the organization switched the WhatsApp module off; nothing was stored or sent. */
@@ -249,8 +252,21 @@ export async function isWhatsAppDisabled(organizationId: string | null): Promise
   return settings?.disabledModules.includes('whatsapp') ?? false
 }
 
-function disabledResult(): WhatsAppResult {
-  return { id: '', status: 'FAILED', delivered: false, demo: false, outcome: 'disabled', error: WHATSAPP_DISABLED_ERROR }
+function disabledResult(error = WHATSAPP_DISABLED_ERROR): WhatsAppResult {
+  return { id: '', status: 'FAILED', delivered: false, demo: false, outcome: 'disabled', error }
+}
+
+export const TYPE_SWITCHED_OFF_ERROR = 'This message type is switched off in Settings → Notifications'
+
+/** False when the owner switched WhatsApp off for this template's type. */
+export async function isTemplateSwitchedOn(organizationId: string | null, template: string): Promise<boolean> {
+  const type = typeForTemplate(template)
+  if (!organizationId || !type) return true
+  const settings = await prisma.orgSetting.findUnique({
+    where: { organizationId },
+    select: { notificationSettings: true },
+  })
+  return isChannelOn(parseNotificationPrefs(settings?.notificationSettings), type, 'WHATSAPP')
 }
 
 // --------------------------------------------------------------------------
@@ -261,6 +277,11 @@ export async function sendWhatsApp(req: WhatsAppRequest): Promise<WhatsAppResult
   // Module off: no Meta call and no outbox row (login links excepted).
   if (!LOGIN_CRITICAL_TEMPLATES.has(req.template) && (await isWhatsAppDisabled(req.organizationId))) {
     return disabledResult()
+  }
+  // Switched off per type (Settings → Notifications): like the module switch,
+  // nothing is stored or sent.
+  if (!req.ignorePreferences && !(await isTemplateSwitchedOn(req.organizationId, req.template))) {
+    return disabledResult(TYPE_SWITCHED_OFF_ERROR)
   }
   const phone = normalisePhone(req.toPhone)
   const channel = await resolveWhatsAppChannel(req.organizationId)
@@ -431,6 +452,9 @@ export async function retryWhatsAppMessage(message: OutboundMessage): Promise<Wh
 
   if (!LOGIN_CRITICAL_TEMPLATES.has(message.template) && (await isWhatsAppDisabled(message.organizationId))) {
     return { ...disabledResult(), id: message.id }
+  }
+  if (message.refType !== 'Test' && !(await isTemplateSwitchedOn(message.organizationId, message.template))) {
+    return { ...disabledResult(TYPE_SWITCHED_OFF_ERROR), id: message.id }
   }
 
   const channel = await resolveWhatsAppChannel(message.organizationId)

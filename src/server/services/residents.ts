@@ -36,8 +36,17 @@ import {
   recordPayment,
   rebuildLedger,
   retryOnUniqueConflict,
+  reviseRentTx,
 } from './billing'
-import { computeSettlement, type SettlementDeduction } from '@/lib/settlement'
+import {
+  chargeDaysInExitMonth,
+  computeSettlement,
+  firstDayAfterExitMonth,
+  invoicesAfterExit,
+  type SettlementDeduction,
+} from '@/lib/settlement'
+import { lineKindFor, prorationFor, rentOnDay, rentSegments } from '@/lib/billing-calc'
+import { assetDeductionLabel, type AssetDamage, type Checklist } from '@/lib/checkout-checklist'
 
 /**
  * Resident lifecycle.
@@ -576,6 +585,12 @@ export async function transferResident(params: {
   toBedId: string
   actor: { id?: string; name: string }
   effectiveDate?: Date
+  /**
+   * New monthly rent from the transfer date (a RentRevision). Months already
+   * invoiced get a pro-rata debit or credit note for the difference.
+   */
+  newRent?: number
+  rentReason?: string
 }) {
   return prisma.$transaction(async (tx) => {
     const resident = await tx.resident.findUnique({
@@ -590,6 +605,7 @@ export async function transferResident(params: {
       include: { room: true },
     })
     if (!target) throw new NotFoundError('Target bed not found in this PG')
+    if (resident.bed?.id === target.id) throw new ValidationError('They are already in this bed')
     if (target.residentId && target.residentId !== resident.id) {
       throw new ConflictError('This bed is already occupied')
     }
@@ -622,6 +638,28 @@ export async function transferResident(params: {
     })
     await tx.resident.update({ where: { id: resident.id }, data: { roomId: target.roomId } })
 
+    const from = resident.bed ? `Room ${resident.bed.room.number} / Bed ${resident.bed.label}` : 'unallocated'
+    const to = `Room ${target.room.number} / Bed ${target.label}`
+
+    // Rent difference: a revision from the transfer date. reviseRentTx raises
+    // the debit/credit notes for months already invoiced and audits itself.
+    const revisions = await tx.rentRevision.findMany({
+      where: { residentId: resident.id },
+      select: { oldRent: true, newRent: true, effectiveFrom: true },
+    })
+    const rentBefore = rentOnDay(date, resident.rentAmount, revisions)
+    let rentChange: Awaited<ReturnType<typeof reviseRentTx>> | null = null
+    if (params.newRent != null && params.newRent !== resident.rentAmount) {
+      rentChange = await reviseRentTx(tx, {
+        organizationId: resident.organizationId,
+        residentId: resident.id,
+        newRent: params.newRent,
+        effectiveFrom: date,
+        reason: params.rentReason?.trim() || `Moved to ${to}`,
+        actor: params.actor,
+      })
+    }
+
     await recordActivity(
       {
         organizationId: resident.organizationId,
@@ -631,9 +669,12 @@ export async function transferResident(params: {
         event: 'ROOM_CHANGED',
         entityType: 'Resident',
         entityId: resident.id,
-        summary: `${resident.fullName} moved from ${
-          resident.bed ? `Room ${resident.bed.room.number} / Bed ${resident.bed.label}` : 'unallocated'
-        } to Room ${target.room.number} / Bed ${target.label}`,
+        summary: `${resident.fullName} moved from ${from} to ${to}${
+          rentChange ? ` — rent ${formatMoney(rentBefore)} → ${formatMoney(params.newRent!)} from ${formatDate(date)}` : ''
+        }`,
+        before: { bedId: resident.bed?.id ?? null, bed: from, rentAmount: resident.rentAmount },
+        after: { bedId: target.id, bed: to, rentAmount: params.newRent ?? resident.rentAmount, effectiveDate: date.toISOString() },
+        meta: rentChange ? { revisionId: rentChange.revision.id, adjustments: rentChange.adjustments } : undefined,
       },
       tx,
     )
@@ -649,7 +690,7 @@ export async function transferResident(params: {
       tx,
     )
 
-    return { resident, bed: target }
+    return { resident, bed: target, rentChange }
   })
 }
 
@@ -690,6 +731,20 @@ export type CheckoutPreview = {
     credit: number
     lines: { label: string; amount: number }[]
   }
+  /** One-time charges (joining, notice, fines) not billed yet — on the settlement. */
+  oneTimeCharges: { label: string; amount: number }[]
+  oneTimeTotal: number
+  /** Invoices for months after the exit; cancelled at checkout. */
+  futureInvoices: { id: string; number: string; period: string; total: number; amountPaid: number }[]
+  /** Assets in the resident's room or bed, for the damage / missing check. */
+  roomAssets: {
+    id: string
+    name: string
+    category: string
+    condition: string
+    status: string
+    value: number
+  }[]
   depositHeld: number
   depositStatus: string | null
   advance: number
@@ -717,21 +772,40 @@ function exitLineLabel(kind: string, from: Date, exit: Date, used: number, total
   }
 }
 
+/** Invoice line kind for an exit-month line. */
+function exitLineKind(l: { kind: string; category?: string }): InvoiceLineKind {
+  if (l.kind === 'CHARGE') return lineKindFor(l.category ?? 'OTHER')
+  return l.kind as InvoiceLineKind
+}
+
 /**
  * Reads everything the settlement depends on through `db` — the plain client
  * for the preview, the checkout's own transaction for the real thing — and
  * runs the pure arithmetic over it.
+ *
+ * Covers: open invoices up to the exit month, invoices for later months
+ * (cancelled; money paid on them comes back as advance), unbilled utilities,
+ * unbilled one-time charges, the exit month pro-rata with rent revisions and
+ * recurring charges/discounts, asset damage, deposit and advance.
  */
 async function loadSettlement(
   db: Db,
-  params: { residentId: string; exitDate: Date; deductions: SettlementDeduction[] },
+  params: {
+    residentId: string
+    exitDate: Date
+    deductions: SettlementDeduction[]
+    assetDamages?: AssetDamage[]
+  },
 ) {
+  const exitDate = startOfDay(params.exitDate)
+  const nextMonth = firstDayAfterExitMonth(exitDate)
   const resident = await db.resident.findUnique({
     where: { id: params.residentId },
     include: {
       deposit: true,
+      bed: { select: { id: true, label: true, roomId: true } },
       invoices: {
-        where: { status: { in: OPEN_INVOICE }, balance: { gt: 0 } },
+        where: { status: { in: OPEN_INVOICE }, balance: { gt: 0 }, periodStart: { lt: nextMonth } },
         orderBy: { dueDate: 'asc' },
       },
       utilityCharges: { where: { billed: false }, orderBy: { periodStart: 'asc' } },
@@ -741,19 +815,32 @@ async function loadSettlement(
         select: {
           id: true,
           amount: true,
+          refundedAmount: true,
           purpose: true,
-          allocations: { select: { amount: true } },
+          allocations: { select: { amount: true, invoiceId: true } },
         },
       },
+      charges: { where: { voidedAt: null } },
+      rentRevisions: { select: { oldRent: true, newRent: true, effectiveFrom: true } },
     },
   })
   if (!resident) throw new NotFoundError('Resident not found')
 
-  const exitDate = startOfDay(params.exitDate)
   const joining = startOfDay(new Date(resident.joiningDate))
   if (exitDate < joining) {
     throw new ValidationError(`The exit date cannot be before the joining date (${formatDate(joining)}).`)
   }
+
+  // --- Invoices for months after the exit: cancelled at checkout -----------
+  const futureInvoices = invoicesAfterExit(
+    await db.rentInvoice.findMany({
+      where: { residentId: resident.id, periodStart: { gte: nextMonth }, status: { notIn: ['CANCELLED', 'WAIVED'] } },
+      select: { id: true, number: true, periodStart: true, issueDate: true, total: true, amountPaid: true, status: true },
+      orderBy: { periodStart: 'asc' },
+    }),
+    exitDate,
+  )
+  const futureIds = new Set(futureInvoices.map((i) => i.id))
 
   // --- Exit month: pro-rata charge, or credit for days already billed -------
   const monthStart = startOfMonth(exitDate)
@@ -771,14 +858,41 @@ async function loadSettlement(
         : Math.max(
             0,
             exitMonthInvoice.lines
-              .filter((l) => l.kind === 'RENT' || l.kind === 'MAINTENANCE' || l.kind === 'FOOD')
+              .filter((l) => l.kind === 'RENT' || l.kind === 'MAINTENANCE' || l.kind === 'FOOD' || l.kind === 'LAUNDRY')
               .reduce((s, l) => s + l.amount, 0) - exitMonthInvoice.discount,
           )
   }
 
+  // Rent by day (a revision can change it inside the month).
+  const proration = prorationFor(resident.joiningDate, monthStart, startOfDay(endOfMonth(monthStart)))
+  const segments = rentSegments(monthStart, proration, resident.rentAmount, resident.rentRevisions).map(
+    ({ fromDay, toDay, monthlyRent }) => ({ fromDay, toDay, monthlyRent }),
+  )
+
+  // Recurring charges and discounts active in the exit month.
+  const recurring = resident.charges
+    .filter((c) => c.kind !== 'ONE_TIME' && c.amount > 0)
+    .flatMap((c) => {
+      const days = chargeDaysInExitMonth(c, exitDate)
+      return days
+        ? [{ label: c.label, category: c.category, amount: c.amount, discount: c.kind === 'DISCOUNT', ...days }]
+        : []
+    })
+
+  // One-time charges not billed yet (or billed on an invoice being cancelled).
+  const oneTime = resident.charges.filter(
+    (c) => c.kind === 'ONE_TIME' && c.amount > 0 && (!c.billedInvoiceId || futureIds.has(c.billedInvoiceId)),
+  )
+
   // --- Money held: unallocated rent advance and deposit payments ------------
+  // Allocations to invoices being cancelled are released, so they count as free.
   const free = (p: (typeof resident.payments)[number]) =>
-    Math.max(0, p.amount - p.allocations.reduce((s, a) => s + a.amount, 0))
+    Math.max(
+      0,
+      p.amount -
+        p.refundedAmount -
+        p.allocations.filter((a) => !futureIds.has(a.invoiceId)).reduce((s, a) => s + a.amount, 0),
+    )
   const rentPayments = resident.payments
     .filter((p) => p.purpose === 'RENT')
     .map((p) => ({ id: p.id, free: free(p) }))
@@ -800,10 +914,39 @@ async function loadSettlement(
     amount: u.amount,
   }))
 
+  // --- Assets in the room or bed: damage and missing items -----------------
+  const roomId = resident.bed?.roomId ?? resident.roomId
+  const roomAssets = await db.asset.findMany({
+    where: {
+      organizationId: resident.organizationId,
+      propertyId: resident.propertyId,
+      status: { notIn: ['DISPOSED', 'MISSING'] },
+      OR: [...(resident.bed ? [{ bedId: resident.bed.id }] : []), ...(roomId ? [{ roomId }] : [])],
+    },
+    orderBy: [{ category: 'asc' }, { name: 'asc' }],
+  })
+  const damages = dedupeDamages(params.assetDamages ?? [])
+  const assetDeductions: SettlementDeduction[] = []
+  const damagedAssets: { asset: (typeof roomAssets)[number]; damage: AssetDamage }[] = []
+  if (damages.length) {
+    if (!roomAssets.length && (resident.bed || roomId)) {
+      throw new ValidationError('No assets are recorded in this room or bed')
+    }
+    for (const damage of damages) {
+      const asset = roomAssets.find((a) => a.id === damage.assetId)
+      if (!asset) throw new ValidationError('That item is not in this resident\'s room or bed')
+      damagedAssets.push({ asset, damage })
+      assetDeductions.push({
+        label: assetDeductionLabel(asset.name, damage.outcome, damage.note),
+        amount: damage.amount,
+      })
+    }
+  }
+
   const result = computeSettlement({
     openBalances,
     utilities: utilities.reduce((s, u) => s + u.amount, 0),
-    deductions: params.deductions,
+    deductions: [...params.deductions, ...assetDeductions],
     exitMonth: {
       totalDays,
       fromDay: fromDate.getDate(),
@@ -814,15 +957,19 @@ async function loadSettlement(
         food: resident.foodOptIn ? resident.foodCharge : 0,
         discount: resident.discountAmount,
       },
+      rentSegments: segments,
+      recurring,
       invoicedCharge,
     },
+    oneTimeCharges: oneTime.map((c) => ({ label: c.label, category: c.category, amount: c.amount })),
     depositCollected: depositHeld,
     advance,
   })
 
+  const span = (used: number) => `${formatDate(fromDate)} – ${formatDate(exitDate)} (${used}/${totalDays} days)`
   const exitLines = result.exitMonthLines.map((l) => ({
-    kind: l.kind,
-    label: exitLineLabel(l.kind, fromDate, exitDate, result.usedDays, totalDays),
+    kind: exitLineKind(l),
+    label: l.label ? `${l.label} ${span(result.usedDays)}` : exitLineLabel(l.kind, fromDate, exitDate, result.usedDays, totalDays),
     amount: l.amount,
   }))
 
@@ -832,6 +979,10 @@ async function loadSettlement(
     monthStart,
     totalDays,
     exitMonthInvoice,
+    futureInvoices,
+    oneTimeIds: oneTime.map((c) => c.id),
+    roomAssets,
+    damagedAssets,
     rentPayments,
     depositPayments,
     depositHeld,
@@ -840,6 +991,13 @@ async function loadSettlement(
     exitLines,
     result,
   }
+}
+
+/** One entry per asset; the last one wins. */
+function dedupeDamages(list: AssetDamage[]) {
+  const byId = new Map<string, AssetDamage>()
+  for (const d of list) byId.set(d.assetId, d)
+  return [...byId.values()]
 }
 
 type LoadedSettlement = Awaited<ReturnType<typeof loadSettlement>>
@@ -873,6 +1031,23 @@ function toPreview(s: LoadedSettlement): CheckoutPreview {
       credit: r.unusedDaysCredit,
       lines: s.exitLines.map(({ label, amount }) => ({ label, amount })),
     },
+    oneTimeCharges: r.oneTimeCharges.map(({ label, amount }) => ({ label, amount })),
+    oneTimeTotal: r.oneTimeTotal,
+    futureInvoices: s.futureInvoices.map((i) => ({
+      id: i.id,
+      number: i.number,
+      period: formatMonth(i.periodStart),
+      total: i.total,
+      amountPaid: i.amountPaid,
+    })),
+    roomAssets: s.roomAssets.map((a) => ({
+      id: a.id,
+      name: a.name,
+      category: a.category,
+      condition: a.condition,
+      status: a.status,
+      value: a.currentValue ?? a.purchaseCost,
+    })),
     depositHeld: s.depositHeld,
     depositStatus: s.resident.deposit?.status ?? null,
     advance: s.advance,
@@ -905,11 +1080,13 @@ export async function previewCheckout(params: {
   deductions?: SettlementDeduction[]
   damageDeduction?: number
   otherCharges?: number
+  assetDamages?: AssetDamage[]
 }): Promise<CheckoutPreview> {
   const loaded = await loadSettlement(prisma, {
     residentId: params.residentId,
     exitDate: params.exitDate,
     deductions: normaliseDeductions(params),
+    assetDamages: params.assetDamages,
   })
   return toPreview(loaded)
 }
@@ -942,6 +1119,11 @@ export async function completeCheckout(params: {
   refund?: RefundInput | null
   /** @deprecated use `refund`. */
   refundPaid?: boolean
+  /** Room inspection and clearance checklists captured in the dialog. */
+  inspection?: Checklist | null
+  clearance?: Checklist | null
+  /** Assets in the room found damaged or missing; each amount is a deduction. */
+  assetDamages?: AssetDamage[]
   actor: { id?: string; name: string }
 }) {
   const deductions = normaliseDeductions(params)
@@ -979,10 +1161,65 @@ export async function completeCheckout(params: {
             residentId: resident.id,
             exitDate: params.exitDate,
             deductions,
+            assetDamages: params.assetDamages,
           })
           const r = s.result
           const exitDate = s.exitDate
           const ledgerBase = { organizationId: resident.organizationId, residentId: resident.id }
+
+          // --- 0. Cancel invoices for months after the exit -----------------
+          // Never left outstanding; what was paid on them is released and
+          // counted as advance in the settlement (already in `s`).
+          for (const inv of s.futureInvoices) {
+            await tx.paymentAllocation.deleteMany({ where: { invoiceId: inv.id } })
+            await tx.rentInvoice.update({
+              where: { id: inv.id },
+              data: {
+                status: 'CANCELLED',
+                amountPaid: 0,
+                balance: 0,
+                paidAt: null,
+                notes: `Cancelled at checkout — resident left on ${formatDate(exitDate)}`,
+              },
+            })
+            if (inv.status !== 'DRAFT' && inv.total > 0) {
+              await appendLedger(tx, {
+                ...ledgerBase,
+                kind: 'ADJUSTMENT',
+                label: `Invoice ${inv.number} cancelled — ${formatMonth(inv.periodStart)} is after the exit`,
+                credit: inv.total,
+                // Never before the charge it reverses, so running balances read right.
+                entryDate: inv.issueDate > exitDate ? inv.issueDate : exitDate,
+                refType: 'RentInvoice',
+                refId: inv.id,
+              })
+            }
+            await recordActivity(
+              {
+                organizationId: resident.organizationId,
+                propertyId: resident.propertyId,
+                actorId: params.actor.id,
+                actorName: params.actor.name,
+                event: 'INVOICE_ADJUSTED',
+                entityType: 'RentInvoice',
+                entityId: inv.id,
+                summary: `${inv.number} (${formatMonth(inv.periodStart)}) cancelled at ${resident.fullName}'s checkout${
+                  inv.amountPaid > 0 ? ` — ${formatMoney(inv.amountPaid)} paid on it moved to the settlement` : ''
+                }`,
+                meta: { action: 'CANCELLED_AT_CHECKOUT', residentId: resident.id },
+                before: { status: inv.status, total: inv.total, amountPaid: inv.amountPaid },
+                after: { status: 'CANCELLED', total: inv.total, amountPaid: 0, balance: 0 },
+              },
+              tx,
+            )
+          }
+          if (s.futureInvoices.length) {
+            // One-time charges billed on a cancelled invoice go on the settlement.
+            await tx.residentCharge.updateMany({
+              where: { residentId: resident.id, billedInvoiceId: { in: s.futureInvoices.map((i) => i.id) } },
+              data: { billedInvoiceId: null },
+            })
+          }
 
           // Open invoices as a working set; the settlement invoice joins at the end.
           const open: OpenInvoiceRow[] = s.resident.invoices.map((i) => ({
@@ -998,6 +1235,7 @@ export async function completeCheckout(params: {
           // --- 1. Final "Settlement" invoice -------------------------------
           const lines = [
             ...s.exitLines.map((l) => ({ kind: l.kind, label: l.label, amount: l.amount })),
+            ...r.oneTimeCharges.map((c) => ({ kind: lineKindFor(c.category), label: c.label, amount: c.amount })),
             ...s.utilities.map((u) => ({
               kind: (u.kind === 'ELECTRICITY' || u.kind === 'WATER' ? u.kind : 'OTHER') as InvoiceLineKind,
               label: u.label,
@@ -1105,6 +1343,16 @@ export async function completeCheckout(params: {
                 where: { id: { in: s.utilities.map((u) => u.id) } },
                 data: { billed: true, notes: `Billed on ${created.number}` },
               })
+            }
+            // One-time charges bill exactly once: claim them for the settlement.
+            if (s.oneTimeIds.length) {
+              const claimed = await tx.residentCharge.updateMany({
+                where: { id: { in: s.oneTimeIds }, billedInvoiceId: null, voidedAt: null },
+                data: { billedInvoiceId: created.id, lastBilledFor: exitDate },
+              })
+              if (claimed.count !== s.oneTimeIds.length) {
+                throw new ConflictError('Charges changed during checkout. Please try again.')
+              }
             }
           }
 
@@ -1269,8 +1517,10 @@ export async function completeCheckout(params: {
               proRataRent: r.exitMonthCharge - foodPart - r.unusedDaysCredit,
               foodCharges: foodPart,
               utilityCharges: s.utilities.reduce((sum, u) => sum + u.amount, 0),
-              otherCharges: 0,
+              otherCharges: r.oneTimeTotal,
               damageDeduction: r.deductionsTotal,
+              inspection: params.inspection ? (params.inspection as Prisma.InputJsonValue) : undefined,
+              clearance: params.clearance ? (params.clearance as Prisma.InputJsonValue) : undefined,
               depositHeld: s.depositHeld,
               refundAmount: r.refundable,
               payableAmount: r.payable,
@@ -1279,6 +1529,41 @@ export async function completeCheckout(params: {
               processedBy: params.actor.name,
             },
           })
+
+          // --- 4b. Damaged / missing assets ---------------------------------
+          for (const { asset, damage } of s.damagedAssets) {
+            const data =
+              damage.outcome === 'MISSING'
+                ? { status: 'MISSING' }
+                : { condition: 'DAMAGED' as const, status: 'UNDER_REPAIR' }
+            await tx.asset.update({
+              where: { id: asset.id },
+              data: {
+                ...data,
+                notes: [asset.notes, `${damage.outcome === 'MISSING' ? 'Missing' : 'Damaged'} at ${resident.fullName}'s checkout on ${formatDate(exitDate)}${damage.note ? ` — ${damage.note}` : ''}`]
+                  .filter(Boolean)
+                  .join('\n')
+                  .slice(0, 1000),
+              },
+            })
+            await recordActivity(
+              {
+                organizationId: resident.organizationId,
+                propertyId: resident.propertyId,
+                actorId: params.actor.id,
+                actorName: params.actor.name,
+                event: 'ASSET_UPDATED',
+                entityType: 'Asset',
+                entityId: asset.id,
+                summary: `${asset.name} ${damage.outcome === 'MISSING' ? 'missing' : 'damaged'} at ${resident.fullName}'s checkout${
+                  damage.amount > 0 ? ` — ${formatMoney(damage.amount)} deducted` : ''
+                }`,
+                before: { status: asset.status, condition: asset.condition },
+                after: { ...data, deduction: damage.amount },
+              },
+              tx,
+            )
+          }
 
           // --- 5. Release the bed, stop food, close the account -------------
           if (resident.bed) {
@@ -1334,7 +1619,10 @@ export async function completeCheckout(params: {
                 advance: s.advance,
                 unusedDaysCredit: r.unusedDaysCredit,
                 exitMonthCharge: r.exitMonthCharge,
+                oneTimeCharges: r.oneTimeCharges,
                 deductions: r.deductions,
+                cancelledInvoices: s.futureInvoices.map((i) => i.number),
+                damagedAssets: s.damagedAssets.map((d) => ({ id: d.asset.id, outcome: d.damage.outcome, amount: d.damage.amount })),
                 settlementInvoice: settlementInvoice?.number ?? null,
               },
             },

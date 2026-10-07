@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { assertLookupValue } from '@/server/services/org-defaults'
 import { createExpense, expenseInputSchema } from '@/server/services/expenses'
+import { resolveAssetLocation } from '@/server/services/assets'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
@@ -34,6 +35,7 @@ import { notifyResident, recordActivity } from '@/server/events'
 import { markMealServed, recordPurchase, upsertMeal } from '@/server/services/kitchen'
 import { formatMoney, startOfDay } from '@/lib/utils'
 import { sendWhatsApp } from '@/server/integrations/whatsapp'
+import { channelEnabled } from '@/server/services/notification-settings'
 import { createWorkerLogin, sendAccessLink } from '@/server/services/accounts'
 import { assertWithinPlan } from '@/server/services/plan-limits'
 import type { ModuleKey } from '@/lib/modules'
@@ -282,6 +284,7 @@ export const POST = route(async ({ user, request }) => {
         await notifyResident(body.residentId, {
           organizationId,
           kind: 'SYSTEM',
+          type: 'VISITOR',
           title: 'You have a visitor',
           body: `${visitor.name} has signed in at the entrance.`,
           link: '/tenant',
@@ -306,12 +309,18 @@ export const POST = route(async ({ user, request }) => {
     // ----------------------------------------------------------- assets --
     case 'ASSET': {
       await assertPropertyAccess(user, body.propertyId)
-      if (body.roomId) await assertRoomInProperty(body.roomId, body.propertyId)
+      // Floor / room / bed, each checked against the PG.
+      const where = (await resolveAssetLocation(body.propertyId, {
+        placement: body.placement,
+        roomId: body.roomId,
+      })) ?? { floorId: null, roomId: null, bedId: null }
       const asset = await prisma.asset.create({
         data: {
           organizationId,
           propertyId: body.propertyId,
-          roomId: body.roomId || null,
+          ...where,
+          status: body.status ?? (body.condition === 'DISPOSED' ? 'DISPOSED' : 'IN_USE'),
+          currentValue: body.currentValue === '' || body.currentValue === undefined ? null : body.currentValue,
           name: body.name,
           category: body.category,
           quantity: body.quantity,
@@ -423,7 +432,7 @@ export const POST = route(async ({ user, request }) => {
           skipDuplicates: true,
         })
         const userIds = residents.map((r) => r.userId).filter((id): id is string => Boolean(id))
-        if (userIds.length) {
+        if (userIds.length && (await channelEnabled(organizationId, 'ANNOUNCEMENT', 'IN_APP'))) {
           await prisma.notification.createMany({
             data: userIds.map((userId) => ({
               userId,
@@ -437,7 +446,9 @@ export const POST = route(async ({ user, request }) => {
         }
       }
 
-      if (sendWhatsapp) {
+      // Announcements switched off for WhatsApp in Settings → Notifications.
+      const whatsappSwitchedOff = sendWhatsapp && !(await channelEnabled(organizationId, 'ANNOUNCEMENT', 'WHATSAPP'))
+      if (sendWhatsapp && !whatsappSwitchedOff) {
         for (const resident of residents) {
           await sendWhatsApp({
             organizationId,
@@ -469,7 +480,9 @@ export const POST = route(async ({ user, request }) => {
         {
           announcement,
           reached: residents.length,
-          message: `Announcement sent to ${residents.length} residents`,
+          message: `Announcement sent to ${residents.length} residents${
+            whatsappSwitchedOff ? ' — no WhatsApp copy: announcements are switched off for WhatsApp in Settings → Notifications' : ''
+          }`,
         },
         { status: 201 },
       )

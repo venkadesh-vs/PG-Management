@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { ArrowDownRight, ArrowUpRight, Printer } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Download, Printer } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
@@ -176,6 +176,17 @@ export default async function ReportsPage({
             >
               Daily collection
             </Link>
+          )}
+          {user.role === 'OWNER' && (
+            <a
+              href="/api/exports/all.xlsx"
+              download
+              title="Every area — residents, rent, payments, expenses, complaints and more — as one Excel file"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="size-4" />
+              All my data
+            </a>
           )}
           <Suspense fallback={null}>
             <FilterBar>

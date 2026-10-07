@@ -1,9 +1,10 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CalendarCheck2 } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { addDays } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
@@ -12,6 +13,7 @@ import { leadScopeWhere, leadStats } from '@/server/services/leads'
 import { LeadsBoard } from './leads-board'
 import { NewLeadButton } from './new-lead'
 import type { LeadCardData, LeadStatus } from './lead-meta'
+import { ExportButton } from '@/components/app/export-button'
 
 export const metadata: Metadata = { title: 'Enquiries' }
 
@@ -21,6 +23,7 @@ export default async function LeadsPage({
   searchParams: Promise<{ property?: string; view?: string }>
 }) {
   const user = await requireAccess({ module: 'leads', permission: 'leads.view' })
+  const canExport = hasPermission(user, 'reports.export')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -81,6 +84,11 @@ export default async function LeadsPage({
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Enquiries' }]}
         actions={
           <>
+            {canExport && (
+              <Suspense fallback={null}>
+                <ExportButton kind="enquiries" />
+              </Suspense>
+            )}
             {canBook && (
               <Button variant="outline" asChild>
                 <Link href="/app/bookings">

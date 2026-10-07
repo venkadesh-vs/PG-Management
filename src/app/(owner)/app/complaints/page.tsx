@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import type { ComplaintStatus, Prisma } from '@prisma/client'
 import { requireAccess } from '@/lib/auth'
 import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
-import { resolveScope } from '@/lib/tenancy'
+import { hasPermission, resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE, themeFor } from '@/lib/theme'
 import { cn, relativeTime } from '@/lib/utils'
@@ -16,6 +16,7 @@ import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/a
 import { NewComplaintButton } from './new-complaint'
 import { SlaChip } from '@/components/app/sla-chip'
 import { refreshSlaBreaches } from '@/server/services/complaints'
+import { ExportButton } from '@/components/app/export-button'
 
 export const metadata: Metadata = { title: 'Complaints' }
 
@@ -36,6 +37,7 @@ export default async function ComplaintsPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireAccess({ module: 'complaints', permission: 'complaints.view' })
+  const canExport = hasPermission(user, 'reports.export')
   const params = await searchParams
   const scope = await resolveScope(user, params.property)
   const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
@@ -153,14 +155,21 @@ export default async function ComplaintsPage({
         icon="wrench"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Complaints' }]}
         actions={
-          user.permissions.includes('complaints.manage') && (
-            <NewComplaintButton
-              properties={properties}
-              residents={residents}
-              categories={categoryOptions}
-              defaultPropertyId={scope.propertyId ?? properties[0]?.id}
-            />
-          )
+          <>
+            {canExport && (
+              <Suspense fallback={null}>
+                <ExportButton kind="complaints" />
+              </Suspense>
+            )}
+            {user.permissions.includes('complaints.manage') && (
+              <NewComplaintButton
+                properties={properties}
+                residents={residents}
+                categories={categoryOptions}
+                defaultPropertyId={scope.propertyId ?? properties[0]?.id}
+              />
+            )}
+          </>
         }
       />
 

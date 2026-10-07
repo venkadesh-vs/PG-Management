@@ -52,6 +52,8 @@ import { LedgerTable } from './ledger-table'
 import { DepositCard } from './deposit-card'
 import { ChargesCard } from './charges-card'
 import { RentRevisionCard } from './rent-revision-card'
+import { SettlementCard } from './settlement-card'
+import { readChecklist } from '@/lib/checkout-checklist'
 import { InvoiceActions } from '../../rent/invoice-actions'
 import { PaymentActions, PaymentStatusBadge } from '../../payments/payment-actions'
 import { rentOnDay, unallocatedOf } from '@/lib/billing-calc'
@@ -85,6 +87,10 @@ export default async function ResidentDetailPage({
       rentRevisions: { orderBy: { effectiveFrom: 'desc' } },
       ledger: { orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }] },
       complaints: { orderBy: { createdAt: 'desc' }, take: 10 },
+      allocations: {
+        orderBy: { fromDate: 'desc' },
+        include: { bed: { select: { label: true, room: { select: { number: true } } } } },
+      },
       utilityCharges: { orderBy: { periodStart: 'desc' }, take: 6 },
     },
   })
@@ -112,7 +118,7 @@ export default async function ResidentDetailPage({
   const [availableBeds, idTypeLabels, relationLabels, categoryLabels] = await Promise.all([
     prisma.bed.findMany({
       where: { propertyId: resident.propertyId, status: 'AVAILABLE' },
-      include: { room: { select: { number: true } } },
+      include: { room: { select: { number: true, baseRent: true } } },
       orderBy: [{ room: { number: 'asc' } }, { label: 'asc' }],
     }),
     getLookupLabels(resident.organizationId, 'ID_TYPE'),
@@ -151,11 +157,13 @@ export default async function ResidentDetailPage({
             availableBeds={availableBeds.map((b) => ({
               id: b.id,
               label: `Room ${b.room.number} · Bed ${b.label}`,
+              rent: b.rent ?? b.room.baseRent ?? resident.property.standardRent ?? undefined,
             }))}
             can={{
               recordPayment: has('payments.record'),
               manage: has('residents.manage'),
               checkout: has('residents.checkout'),
+              rent: has('rent.manage'),
             }}
           />
         }
@@ -405,40 +413,50 @@ export default async function ResidentDetailPage({
               </Card>
 
               {resident.checkout && (
-                <Card className="border-slate-300 bg-slate-50">
+                <SettlementCard
+                  residentId={resident.id}
+                  canManage={has('residents.checkout')}
+                  settlement={{
+                    exitDate: resident.checkout.exitDate.toISOString(),
+                    outstandingRent: resident.checkout.outstandingRent,
+                    proRataRent: resident.checkout.proRataRent,
+                    foodCharges: resident.checkout.foodCharges,
+                    utilityCharges: resident.checkout.utilityCharges,
+                    otherCharges: resident.checkout.otherCharges,
+                    damageDeduction: resident.checkout.damageDeduction,
+                    depositHeld: resident.checkout.depositHeld,
+                    refundAmount: resident.checkout.refundAmount,
+                    payableAmount: resident.checkout.payableAmount,
+                    settledAt: resident.checkout.settledAt?.toISOString() ?? null,
+                    settlementNote: resident.checkout.settlementNote,
+                    lockedAt: resident.checkout.lockedAt?.toISOString() ?? null,
+                    inspection: readChecklist(resident.checkout.inspection),
+                    clearance: readChecklist(resident.checkout.clearance),
+                  }}
+                />
+              )}
+
+              {resident.allocations.length > 0 && (
+                <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Final settlement</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Bed className="size-4 text-slate-400" />
+                      Stay history
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <Row label="Exit date" value={formatDate(resident.checkout.exitDate)} />
-                    <Row label="Rent dues at exit" value={formatMoney(resident.checkout.outstandingRent)} />
-                    <Row
-                      label={resident.checkout.proRataRent < 0 ? 'Unused days credit' : 'Exit month charges'}
-                      value={
-                        resident.checkout.proRataRent < 0
-                          ? `− ${formatMoney(-resident.checkout.proRataRent)}`
-                          : formatMoney(resident.checkout.proRataRent + resident.checkout.foodCharges)
-                      }
-                    />
-                    {resident.checkout.utilityCharges > 0 && (
-                      <Row label="Utilities" value={formatMoney(resident.checkout.utilityCharges)} />
-                    )}
-                    <Row
-                      label="Deductions"
-                      value={formatMoney(resident.checkout.damageDeduction + resident.checkout.otherCharges)}
-                    />
-                    <Row label="Deposit held" value={formatMoney(resident.checkout.depositHeld)} />
-                    {resident.checkout.refundAmount > 0 ? (
-                      <Row
-                        label={resident.checkout.settledAt ? 'Refunded' : 'Refund pending'}
-                        value={formatMoney(resident.checkout.refundAmount)}
-                      />
-                    ) : (
-                      <Row label="Still payable" value={formatMoney(resident.checkout.payableAmount)} />
-                    )}
-                    {resident.checkout.settlementNote && (
-                      <p className="pt-1 text-xs text-slate-500">{resident.checkout.settlementNote}</p>
-                    )}
+                  <CardContent>
+                    <ol className="space-y-2.5">
+                      {resident.allocations.map((a) => (
+                        <li key={a.id} className="flex items-start justify-between gap-3 text-sm">
+                          <span className="min-w-0 font-medium text-slate-700">
+                            Room {a.bed.room.number} · Bed {a.bed.label}
+                          </span>
+                          <span className="shrink-0 text-right text-xs text-slate-500">
+                            {formatDate(a.fromDate)} – {a.toDate ? formatDate(a.toDate) : 'now'}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
                   </CardContent>
                 </Card>
               )}

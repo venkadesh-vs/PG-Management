@@ -98,7 +98,7 @@ export function NotificationList({ notifications }: { notifications: Notificatio
               className={cn(
                 'rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors',
                 filter === value
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
               )}
             >

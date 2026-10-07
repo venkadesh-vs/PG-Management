@@ -162,7 +162,7 @@ export function ImportWizard({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {kinds.map((k) => (
+            {[...kinds].sort((a, b) => KIND_HELP[a.key].step.localeCompare(KIND_HELP[b.key].step)).map((k) => (
               <button
                 key={k.key}
                 type="button"

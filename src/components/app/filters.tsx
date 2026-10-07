@@ -58,7 +58,7 @@ export function SearchInput({
   }, [value, paramKey, searchParams, write])
 
   return (
-    <div className={cn('relative col-span-2 w-full min-w-0 sm:col-span-1 sm:w-auto sm:flex-1 sm:max-w-xs', className)}>
+    <div className={cn('relative col-span-2 w-full min-w-0 sm:col-span-1 sm:w-auto sm:min-w-[10rem] sm:max-w-xs sm:flex-[1_1_14rem]', className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
       <Input
         value={value}

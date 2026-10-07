@@ -10,6 +10,9 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+    // Interactive transactions (check-in, payments, checkout) run several queries; with the
+    // database in another region each round trip adds latency, so allow more than the 5 s default.
+    transactionOptions: { maxWait: 10_000, timeout: 20_000 },
   })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

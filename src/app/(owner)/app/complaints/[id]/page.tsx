@@ -107,14 +107,14 @@ export default async function ComplaintDetailPage({
         <div className="space-y-4">
           {/* --------------------------------------------- Issue summary */}
           <Card>
-            <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-              <div>
+            <CardHeader className="flex-col items-start gap-3 space-y-0 sm:flex-row sm:justify-between">
+              <div className="min-w-0">
                 <CardTitle className="text-base">{complaint.title}</CardTitle>
                 <p className="mt-1 text-xs text-slate-500">
                   {categoryLabels[complaint.category] ?? complaint.category} · {complaint.code}
                 </p>
               </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+              <div className="flex flex-wrap gap-1.5 sm:shrink-0 sm:justify-end">
                 <StatusChip label={statusStyle.label} chip={statusStyle.chip} />
                 <StatusChip label={priorityStyle.label} chip={priorityStyle.chip} />
                 <SlaChip

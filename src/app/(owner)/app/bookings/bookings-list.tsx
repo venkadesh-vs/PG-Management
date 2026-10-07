@@ -379,7 +379,7 @@ function CancelDialog({
               onClick={() => setReason(r)}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
-                reason === r ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                reason === r ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
               )}
             >
               {r}

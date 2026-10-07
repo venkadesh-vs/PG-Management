@@ -15,6 +15,15 @@ staging with real providers.
 | Tenant isolation (other organisation's ticket 404, restricted manager sees only own PGs, search/exports scoped) | PASS |
 | Production bootstrap script on an empty database, run twice (idempotent) | PASS |
 
+## Production (7 Oct 2026)
+
+| Test | Result |
+| --- | --- |
+| Deploy, migrations, health (`db: ok`) | PASS |
+| Super Admin bootstrap + login | PASS |
+| Multi-tenancy: two test organisations created through real signup, PG A data never reachable by PG B (lists, by-id API, edit, checkout, rooms, search, exports, invoice PDF, pages) and vice versa | PASS 23/23 |
+| First invoice at check-in | FAIL then fixed: the transaction exceeded Prisma's 5 s default because of US↔Singapore latency; timeout raised to 20 s. Re-test after deploy below. |
+
 ## Staging (real providers, test mode) — not run yet
 
 | # | Test | Flow | Result | Date |

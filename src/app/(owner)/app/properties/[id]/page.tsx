@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Bed, CheckCircle2, MapPin, Phone, Sparkles, Utensils } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
-import { assertPropertyAccess } from '@/lib/tenancy'
+import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { themeFor, SUBSCRIPTION_STATUS_STYLE } from '@/lib/theme'
 import { cn, formatDate, formatMoney, formatPhone } from '@/lib/utils'
@@ -25,7 +25,11 @@ export default async function PropertyDetailPage({
 }) {
   const user = await requireAccess({ module: 'properties', permission: 'properties.view' })
   const { id } = await params
-  await assertPropertyAccess(user, id)
+  // Another organisation's (or another PG's) record reads as "not found".
+  await assertPropertyAccess(user, id).catch((error: unknown) => {
+    if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound()
+    throw error
+  })
 
   const property = await prisma.property.findUnique({
     where: { id },

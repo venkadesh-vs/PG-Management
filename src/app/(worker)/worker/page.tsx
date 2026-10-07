@@ -106,7 +106,7 @@ export default async function WorkerHome() {
               {can.attendance && (
                 <Tile
                   label="Attendance"
-                  value={attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'not marked'}
+                  value={attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'Pending'}
                 />
               )}
             </div>

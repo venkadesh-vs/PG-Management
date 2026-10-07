@@ -198,7 +198,7 @@ export function LeadsBoard({
                 onClick={() => chooseView(key)}
                 className={cn(
                   'inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-sm font-medium transition-colors',
-                  view === key ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900',
+                  view === key ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-900',
                 )}
               >
                 <Icon className="size-4" /> {label}
@@ -221,7 +221,7 @@ export function LeadsBoard({
                 onClick={() => setMobileStatus(col.status)}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
-                  active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600',
+                  active ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600',
                 )}
               >
                 <span className={cn('size-1.5 rounded-full', col.dot)} />

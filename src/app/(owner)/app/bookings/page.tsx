@@ -175,7 +175,7 @@ export default async function BookingsPage({
                 href={`/app/bookings${query.size ? `?${query}` : ''}`}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
-                  active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                  active ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
                 )}
               >
                 {meta && <span className={cn('size-1.5 rounded-full', meta.dot)} />}

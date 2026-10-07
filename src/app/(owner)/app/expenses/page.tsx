@@ -350,7 +350,7 @@ export default async function ExpensesPage({
             <CardTitle className="text-sm">Where the money went</CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
-            <CategoryBarChart data={breakdown.slice(0, 8)} color={CHART_COLORS[5]} height={260} />
+            <CategoryBarChart data={breakdown.slice(0, 8)} color={CHART_COLORS[0]} height={260} />
           </CardContent>
         </Card>
         <Card>

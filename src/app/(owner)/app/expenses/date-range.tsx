@@ -19,11 +19,11 @@ export function DateRange() {
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="col-span-2 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1.5 sm:flex sm:w-auto">
       <Input
         type="date"
         aria-label="From date"
-        className="h-10 w-[9.5rem]"
+        className="h-10 w-full min-w-0 sm:w-[9.5rem]"
         value={params.get('from') ?? ''}
         onChange={(e) => write('from', e.target.value)}
       />
@@ -31,7 +31,7 @@ export function DateRange() {
       <Input
         type="date"
         aria-label="To date"
-        className="h-10 w-[9.5rem]"
+        className="h-10 w-full min-w-0 sm:w-[9.5rem]"
         value={params.get('to') ?? ''}
         onChange={(e) => write('to', e.target.value)}
       />

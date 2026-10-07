@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { requireAccess } from '@/lib/auth'
-import { assertPropertyAccess } from '@/lib/tenancy'
+import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/app/page-header'
 import { PropertyForm } from '../../property-form'
@@ -16,7 +16,11 @@ export default async function EditPropertyPage({
   // Same rule as PATCH /api/properties/<id>.
   const user = await requireAccess({ module: 'properties', permission: 'properties.manage' })
   const { id } = await params
-  await assertPropertyAccess(user, id)
+  // Another organisation's (or another PG's) record reads as "not found".
+  await assertPropertyAccess(user, id).catch((error: unknown) => {
+    if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound()
+    throw error
+  })
 
   const property = await prisma.property.findFirst({
     where: { id, organizationId: user.organizationId },

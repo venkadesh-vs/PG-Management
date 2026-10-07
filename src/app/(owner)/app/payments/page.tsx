@@ -389,11 +389,11 @@ export default async function PaymentsPage({
                   <div className="min-w-0">
                     <Link
                       href={`/app/residents/${payment.resident.id}`}
-                      className="truncate font-medium text-slate-900"
+                      className="block truncate font-medium text-slate-900"
                     >
                       {payment.resident.fullName}
                     </Link>
-                    <a href={`/api/documents/rent-receipt/${payment.id}.pdf`} target="_blank" rel="noopener" className="font-mono text-xs text-slate-500 underline-offset-2 hover:underline">
+                    <a href={`/api/documents/rent-receipt/${payment.id}.pdf`} target="_blank" rel="noopener" className="mt-0.5 block font-mono text-xs text-slate-500 underline-offset-2 hover:underline">
                       {payment.receiptNumber}
                     </a>
                   </div>

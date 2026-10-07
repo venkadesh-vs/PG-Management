@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { ExportButton } from '@/components/app/export-button'
-import { assertResidentAccess } from '@/lib/tenancy'
+import { assertResidentAccess, ForbiddenError, NotFoundError } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import {
   INVOICE_STATUS_STYLE,
@@ -69,7 +69,11 @@ export default async function ResidentDetailPage({
 }) {
   const user = await requireAccess({ module: 'residents', permission: 'residents.view' })
   const { id } = await params
-  await assertResidentAccess(user, id)
+  // Another organisation's (or another PG's) record reads as "not found".
+  await assertResidentAccess(user, id).catch((error: unknown) => {
+    if (error instanceof NotFoundError || error instanceof ForbiddenError) notFound()
+    throw error
+  })
   const has = (p: string) => user.permissions.includes(p)
 
   const resident = await prisma.resident.findUnique({

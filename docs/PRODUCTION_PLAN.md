@@ -33,5 +33,17 @@ and `20261007091000_audit_event_types` (additive only).
 | 4 | 26–28 | Security review, UX quality pass, test expansion |
 | 4 | 14, 29, 30 | Backup/DR docs, environments, go-live checklist verification |
 
+## Status (7 Oct 2026)
+
+| Batch | Commit | Verified |
+| --- | --- | --- |
+| 1 | 8348468 | build, unit tests, 390px pages, smoke, money/chain API checks |
+| 2 | 04e703b | + 31 targeted API checks (CRM, announcements, expenses, P&L, import, cron) |
+| 3 | 8d0c654 | + 36 HTTP checks (search, 13 exports, maintenance, checkout, settlement PDF) |
+| 4 | bf3e08d | + 14 HTTP checks (support tickets, error codes, health) |
+| Security + lint | 7afe8ef | review findings fixed (1 high, 4 medium, lows); eslint 0 errors; 347 unit tests |
+
+Go-live steps that need your accounts and infrastructure: `docs/GO_LIVE.md`.
+
 Each batch: build → typecheck → unit tests → production build → every page as every role at 390px →
 smoke test → targeted API tests → commit → push.

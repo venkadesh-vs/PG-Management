@@ -18,8 +18,10 @@
 
 # Only the production deploy migrates the production database. Deploy
 # previews and branch deploys must point DATABASE_URL at a separate database.
+# Migrations need a direct (unpooled) connection; the app itself uses the pooled
+# DATABASE_URL. DATABASE_URL_UNPOOLED falls back to DATABASE_URL when unset.
 [context.production]
-  command = "npm run db:deploy && npm run build"
+  command = "DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" npm run db:deploy && npm run build"
 
 # The daily automation (rent, reminders, billing) runs as a scheduled
 # function: netlify/functions/daily-automation.mts (06:00 IST).

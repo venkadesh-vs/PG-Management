@@ -16,6 +16,7 @@
 import { ensureOrgDefaults } from '../src/server/services/org-defaults'
 import { PrismaClient, type Prisma } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { PLATFORM_FEATURE_FLAGS, PLATFORM_PLANS, PLATFORM_SETTINGS } from './platform-data'
 import {
   ANNOUNCEMENTS,
   ASSET_TEMPLATES,
@@ -108,92 +109,13 @@ async function reset() {
 async function seedPlatform(passwordHash: string) {
   console.log('  plans, features and the platform owner…')
 
-  const [starter, growth, scale] = await Promise.all([
-    prisma.plan.create({
-      data: {
-        name: 'Starter',
-        slug: 'starter',
-        description: 'For a single PG getting off notebooks.',
-        pricingBasis: 'STANDARD_RENT',
-        multiplier: 100,
-        minAmount: 2000,
-        maxAmount: 12000,
-        trialDays: 14,
-        graceDays: 7,
-        maxProperties: 1,
-        features: ['residents', 'rooms', 'rent', 'complaints', 'whatsapp'],
-        isDefault: false,
-      },
-    }),
-    prisma.plan.create({
-      data: {
-        name: 'Growth',
-        slug: 'growth',
-        description:
-          'One PG subscription equals roughly one standard resident rent. Everything included.',
-        pricingBasis: 'STANDARD_RENT',
-        multiplier: 100,
-        minAmount: 3000,
-        maxAmount: 25000,
-        trialDays: 14,
-        graceDays: 7,
-        features: [
-          'residents', 'rooms', 'rent', 'complaints', 'whatsapp',
-          'food', 'grocery', 'staff', 'reports', 'tenant_app', 'worker_app',
-        ],
-        isDefault: true,
-      },
-    }),
-    prisma.plan.create({
-      data: {
-        name: 'Scale',
-        slug: 'scale',
-        description: 'Per-bed pricing for operators running many properties.',
-        pricingBasis: 'PER_BED',
-        perBedPrice: 90,
-        minAmount: 8000,
-        maxAmount: 60000,
-        trialDays: 7,
-        graceDays: 10,
-        features: [
-          'residents', 'rooms', 'rent', 'complaints', 'whatsapp', 'food',
-          'grocery', 'staff', 'reports', 'tenant_app', 'worker_app', 'api', 'priority_support',
-        ],
-      },
-    }),
-  ])
+  const [starter, growth, scale] = await Promise.all(
+    PLATFORM_PLANS.map((data) => prisma.plan.create({ data })),
+  )
 
-  await prisma.featureFlag.createMany({
-    data: [
-      { key: 'whatsapp_reminders', name: 'WhatsApp rent reminders', description: 'Automatic reminders before, on and after the due date.', plans: ['starter', 'growth', 'scale'] },
-      { key: 'tenant_app', name: 'Resident app', description: 'Residents pay rent, raise complaints and see the menu.', plans: ['growth', 'scale'] },
-      { key: 'worker_app', name: 'Worker app', description: 'Task list for maintenance, kitchen and cleaning staff.', plans: ['growth', 'scale'] },
-      { key: 'food_module', name: 'Food & meal planning', description: 'Meal counts derived from live food subscriptions.', plans: ['growth', 'scale'] },
-      { key: 'grocery_module', name: 'Grocery & inventory', description: 'Stock, low-stock alerts and purchase lists.', plans: ['growth', 'scale'] },
-      { key: 'online_payments', name: 'Online rent collection', description: 'Payment links, UPI and gateway reconciliation.', plans: ['growth', 'scale'] },
-      { key: 'multi_property', name: 'Multiple PGs', description: 'Manage more than one property from one login.', plans: ['growth', 'scale'] },
-      { key: 'advanced_reports', name: 'Advanced reports', description: 'Profit estimates and PG-versus-PG comparison.', plans: ['scale'] },
-      { key: 'api_access', name: 'API access', description: 'Programmatic access for custom integrations.', enabled: false, plans: ['scale'] },
-    ],
-  })
+  await prisma.featureFlag.createMany({ data: PLATFORM_FEATURE_FLAGS })
 
-  await prisma.systemSetting.createMany({
-    data: [
-      { key: 'platform:name', value: 'StayFlow' as Prisma.InputJsonValue },
-      { key: 'platform:support_email', value: 'support@stayflow.app' as Prisma.InputJsonValue },
-      {
-        key: 'pricing:defaults',
-        value: {
-          basis: 'STANDARD_RENT',
-          multiplier: 100,
-          minAmount: 3000,
-          maxAmount: 25000,
-          trialDays: 14,
-          graceDays: 7,
-        } as Prisma.InputJsonValue,
-      },
-    ],
-  })
+  await prisma.systemSetting.createMany({ data: PLATFORM_SETTINGS })
 
   const superAdmin = await prisma.user.create({
     data: {

@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "cron": "tsx --conditions=react-server scripts/run-automation.ts",
+    "bootstrap:prod": "tsx --conditions=react-server scripts/bootstrap-production.ts",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "smoke": "node scripts/smoke.mjs",
     "test": "vitest run"

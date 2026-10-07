@@ -38,7 +38,7 @@ send, a password-reset email, and a photo upload.
 - [ ] Plans and prices reviewed in Super Admin → Plans (limits: PGs, beds, staff, WhatsApp/month,
       storage)
 - [ ] Never run `npm run db:seed` against production (it refuses, but don't try)
-- [ ] Your own Super Admin account created with a strong password; demo accounts not present
+- [ ] Plans and your Super Admin created with `npm run bootstrap:prod` (see `docs/PRODUCTION_ENV.md`); demo accounts not present
 - [ ] Terms, privacy, refund and shipping policy pages read and approved by you
 
 ## 4. Release verification (each deploy)

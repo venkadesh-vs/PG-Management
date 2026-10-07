@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { CreateClientDialog } from './create-client-dialog'
+import { computeMrr, subscriptionMrr } from '@/server/services/platform-metrics'
 
 export const metadata: Metadata = { title: 'Organizations' }
 
@@ -48,10 +49,16 @@ export default async function OrganizationsPage({
   const page = Math.max(1, Number(params.page) || 1)
   const q = params.q?.trim() ?? ''
   const status = params.status
+  const plan = params.plan
+  const city = params.city
+  const source = params.source
 
   const where = {
     archivedAt: null,
     ...(status ? { status: status as never } : {}),
+    ...(plan ? { subscriptions: { some: { planId: plan, status: { not: 'CANCELLED' as const } } } } : {}),
+    ...(city ? { city: { equals: city, mode: 'insensitive' as const } } : {}),
+    ...(source ? { signupSource: source } : {}),
     ...(q
       ? {
           OR: [
@@ -69,8 +76,24 @@ export default async function OrganizationsPage({
     prisma.organization.findMany({
       where,
       include: {
-        _count: { select: { properties: true, residents: true, users: true } },
-        subscriptions: { select: { amount: true, status: true, nextBillingDate: true } },
+        _count: {
+          select: {
+            properties: { where: { archivedAt: null } },
+            residents: { where: { status: { in: ['ACTIVE', 'NOTICE'] } } },
+            users: true,
+          },
+        },
+        properties: { where: { archivedAt: null }, select: { _count: { select: { beds: true } } } },
+        users: { select: { lastLoginAt: true }, orderBy: { lastLoginAt: { sort: 'desc', nulls: 'last' } }, take: 1 },
+        subscriptions: {
+          select: {
+            amount: true,
+            status: true,
+            billingCycle: true,
+            nextBillingDate: true,
+            plan: { select: { name: true, yearlyDiscountPercent: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * PAGE_SIZE,
@@ -82,37 +105,81 @@ export default async function OrganizationsPage({
       where: { archivedAt: null },
       _count: { _all: true },
     }),
-    prisma.subscription.aggregate({
+    prisma.subscription.findMany({
       where: { status: 'ACTIVE' },
-      _sum: { amount: true },
-      _count: true,
+      select: { status: true, amount: true, billingCycle: true, plan: { select: { yearlyDiscountPercent: true } } },
     }),
   ])
+  const platformMrr = computeMrr(
+    totals.map((t) => ({ ...t, yearlyDiscountPercent: t.plan.yearlyDiscountPercent })),
+  )
+
+  const [plans, cities, activity] = await Promise.all([
+    prisma.plan.findMany({ select: { id: true, name: true }, orderBy: { sortOrder: 'asc' } }),
+    prisma.organization.findMany({
+      where: { archivedAt: null, city: { not: null } },
+      distinct: ['city'],
+      select: { city: true },
+      orderBy: { city: 'asc' },
+      take: 100,
+    }),
+    organizations.length
+      ? prisma.activityLog.groupBy({
+          by: ['organizationId'],
+          where: { organizationId: { in: organizations.map((o) => o.id) } },
+          _max: { createdAt: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const lastActivity = new Map(activity.map((a) => [a.organizationId, a._max.createdAt]))
+  const rowFor = (org: (typeof organizations)[number]) => {
+    const mrr = Math.round(
+      org.subscriptions
+        .filter((s) => s.status === 'ACTIVE')
+        .reduce(
+          (sum, sub) =>
+            sum +
+            subscriptionMrr({
+              status: sub.status,
+              amount: sub.amount,
+              billingCycle: sub.billingCycle,
+              yearlyDiscountPercent: sub.plan.yearlyDiscountPercent,
+            }),
+          0,
+        ),
+    )
+    const beds = org.properties.reduce((sum, p) => sum + p._count.beds, 0)
+    const planNames = [...new Set(org.subscriptions.filter((s) => s.status !== 'CANCELLED').map((s) => s.plan.name))]
+    const login = org.users[0]?.lastLoginAt ?? null
+    const logged = lastActivity.get(org.id) ?? null
+    const last = [login, logged].filter((d): d is Date => Boolean(d)).sort((a, b) => b.getTime() - a.getTime())[0] ?? null
+    return { mrr, beds, planNames, last }
+  }
 
   const countFor = (s: string) => counts.find((c) => c.status === s)?._count._all ?? 0
-  const activeFilters = [q, status].filter(Boolean).length
+  const activeFilters = [q, status, plan, city, source].filter(Boolean).length
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Organizations"
-        subtitle="Every PG owner account on the platform, with their PGs, residents and subscription."
+        title="Customers"
+        subtitle="Every PG owner account on the platform, with their PGs, beds, residents and subscription."
         icon="building"
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Organizations' }]}
         actions={<CreateClientDialog />}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total accounts" value={total} icon="building" tone="blue" />
+        <StatCard label="Total accounts" value={counts.reduce((n, c) => n + c._count._all, 0)} icon="building" tone="blue" hint={activeFilters ? `${total} match these filters` : undefined} />
         <StatCard label="Active" value={countFor('ACTIVE')} icon="check" tone="emerald" />
         <StatCard label="On trial" value={countFor('TRIAL')} icon="clock" tone="violet" />
         <StatCard
           label="Combined MRR"
-          value={totals._sum.amount ?? 0}
+          value={platformMrr}
           format="money"
           icon="sparkles"
           tone="amber"
-          hint={`${totals._count} active subscriptions`}
+          hint={`${totals.length} active subscriptions`}
         />
       </div>
 
@@ -128,6 +195,23 @@ export default async function OrganizationsPage({
               { value: 'PAST_DUE', label: 'Past due' },
               { value: 'SUSPENDED', label: 'Suspended' },
               { value: 'CANCELLED', label: 'Cancelled' },
+            ]}
+          />
+          <FilterSelect paramKey="plan" placeholder="All plans" options={plans.map((p) => ({ value: p.id, label: p.name }))} />
+          {cities.length > 0 && (
+            <FilterSelect
+              paramKey="city"
+              placeholder="All cities"
+              options={cities.map((c) => ({ value: c.city!, label: c.city! }))}
+            />
+          )}
+          <FilterSelect
+            paramKey="source"
+            placeholder="Any signup source"
+            options={[
+              { value: 'SELF_SIGNUP', label: 'Self signup' },
+              { value: 'ADMIN', label: 'Created by admin' },
+              { value: 'LEAD', label: 'From a sales lead' },
             ]}
           />
         </FilterBar>
@@ -149,17 +233,18 @@ export default async function OrganizationsPage({
                   <TableHead>Organization</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead className="text-right">PGs</TableHead>
+                  <TableHead className="text-right">Beds</TableHead>
                   <TableHead className="text-right">Residents</TableHead>
+                  <TableHead>Plan</TableHead>
                   <TableHead className="text-right">MRR</TableHead>
                   <TableHead>Next billing</TableHead>
+                  <TableHead>Last activity</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {organizations.map((org) => {
-                  const mrr = org.subscriptions
-                    .filter((s) => s.status === 'ACTIVE')
-                    .reduce((s, sub) => s + sub.amount, 0)
+                  const { mrr, beds, planNames, last } = rowFor(org)
                   const nextBilling = org.subscriptions
                     .map((s) => s.nextBillingDate)
                     .sort((a, b) => a.getTime() - b.getTime())[0]
@@ -182,12 +267,17 @@ export default async function OrganizationsPage({
                         <p className="text-xs text-slate-500">{formatPhone(org.contactPhone)}</p>
                       </TableCell>
                       <TableCell className="text-right tabular">{org._count.properties}</TableCell>
+                      <TableCell className="text-right tabular">{beds}</TableCell>
                       <TableCell className="text-right tabular">{org._count.residents}</TableCell>
+                      <TableCell className="text-sm text-slate-600">{planNames.join(', ') || '—'}</TableCell>
                       <TableCell className="text-right font-semibold tabular">
                         {mrr > 0 ? formatMoney(mrr) : '—'}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {nextBilling ? formatDate(nextBilling) : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {last ? relativeTime(last) : 'Never'}
                       </TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANT[org.status] ?? 'default'} size="sm">
@@ -209,9 +299,7 @@ export default async function OrganizationsPage({
           {/* Mobile cards */}
           <ul className="space-y-2 md:hidden">
             {organizations.map((org) => {
-              const mrr = org.subscriptions
-                .filter((s) => s.status === 'ACTIVE')
-                .reduce((s, sub) => s + sub.amount, 0)
+              const { mrr, beds, last } = rowFor(org)
               const nextBilling = org.subscriptions
                 .map((s) => s.nextBillingDate)
                 .sort((a, b) => a.getTime() - b.getTime())[0]
@@ -232,7 +320,8 @@ export default async function OrganizationsPage({
                       {org.ownerName} · {formatPhone(org.contactPhone)}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {org.city ?? '—'} · {org._count.properties} PGs · {org._count.residents} residents
+                      {org.city ?? '—'} · {org._count.properties} PGs · {beds} beds · {org._count.residents} residents
+                      {last ? ` · active ${relativeTime(last)}` : ''}
                       {org.trialEndsAt && org.status === 'TRIAL'
                         ? ` · trial ends ${relativeTime(org.trialEndsAt)}`
                         : ''}

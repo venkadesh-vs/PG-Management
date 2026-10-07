@@ -68,9 +68,14 @@ export function VacancyCard({ insight, showPerProperty }: { insight: VacancyInsi
               </ul>
             )}
 
-            <Link href="/app/beds" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
-              See empty beds <ArrowRight className="size-3" />
-            </Link>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <Link href="/app/vacancy" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+                Vacancy details <ArrowRight className="size-3" />
+              </Link>
+              <Link href="/app/beds" className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                Bed map <ArrowRight className="size-3" />
+              </Link>
+            </div>
           </>
         )}
       </CardContent>

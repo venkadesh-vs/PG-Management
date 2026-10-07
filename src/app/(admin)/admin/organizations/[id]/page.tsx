@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   Mail,
@@ -11,6 +12,9 @@ import { prisma } from '@/lib/prisma'
 import { INVOICE_STATUS_STYLE, SUBSCRIPTION_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, formatDate, formatDateTime, formatMoney, formatPhone } from '@/lib/utils'
 import { occupancyFor } from '@/server/services/residents'
+import { usageForOrg } from '@/server/services/plan-limits'
+import { subscriptionMrr } from '@/server/services/platform-metrics'
+import { CYCLE_LABEL } from '@/lib/subscription-math'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,6 +72,7 @@ export default async function AdminOrganizationPage({
       subscriptions: {
         include: {
           property: { select: { name: true, type: true } },
+          plan: { select: { name: true, yearlyDiscountPercent: true } },
           invoices: { orderBy: { issueDate: 'desc' }, take: 6, include: { payments: true } },
         },
       },
@@ -84,7 +89,7 @@ export default async function AdminOrganizationPage({
     await prisma.featureFlag.findMany({ where: { enabled: false }, select: { key: true } })
   ).map((f) => f.key)
 
-  const [occupancy, collections, activity] = await Promise.all([
+  const [occupancy, collections, activity, usage, tickets, lastActivity] = await Promise.all([
     propertyIds.length
       ? occupancyFor(propertyIds)
       : Promise.resolve({ total: 0, occupied: 0, available: 0, reserved: 0, maintenance: 0, blocked: 0, rate: 0 }),
@@ -92,16 +97,58 @@ export default async function AdminOrganizationPage({
       where: { organizationId: org.id, status: 'SUCCESS', purpose: 'RENT' },
       _sum: { amount: true },
     }),
+    // Admin actions only: owner activity summaries can name residents, and
+    // the platform view shows counts, never resident personal data.
     prisma.activityLog.findMany({
-      where: { organizationId: org.id },
+      where: {
+        OR: [
+          { organizationId: org.id, actorRole: 'SUPER_ADMIN' },
+          { organizationId: org.id, event: 'ADMIN_ACTION' },
+          { entityType: 'Organization', entityId: org.id },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       take: 10,
     }),
+    usageForOrg(org.id),
+    prisma.supportTicket.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { id: true, code: true, subject: true, category: true, priority: true, status: true, createdAt: true },
+    }),
+    prisma.activityLog.findFirst({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
   ])
 
-  const mrr = org.subscriptions
-    .filter((s) => s.status === 'ACTIVE')
-    .reduce((s, sub) => s + sub.amount, 0)
+  const mrr = Math.round(
+    org.subscriptions
+      .filter((s) => s.status === 'ACTIVE')
+      .reduce(
+        (sum, sub) =>
+          sum +
+          subscriptionMrr({
+            status: sub.status,
+            amount: sub.amount,
+            billingCycle: sub.billingCycle,
+            yearlyDiscountPercent: sub.plan.yearlyDiscountPercent,
+          }),
+        0,
+      ),
+  )
+  const liveSubs = org.subscriptions.filter((s) => s.status !== 'CANCELLED')
+  const subsByStatus = liveSubs.reduce<Record<string, number>>((acc, s) => {
+    acc[s.status] = (acc[s.status] ?? 0) + 1
+    return acc
+  }, {})
+  const nextBilling = liveSubs.map((s) => s.nextBillingDate).sort((a, b) => a.getTime() - b.getTime())[0]
+  const lastLogin = org.users
+    .map((u) => u.lastLoginAt)
+    .filter((d): d is Date => Boolean(d))
+    .sort((a, b) => b.getTime() - a.getTime())[0]
   const allInvoices = org.subscriptions.flatMap((s) =>
     s.invoices.map((i) => ({ ...i, propertyName: s.property.name, propertyType: s.property.type })),
   )
@@ -211,6 +258,126 @@ export default async function AdminOrganizationPage({
                 </li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+      </div>
+
+      <SectionHeader
+        title="Customer overview"
+        description="Read-only. StayFlow staff never sign in as a customer; resident details stay private."
+        icon="gauge"
+      />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Subscription summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5 text-sm">
+            <SummaryRow label="Live subscriptions" value={String(liveSubs.length)} />
+            {Object.entries(subsByStatus).map(([status, n]) => (
+              <SummaryRow
+                key={status}
+                label={SUBSCRIPTION_STATUS_STYLE[status]?.label ?? status.toLowerCase()}
+                value={String(n)}
+              />
+            ))}
+            <SummaryRow
+              label="Plans"
+              value={
+                [...new Set(liveSubs.map((s) => `${s.plan.name} · ${CYCLE_LABEL[s.billingCycle].toLowerCase()}`))].join(
+                  ', ',
+                ) || '—'
+              }
+            />
+            <SummaryRow label="MRR" value={mrr ? formatMoney(mrr) : '—'} />
+            <SummaryRow label="Next billing" value={nextBilling ? formatDate(nextBilling) : '—'} />
+            <SummaryRow
+              label="AutoPay"
+              value={`${liveSubs.filter((s) => s.autopayEnabled).length} of ${liveSubs.length}`}
+            />
+            <SummaryRow label="Last login" value={lastLogin ? formatDateTime(lastLogin) : 'Never'} />
+            <SummaryRow
+              label="Last activity"
+              value={lastActivity ? formatDateTime(lastActivity.createdAt) : '—'}
+            />
+            <SummaryRow
+              label="Signed up via"
+              value={(org.signupSource ?? '—').replace('_', ' ').toLowerCase()}
+            />
+            <Link href="/admin/subscriptions" className="inline-block pt-1 text-xs font-semibold text-blue-600">
+              Manage in Subscriptions →
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Usage vs plan limits</CardTitle>
+            <p className="text-xs text-slate-500">{usage.planNames.join(', ') || 'Default plan'}</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {usage.rows.map((row) => (
+              <div key={row.key}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="capitalize text-slate-600">{row.key === 'properties' ? 'PGs' : row.key}</span>
+                  <span className="font-medium text-slate-800 tabular">
+                    {row.used} / {row.limit == null ? 'Unlimited' : row.limit}
+                  </span>
+                </div>
+                {row.percent != null && (
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        row.percent >= 100 ? 'bg-red-500' : row.percent >= 80 ? 'bg-amber-500' : 'bg-emerald-500',
+                      )}
+                      style={{ width: `${row.percent}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Support tickets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tickets.length === 0 ? (
+              <EmptyState
+                compact
+                icon="messages"
+                title="No tickets"
+                description="This customer has not raised a support ticket."
+              />
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {tickets.map((t) => (
+                  <li key={t.id} className="py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 truncate text-sm font-medium text-slate-800">{t.subject}</p>
+                      <Badge
+                        variant={
+                          t.status === 'RESOLVED' || t.status === 'CLOSED'
+                            ? 'success'
+                            : t.status === 'OPEN'
+                              ? 'warning'
+                              : 'info'
+                        }
+                        size="sm"
+                      >
+                        {t.status.replace(/_/g, ' ').toLowerCase()}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {t.code} · {t.category} · {t.priority.toLowerCase()} · {formatDate(t.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -411,13 +578,22 @@ export default async function AdminOrganizationPage({
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Recent activity</CardTitle>
+            <CardTitle className="text-sm">Recent admin actions</CardTitle>
           </CardHeader>
           <CardContent>
             <ActivityTimeline items={activity} compact />
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium text-slate-800 first-letter:uppercase">{value}</span>
     </div>
   )
 }

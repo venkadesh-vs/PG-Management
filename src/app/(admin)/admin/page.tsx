@@ -4,7 +4,9 @@ import { ArrowRight, Building2, TrendingUp } from 'lucide-react'
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { platformMetrics } from '@/server/services/subscriptions'
-import { CHART_COLORS, LEAD_STATUS_STYLE, SUBSCRIPTION_STATUS_STYLE, themeFor } from '@/lib/theme'
+import { getPlatformKpis } from '@/server/services/platform-metrics'
+import { CHART_COLORS, SUBSCRIPTION_STATUS_STYLE, themeFor } from '@/lib/theme'
+import { LEAD_PIPELINE, LEAD_SIDE, leadStyle } from './leads/lead-meta'
 import { addDays, addMonths, cn, formatDate, formatMoney, relativeTime, startOfMonth } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
@@ -19,7 +21,7 @@ export const metadata: Metadata = { title: 'Platform' }
 export default async function AdminDashboard() {
   await requireSuperAdmin()
 
-  const [metrics, organizations, expiring, failed, leads, activity, invoices, orgStatuses] =
+  const [metrics, organizations, expiring, failed, leads, activity, invoices, orgStatuses, kpis] =
     await Promise.all([
       platformMetrics(),
       prisma.organization.findMany({
@@ -58,7 +60,7 @@ export default async function AdminDashboard() {
         take: 5,
       }),
       prisma.lead.findMany({
-        where: { status: { in: ['NEW', 'CONTACTED', 'DEMO_SCHEDULED'] } },
+        where: { status: { in: ['NEW', 'CONTACTED', 'DEMO_SCHEDULED', 'FOLLOW_UP'] } },
         orderBy: { createdAt: 'desc' },
         take: 6,
       }),
@@ -86,6 +88,7 @@ export default async function AdminDashboard() {
         where: { archivedAt: null },
         _count: { _all: true },
       }),
+      getPlatformKpis(),
     ])
 
   // Six-month platform revenue, billed vs collected.
@@ -125,30 +128,100 @@ export default async function AdminDashboard() {
         <MotionItem>
           <StatCard
             label="Monthly recurring revenue"
-            value={metrics.mrr}
+            value={kpis.mrr}
             format="money"
             icon="sparkles"
             tone="violet"
-            hint={`${metrics.activeSubscriptions} active subscriptions`}
+            hint={`${kpis.activeSubscriptions} active subscriptions`}
+            href="/admin/subscriptions"
           />
         </MotionItem>
         <MotionItem>
           <StatCard
-            label="Organizations"
-            value={metrics.organizations}
-            icon="building"
+            label="Annual run rate"
+            value={kpis.arr}
+            format="moneyCompact"
+            icon="chart"
             tone="blue"
-            hint={`${metrics.properties} PGs live`}
+            hint="MRR × 12"
+          />
+        </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Customers"
+            value={kpis.customers.total}
+            icon="building"
+            tone="emerald"
+            hint={`${kpis.customers.active} active · ${kpis.customers.trial} on trial`}
             href="/admin/organizations"
           />
         </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="New this month"
+            value={kpis.customers.newThisMonth}
+            icon="userPlus"
+            tone="pink"
+            hint="Accounts created since the 1st"
+          />
+        </MotionItem>
+      </MotionGrid>
+
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <MotionItem>
+          <StatCard
+            label="Churn (30 days)"
+            value={kpis.churn.rate}
+            format="percent"
+            icon="trendingDown"
+            tone={kpis.churn.churned ? 'red' : 'emerald'}
+            hint={`${kpis.churn.churned} of ${kpis.churn.activeAtStart} paying customers left`}
+          />
+        </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Trials ending in 7 days"
+            value={kpis.trialsEndingSoon}
+            icon="clock"
+            tone={kpis.trialsEndingSoon ? 'amber' : 'default'}
+            hint={`${metrics.trials} subscriptions on trial`}
+            href="/admin/organizations?status=TRIAL"
+          />
+        </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Failed payments (30 days)"
+            value={kpis.failedPayments30d}
+            icon="card"
+            tone={kpis.failedPayments30d ? 'red' : 'emerald'}
+            hint={`${metrics.failedPayments} in total`}
+            href="/admin/payments"
+          />
+        </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Follow-ups due"
+            value={kpis.followUps.due}
+            icon="clipboard"
+            tone={kpis.followUps.overdue ? 'red' : kpis.followUps.due ? 'amber' : 'emerald'}
+            hint={
+              kpis.followUps.overdue
+                ? `${kpis.followUps.overdue} overdue · ${kpis.followUps.today} today`
+                : `${kpis.followUps.today} due today`
+            }
+            href="/admin/leads?due=due&sort=followup&view=table"
+          />
+        </MotionItem>
+      </MotionGrid>
+
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>
           <StatCard
             label="Residents managed"
             value={metrics.residents}
             icon="users"
             tone="emerald"
-            hint={`${metrics.beds} beds · ${metrics.occupancyRate}% occupied`}
+            hint={`${metrics.properties} PGs · ${metrics.beds} beds · ${metrics.occupancyRate}% occupied`}
           />
         </MotionItem>
         <MotionItem>
@@ -162,22 +235,111 @@ export default async function AdminDashboard() {
             href="/admin/payments"
           />
         </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Past due"
+            value={metrics.pastDue}
+            icon="warning"
+            tone={metrics.pastDue ? 'red' : 'emerald'}
+            hint="In grace or overdue"
+          />
+        </MotionItem>
+        <MotionItem>
+          <StatCard
+            label="Suspended / cancelled"
+            value={kpis.customers.suspended + kpis.customers.cancelled}
+            icon="shield"
+            tone={kpis.customers.suspended ? 'amber' : 'default'}
+            hint={`${kpis.customers.suspended} suspended · ${kpis.customers.cancelled} cancelled`}
+            href="/admin/organizations?status=SUSPENDED"
+          />
+        </MotionItem>
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <MotionItem>
-          <StatCard label="Trial accounts" value={metrics.trials} icon="clock" tone="blue" hint={`${metrics.expiringTrials} expiring within 7 days`} />
-        </MotionItem>
-        <MotionItem>
-          <StatCard label="Past due" value={metrics.pastDue} icon="warning" tone={metrics.pastDue ? 'red' : 'emerald'} hint="In grace or overdue" />
-        </MotionItem>
-        <MotionItem>
-          <StatCard label="Failed payments" value={metrics.failedPayments} icon="card" tone={metrics.failedPayments ? 'red' : 'emerald'} href="/admin/payments" />
-        </MotionItem>
-        <MotionItem>
-          <StatCard label="New enquiries" value={leads.length} icon="clipboard" tone="amber" hint="Awaiting follow-up" href="/admin/leads" />
-        </MotionItem>
-      </MotionGrid>
+      {/* -------------------------------------------------- Growth trends */}
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">MRR trend</CardTitle>
+            <p className="text-xs text-slate-500">Monthly recurring revenue at each month end</p>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <CategoryBarChart
+              layout="horizontal"
+              color={CHART_COLORS[4]}
+              height={220}
+              data={kpis.trends.map((t) => ({ name: t.month, amount: t.mrr }))}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">New customers</CardTitle>
+            <p className="text-xs text-slate-500">Accounts created per month</p>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <CategoryBarChart
+              layout="horizontal"
+              money={false}
+              color={CHART_COLORS[2]}
+              height={220}
+              data={kpis.trends.map((t) => ({ name: t.month, amount: t.newCustomers }))}
+            />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ------------------------------------------------ Sales pipeline */}
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-sm">Sales pipeline</CardTitle>
+            <p className="text-xs text-slate-500">Leads by stage</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {kpis.followUps.overdue > 0 && (
+              <Link href="/admin/leads?due=overdue&sort=followup&view=table">
+                <Badge variant="danger" size="sm">
+                  {kpis.followUps.overdue} overdue
+                </Badge>
+              </Link>
+            )}
+            {kpis.followUps.today > 0 && (
+              <Link href="/admin/leads?due=today&sort=followup&view=table">
+                <Badge variant="warning" size="sm">
+                  {kpis.followUps.today} due today
+                </Badge>
+              </Link>
+            )}
+            <Link href="/admin/leads" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+              Open CRM <ArrowRight className="size-3" />
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {[...LEAD_PIPELINE, ...LEAD_SIDE].map((stage) => {
+              const style = leadStyle(stage)
+              return (
+                <li key={stage}>
+                  <Link
+                    href={`/admin/leads?status=${stage}`}
+                    className="block rounded-xl border border-slate-200 bg-white px-3 py-2 transition-colors hover:border-blue-300"
+                  >
+                    <p className="flex items-center gap-1.5 truncate text-[11px] text-slate-500">
+                      <span className={cn('size-1.5 shrink-0 rounded-full', style.dot)} />
+                      {style.label}
+                    </p>
+                    <p className="font-display text-lg font-semibold text-slate-900 tabular">
+                      {kpis.leadsByStage[stage] ?? 0}
+                    </p>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* -------------------------------------------------------- Charts */}
       <section className="grid gap-4 lg:grid-cols-3">
@@ -381,7 +543,7 @@ export default async function AdminDashboard() {
             ) : (
               <ul className="divide-y divide-slate-100">
                 {leads.map((lead) => {
-                  const style = LEAD_STATUS_STYLE[lead.status]
+                  const style = leadStyle(lead.status)
                   return (
                     <li key={lead.id}>
                       <Link

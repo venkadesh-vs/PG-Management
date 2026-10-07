@@ -30,9 +30,11 @@ export const POST = route(
       actorId: user.id,
       actorName: user.name,
       actorRole: user.role,
-      event: 'SETTINGS_UPDATED',
+      event: 'ADMIN_ACTION',
       entityType: 'FeatureFlag',
       entityId: feature.id,
+      before: { enabled: feature.enabled, plans: feature.plans },
+      after: { enabled: updated.enabled, plans: updated.plans },
       summary: `${updated.name} ${updated.enabled ? 'enabled' : 'disabled'}`,
     })
 

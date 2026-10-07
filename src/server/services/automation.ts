@@ -23,6 +23,7 @@ import { expireBookings } from './bookings'
 import { sendLeadFollowUpReminders } from './leads'
 import { markSlaBreaches } from './complaints'
 import { applyApprovedLeaveToMeals } from './requests'
+import { createRecurringExpenses } from './expenses'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -45,6 +46,8 @@ export type AutomationReport = {
   sla: { breached: number }
   bookings: { expired: number; bedsReleased: number }
   leadFollowUps: { due: number; notified: number }
+  /** Recurring expenses whose next copy fell due today. */
+  recurringExpenses: { created: number }
   errors: string[]
 }
 
@@ -88,12 +91,56 @@ async function releaseRunLock(token: string) {
   `
 }
 
-export async function runDailyAutomation(options?: {
+type AutomationOptions = {
   organizationId?: string
   now?: Date
   /** Skip invoice generation when only reminders are wanted. */
   skipInvoices?: boolean
-}): Promise<AutomationReport> {
+}
+
+/**
+ * The daily pass, recorded as a CronRun row (Super Admin → System health):
+ * RUNNING while it works, then SUCCESS, PARTIAL (some step reported errors)
+ * or FAILED (it threw). Recording problems never stop the automation itself.
+ */
+export async function runDailyAutomation(options?: AutomationOptions): Promise<AutomationReport> {
+  const job = options?.organizationId ? 'daily-automation:org' : 'daily-automation'
+  const run = await prisma.cronRun
+    .create({ data: { job, status: 'RUNNING' } })
+    .catch((error) => {
+      console.error('[automation] could not record cron run', error)
+      return null
+    })
+  const finish = (data: { status: 'SUCCESS' | 'PARTIAL' | 'FAILED'; report?: unknown; error?: string }) =>
+    run
+      ? prisma.cronRun
+          .update({
+            where: { id: run.id },
+            data: {
+              status: data.status,
+              finishedAt: new Date(),
+              report: data.report === undefined ? undefined : JSON.parse(JSON.stringify(data.report)),
+              error: data.error?.slice(0, 2000),
+            },
+          })
+          .catch((error) => console.error('[automation] could not finish cron run', error))
+      : Promise.resolve()
+
+  try {
+    const report = await runAutomationPass(options)
+    await finish({
+      status: report.errors.length ? 'PARTIAL' : 'SUCCESS',
+      report,
+      error: report.errors.length ? report.errors.slice(0, 10).join('\n') : undefined,
+    })
+    return report
+  } catch (error) {
+    await finish({ status: 'FAILED', error: error instanceof Error ? error.message : String(error) })
+    throw error
+  }
+}
+
+async function runAutomationPass(options?: AutomationOptions): Promise<AutomationReport> {
   const now = options?.now ?? new Date()
   const errors: string[] = []
 
@@ -110,6 +157,7 @@ export async function runDailyAutomation(options?: {
     sla: { breached: 0 },
     bookings: { expired: 0, bedsReleased: 0 },
     leadFollowUps: { due: 0, notified: 0 },
+    recurringExpenses: { created: 0 },
     errors,
   }
 
@@ -307,6 +355,16 @@ async function runSteps(
     }
   } catch (error) {
     errors.push(`lead follow-ups: ${(error as Error).message}`)
+  }
+
+  // 10. Recurring expenses (rent of the building, salaries, internet…): the
+  //     copy due today is created once, linked to the original. Idempotent;
+  //     skipped for organizations with Expenses switched off.
+  try {
+    const result = await createRecurringExpenses({ now, organizationId: options?.organizationId })
+    report.recurringExpenses = { created: result.created }
+  } catch (error) {
+    errors.push(`recurring expenses: ${(error as Error).message}`)
   }
 }
 

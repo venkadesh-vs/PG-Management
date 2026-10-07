@@ -6,18 +6,21 @@ import { maskIdNumber, requireModule, requirePermission, resolveScope, scopeWher
 import type { ModuleKey } from '@/lib/modules'
 import { endOfDay, startOfDay, toISODate } from '@/lib/utils'
 import { dailyCollectionReport } from '@/server/services/billing'
+import { profitAndLoss } from '@/server/services/analytics'
+import type { PnlFigures } from '@/server/services/pnl'
 
 /**
  * GET /api/exports/<kind>.csv?property=&from=YYYY-MM-DD&to=YYYY-MM-DD
  *
  * CSV downloads for owners and managers, limited to the PGs they can see.
  * Written with a UTF-8 BOM so Excel shows ₹ and Indian names correctly.
- * kinds: residents, invoices, payments, expenses, outstanding, daily-collection (?date=YYYY-MM-DD)
+ * kinds: residents, invoices, payments, expenses (&status=&category=&vendor=), outstanding,
+ *        daily-collection (?date=YYYY-MM-DD), pnl (?from=YYYY-MM&to=YYYY-MM — month range)
  */
 
 type Row = (string | number | null | undefined)[]
 
-const KINDS = ['residents', 'invoices', 'payments', 'expenses', 'outstanding', 'daily-collection'] as const
+const KINDS = ['residents', 'invoices', 'payments', 'expenses', 'outstanding', 'daily-collection', 'pnl'] as const
 type Kind = (typeof KINDS)[number]
 
 /** The module each export reads from, and the view permission it needs. */
@@ -28,6 +31,8 @@ const KIND_ACCESS: Record<Kind, { module: ModuleKey; permission: string }> = {
   outstanding: { module: 'rent', permission: 'rent.view' },
   'daily-collection': { module: 'rent', permission: 'rent.view' },
   expenses: { module: 'expenses', permission: 'expenses.view' },
+  // Revenue is rent money, so P&L also needs rent.view (checked below).
+  pnl: { module: 'reports', permission: 'reports.view' },
 }
 
 function cell(value: string | number | null | undefined) {
@@ -115,15 +120,76 @@ export const GET = route(
     }
 
     if (kind === 'expenses') {
+      const status = url.searchParams.get('status')
+      const category = url.searchParams.get('category')
+      const vendor = url.searchParams.get('vendor')?.trim()
       const expenses = await prisma.expense.findMany({
-        where: { ...where, ...(hasRange ? { spentOn: dates } : {}) },
+        where: {
+          ...where,
+          ...(hasRange ? { spentOn: dates } : {}),
+          ...(category ? { categoryId: category } : {}),
+          ...(vendor ? { paidTo: { contains: vendor, mode: 'insensitive' as const } } : {}),
+          ...(status === 'VOIDED'
+            ? { voidedAt: { not: null } }
+            : status === 'PENDING' || status === 'REJECTED' || status === 'APPROVED'
+              ? { voidedAt: null, approvalStatus: status }
+              : {}),
+        },
         include: { category: { select: { name: true } }, property: { select: { name: true } } },
         orderBy: { spentOn: 'desc' },
       })
-      header = ['Date', 'PG', 'Category', 'Title', 'Amount', 'Paid to', 'Mode', 'Reference', 'Notes', 'Recorded by']
+      const origin = url.origin
+      header = ['Date', 'PG', 'Category', 'Title', 'Amount', 'Vendor', 'Bill number', 'Mode', 'Reference', 'Status', 'Approved by', 'Recurring', 'Repeats from', 'Attachment', 'Void reason', 'Notes', 'Recorded by']
       rows = expenses.map((e) => [
-        d(e.spentOn), e.property.name, e.category.name, e.title, e.amount, e.paidTo, e.paymentMode, e.reference, e.notes, e.recordedBy,
+        d(e.spentOn), e.property.name, e.category.name, e.title, e.amount, e.paidTo, e.billNumber, e.paymentMode, e.reference,
+        e.voidedAt ? 'VOIDED' : e.approvalStatus, e.approvedBy, e.isRecurring ? e.recurrence ?? 'MONTHLY' : '', e.recurringFromId ? 'yes' : '',
+        e.receiptUrl ? `${origin}${e.receiptUrl}` : '', e.voidReason, e.notes, e.recordedBy,
       ])
+    }
+
+    if (kind === 'pnl') {
+      requireModule(user, 'rent')
+      requirePermission(user, 'rent.view')
+      const month = (v: string | null) => {
+        const m = v?.match(/^(\d{4})-(\d{2})/)
+        return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null
+      }
+      const toMonth = month(url.searchParams.get('to')) ?? new Date()
+      const fromMonth = month(url.searchParams.get('from')) ?? toMonth
+      const pnl = await profitAndLoss({
+        organizationId: scope.organizationId,
+        propertyIds: scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds,
+        from: fromMonth,
+        to: toMonth,
+      })
+      const columns = [{ name: 'All PGs', f: pnl.total }, ...pnl.byProperty.map((p) => ({ name: p.name, f: p }))]
+      const line = (label: string, pick: (f: PnlFigures) => number | null): Row => [label, ...columns.map((c) => pick(c.f) ?? '')]
+      const categories = pnl.total.expensesByCategory.map((c) => c.name)
+      header = ['Line', ...columns.map((c) => c.name)]
+      rows = [
+        [`Period ${toISODate(fromMonth).slice(0, 7)} to ${toISODate(toMonth).slice(0, 7)} · cash basis, excludes deposits, net of refunds and reversals`],
+        line('Revenue: Rent', (f) => f.revenue.rent),
+        line('Revenue: Food', (f) => f.revenue.food),
+        line('Revenue: Electricity & water', (f) => f.revenue.utilities),
+        line('Revenue: Other income', (f) => f.revenue.other),
+        line('Revenue: Advance (not yet billed)', (f) => f.revenue.advance),
+        line('Total revenue', (f) => f.revenue.total),
+        ...categories.map((name) => line(`Expense: ${name}`, (f) => f.expensesByCategory.find((c) => c.name === name)?.amount ?? 0)),
+        line('Total expenses', (f) => f.expenses),
+        line('Net profit', (f) => f.net),
+        line('Billed (invoices for these months)', (f) => f.billed),
+        line('Collection rate %', (f) => f.collectionRate),
+        line('Outstanding on these invoices', (f) => f.outstanding),
+        line('Beds (average)', (f) => f.beds),
+        line('Occupied beds (average)', (f) => f.occupiedBeds),
+        line('Profit per bed', (f) => f.profitPerBed),
+        line('Revenue per occupied bed', (f) => f.revenuePerOccupiedBed),
+        line('Estimated vacancy loss', (f) => f.vacancyLoss),
+        line('Deposits received via invoices (excluded)', (f) => f.revenue.depositExcluded),
+        [],
+        ['Month', 'Revenue', 'Expenses', 'Net profit'],
+        ...pnl.trend.map((t): Row => [t.key, t.revenue, t.expenses, t.profit]),
+      ]
     }
 
     if (kind === 'daily-collection') {

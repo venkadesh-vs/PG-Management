@@ -12,6 +12,8 @@ import {
 } from '@/lib/utils'
 import type { PropertyScope } from '@/lib/tenancy'
 import { occupancyFor } from './residents'
+import { COUNTED_EXPENSE } from './expense-rules'
+import { buildPnl, monthKey } from './pnl'
 
 /**
  * Every dashboard number is computed here, straight from PostgreSQL. Nothing
@@ -91,7 +93,7 @@ export async function dashboardSummary(scope: PropertyScope) {
       _count: true,
     }),
     prisma.expense.aggregate({
-      where: { propertyId: { in: propertyIds }, spentOn: { gte: monthStart, lte: monthEnd } },
+      where: { ...COUNTED_EXPENSE, propertyId: { in: propertyIds }, spentOn: { gte: monthStart, lte: monthEnd } },
       _sum: { amount: true },
     }),
     prisma.complaint.count({
@@ -228,7 +230,7 @@ export async function revenueTrend(propertyIds: string[], months = 6) {
       select: { amount: true, paidAt: true },
     }),
     prisma.expense.findMany({
-      where: { propertyId: { in: propertyIds }, spentOn: { gte: start } },
+      where: { ...COUNTED_EXPENSE, propertyId: { in: propertyIds }, spentOn: { gte: start } },
       select: { amount: true, spentOn: true },
     }),
     prisma.rentInvoice.findMany({
@@ -328,7 +330,7 @@ export async function expenseBreakdown(propertyIds: string[], from: Date, to: Da
   if (!propertyIds.length) return []
   const rows = await prisma.expense.groupBy({
     by: ['categoryId'],
-    where: { propertyId: { in: propertyIds }, spentOn: { gte: from, lte: to } },
+    where: { ...COUNTED_EXPENSE, propertyId: { in: propertyIds }, spentOn: { gte: from, lte: to } },
     _sum: { amount: true },
   })
   const categories = await prisma.expenseCategory.findMany({
@@ -376,7 +378,7 @@ export async function propertyComparison(organizationId: string, propertyIds: st
           _sum: { balance: true },
         }),
         prisma.expense.aggregate({
-          where: { propertyId: property.id, spentOn: { gte: monthStart, lte: monthEnd } },
+          where: { ...COUNTED_EXPENSE, propertyId: property.id, spentOn: { gte: monthStart, lte: monthEnd } },
           _sum: { amount: true },
         }),
         prisma.complaint.count({
@@ -451,7 +453,7 @@ export async function reportTotals(propertyIds: string[], from: Date, to: Date) 
         _sum: { balance: true },
       }),
       prisma.expense.aggregate({
-        where: { propertyId: { in: propertyIds }, spentOn: { gte: from, lte: to } },
+        where: { ...COUNTED_EXPENSE, propertyId: { in: propertyIds }, spentOn: { gte: from, lte: to } },
         _sum: { amount: true },
       }),
       prisma.resident.count({
@@ -719,5 +721,280 @@ export async function vacancyIntelligence(scope: PropertyScope) {
     averageRent: occupiedCount ? Math.round(occupiedRent / occupiedCount) : fallback,
     monthlyLoss: byProperty.reduce((s, p) => s + p.monthlyLoss, 0),
     byProperty,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Profit & loss (phase 9) — basis documented in ./pnl                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Loads the period's collections, expenses, invoices and bed counts and
+ * hands them to the pure buildPnl. `from`/`to` are whole months.
+ */
+export async function profitAndLoss(params: {
+  organizationId: string
+  propertyIds: string[]
+  from: Date
+  to: Date
+}) {
+  const from = startOfMonth(params.from)
+  const to = endOfMonth(params.to)
+  const months: { key: string; label: string }[] = []
+  for (let d = from; d <= to; d = startOfMonth(addMonths(d, 1))) {
+    months.push({ key: monthKey(d), label: formatMonth(d) })
+  }
+  const ids = params.propertyIds
+  if (!ids.length) {
+    return {
+      months,
+      ...buildPnl({ months, properties: [], payments: [], expenses: [], invoices: [], beds: {}, averageRent: {} }),
+    }
+  }
+
+  const [properties, payments, expenses, invoices, snapshots, beds, rents] = await Promise.all([
+    prisma.property.findMany({
+      where: { organizationId: params.organizationId, id: { in: ids } },
+      select: { id: true, name: true, type: true, standardRent: true },
+      orderBy: { name: 'asc' },
+    }),
+    // REVERSED payments are out; a fully REFUNDED one nets to zero anyway.
+    prisma.rentPayment.findMany({
+      where: {
+        organizationId: params.organizationId,
+        propertyId: { in: ids },
+        purpose: 'RENT',
+        status: { in: ['SUCCESS', 'REFUNDED'] },
+        paidAt: { gte: from, lte: to },
+      },
+      select: {
+        propertyId: true,
+        amount: true,
+        refundedAmount: true,
+        paidAt: true,
+        allocations: { select: { amount: true, invoiceId: true }, orderBy: { createdAt: 'asc' } },
+      },
+    }),
+    prisma.expense.findMany({
+      where: {
+        ...COUNTED_EXPENSE,
+        organizationId: params.organizationId,
+        propertyId: { in: ids },
+        spentOn: { gte: from, lte: to },
+      },
+      select: { propertyId: true, amount: true, spentOn: true, category: { select: { name: true } } },
+    }),
+    prisma.rentInvoice.findMany({
+      where: {
+        organizationId: params.organizationId,
+        propertyId: { in: ids },
+        periodStart: { gte: from, lte: to },
+        status: { notIn: ['CANCELLED', 'DRAFT'] },
+      },
+      select: { propertyId: true, total: true, amountPaid: true, balance: true },
+    }),
+    prisma.occupancySnapshot.findMany({
+      where: { propertyId: { in: ids }, date: { gte: from, lte: to } },
+      select: { propertyId: true, totalBeds: true, occupied: true },
+    }),
+    prisma.bed.groupBy({
+      by: ['propertyId', 'status'],
+      where: { propertyId: { in: ids } },
+      _count: { _all: true },
+    }),
+    prisma.resident.groupBy({
+      by: ['propertyId'],
+      where: { propertyId: { in: ids }, status: { in: ['ACTIVE', 'NOTICE'] } },
+      _avg: { rentAmount: true },
+    }),
+  ])
+
+  const invoiceIds = [...new Set(payments.flatMap((p) => p.allocations.map((a) => a.invoiceId)))]
+  const lines = invoiceIds.length
+    ? await prisma.invoiceLine.findMany({
+        where: { invoiceId: { in: invoiceIds } },
+        select: { invoiceId: true, kind: true, amount: true },
+      })
+    : []
+  const linesBy = new Map<string, { kind: string; amount: number }[]>()
+  for (const l of lines) {
+    const list = linesBy.get(l.invoiceId) ?? []
+    list.push({ kind: l.kind, amount: l.amount })
+    linesBy.set(l.invoiceId, list)
+  }
+
+  // Average beds over the period from the daily snapshots; today's bed
+  // counts when there are none yet (a new account).
+  const bedAvg: Record<string, { total: number; occupied: number }> = {}
+  for (const p of properties) {
+    const snaps = snapshots.filter((s) => s.propertyId === p.id)
+    if (snaps.length) {
+      bedAvg[p.id] = {
+        total: snaps.reduce((s, x) => s + x.totalBeds, 0) / snaps.length,
+        occupied: snaps.reduce((s, x) => s + x.occupied, 0) / snaps.length,
+      }
+    } else {
+      const rows = beds.filter((b) => b.propertyId === p.id)
+      bedAvg[p.id] = {
+        total: rows.reduce((s, r) => s + r._count._all, 0),
+        occupied: rows.filter((r) => r.status === 'OCCUPIED').reduce((s, r) => s + r._count._all, 0),
+      }
+    }
+  }
+  const rentBy = new Map(rents.map((r) => [r.propertyId, r._avg.rentAmount]))
+  const averageRent: Record<string, number> = {}
+  for (const p of properties) averageRent[p.id] = Math.round(rentBy.get(p.id) ?? p.standardRent)
+
+  const report = buildPnl({
+    months,
+    properties: properties.map((p) => ({ id: p.id, name: p.name, type: p.type })),
+    payments: payments.map((p) => ({
+      propertyId: p.propertyId,
+      month: monthKey(p.paidAt),
+      amount: p.amount,
+      refundedAmount: p.refundedAmount,
+      allocations: p.allocations.map((a) => ({ amount: a.amount, lines: linesBy.get(a.invoiceId) ?? [] })),
+    })),
+    expenses: expenses.map((e) => ({
+      propertyId: e.propertyId,
+      month: monthKey(e.spentOn),
+      amount: e.amount,
+      category: e.category.name,
+    })),
+    invoices,
+    beds: bedAvg,
+    averageRent,
+  })
+  return { months, ...report }
+}
+
+/* ------------------------------------------------------------------ */
+/* Vacancy details (phase 10) — the /app/vacancy page                   */
+/* ------------------------------------------------------------------ */
+
+export type VacancyDetails = Awaited<ReturnType<typeof vacancyDetails>>
+
+/**
+ * Bed counts by status per PG, every vacant bed with how long it has been
+ * empty and its rent, and the rooms that still have space. Days vacant
+ * follow attentionSummary: since the last checkout/transfer out, or since
+ * the bed last changed when it was never occupied.
+ */
+export async function vacancyDetails(scope: PropertyScope) {
+  const propertyIds = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
+  const [insight, properties, counts, vacant] = await Promise.all([
+    vacancyIntelligence(scope),
+    prisma.property.findMany({
+      where: { organizationId: scope.organizationId, id: { in: propertyIds }, archivedAt: null },
+      select: { id: true, name: true, type: true, standardRent: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.bed.groupBy({
+      by: ['propertyId', 'status'],
+      where: { propertyId: { in: propertyIds } },
+      _count: { _all: true },
+    }),
+    prisma.bed.findMany({
+      where: { propertyId: { in: propertyIds }, status: 'AVAILABLE' },
+      select: {
+        id: true,
+        label: true,
+        rent: true,
+        updatedAt: true,
+        propertyId: true,
+        room: { select: { id: true, number: true, type: true, baseRent: true } },
+        floor: { select: { name: true } },
+        allocations: {
+          where: { toDate: { not: null } },
+          orderBy: { toDate: 'desc' },
+          take: 1,
+          select: { toDate: true },
+        },
+      },
+    }),
+  ])
+
+  const today = startOfDay(new Date())
+  const propertyById = new Map(properties.map((p) => [p.id, p]))
+  type Counts = { total: number; occupied: number; reserved: number; available: number; maintenance: number; blocked: number }
+  const empty = (): Counts => ({ total: 0, occupied: 0, reserved: 0, available: 0, maintenance: 0, blocked: 0 })
+  const totals = empty()
+  const byProperty = properties.map((p) => {
+    const c = empty()
+    for (const row of counts) {
+      if (row.propertyId !== p.id) continue
+      const n = row._count._all
+      c.total += n
+      c[row.status.toLowerCase() as Exclude<keyof Counts, 'total'>] += n
+    }
+    for (const k of Object.keys(c) as (keyof Counts)[]) totals[k] += c[k]
+    const loss = insight.byProperty.find((x) => x.id === p.id)
+    return {
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      ...c,
+      rate: c.total ? Math.round((c.occupied / c.total) * 100) : 0,
+      monthlyLoss: loss?.monthlyLoss ?? 0,
+    }
+  })
+
+  const beds = vacant
+    .filter((b) => propertyById.has(b.propertyId))
+    .map((b) => {
+      const since = b.allocations[0]?.toDate ?? b.updatedAt
+      const property = propertyById.get(b.propertyId)!
+      return {
+        id: b.id,
+        label: b.label,
+        propertyId: b.propertyId,
+        propertyName: property.name,
+        propertyType: property.type,
+        roomId: b.room.id,
+        roomNumber: b.room.number,
+        roomType: b.room.type,
+        floor: b.floor.name,
+        rent: b.rent ?? b.room.baseRent ?? property.standardRent,
+        vacantSince: since,
+        daysVacant: Math.max(0, Math.round((today.getTime() - startOfDay(since).getTime()) / 86400000)),
+      }
+    })
+    .sort((a, b) => b.daysVacant - a.daysVacant)
+
+  type RoomSpace = {
+    id: string
+    number: string
+    type: string
+    propertyName: string
+    propertyType: (typeof beds)[number]['propertyType']
+    floor: string
+    free: number
+    rent: number
+  }
+  const roomMap = new Map<string, RoomSpace>()
+  for (const b of beds) {
+    const room = roomMap.get(b.roomId) ?? {
+      id: b.roomId,
+      number: b.roomNumber,
+      type: b.roomType,
+      propertyName: b.propertyName,
+      propertyType: b.propertyType,
+      floor: b.floor,
+      free: 0,
+      rent: b.rent,
+    }
+    room.free++
+    room.rent = Math.min(room.rent, b.rent)
+    roomMap.set(b.roomId, room)
+  }
+
+  return {
+    totals: { ...totals, rate: totals.total ? Math.round((totals.occupied / totals.total) * 100) : 0 },
+    monthlyLoss: insight.monthlyLoss,
+    averageRent: insight.averageRent,
+    longVacant: beds.filter((b) => b.daysVacant >= LONG_VACANT_DAYS).length,
+    byProperty,
+    beds,
+    rooms: [...roomMap.values()].sort((a, b) => b.free - a.free),
   }
 }

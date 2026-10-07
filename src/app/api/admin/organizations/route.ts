@@ -88,9 +88,11 @@ export const POST = route(
         actorId: user.id,
         actorName: user.name,
         actorRole: user.role,
-        event: 'SETTINGS_UPDATED',
+        event: 'ADMIN_ACTION',
         entityType: 'Organization',
         entityId: target.id,
+        before: { withheld: Object.entries((target.featureOverrides ?? {}) as Record<string, unknown>).filter(([, v]) => v === false).map(([k]) => k) },
+        after: { withheld: body.withheld },
         summary: labels.length
           ? `StayFlow withheld ${labels.join(', ')} for ${target.name}`
           : `StayFlow restored every plan feature for ${target.name}`,
@@ -119,9 +121,11 @@ export const POST = route(
       actorId: user.id,
       actorName: user.name,
       actorRole: user.role,
-      event: 'SETTINGS_UPDATED',
+      event: 'ADMIN_ACTION',
       entityType: 'Organization',
       entityId: org.id,
+      before: { status: org.status },
+      after: { status: body.status, note: body.note ?? null },
       summary: `${org.name} moved from ${org.status.toLowerCase()} to ${body.status.toLowerCase()}${
         body.note ? ` — ${body.note}` : ''
       }`,

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { assertLookupValue } from '@/server/services/org-defaults'
+import { createExpense, expenseInputSchema } from '@/server/services/expenses'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
@@ -22,7 +23,6 @@ import {
   announcementSchema,
   assetSchema,
   attendanceSchema,
-  expenseSchema,
   groceryItemSchema,
   mealSchema,
   mealServedSchema,
@@ -43,7 +43,7 @@ import type { ModuleKey } from '@/lib/modules'
  * form uses the same auth, scoping and error handling.
  */
 const schema = z.discriminatedUnion('entity', [
-  z.object({ entity: z.literal('EXPENSE') }).merge(expenseSchema),
+  z.object({ entity: z.literal('EXPENSE') }).merge(expenseInputSchema),
   z.object({ entity: z.literal('STAFF') }).merge(staffSchema),
   z.object({ entity: z.literal('ATTENDANCE') }).merge(attendanceSchema),
   z.object({ entity: z.literal('VISITOR') }).merge(visitorSchema),
@@ -108,43 +108,9 @@ export const POST = route(async ({ user, request }) => {
   switch (body.entity) {
     // ------------------------------------------------------------ money --
     case 'EXPENSE': {
-      await assertPropertyAccess(user, body.propertyId)
-      const category = await prisma.expenseCategory.findFirst({
-        where: { id: body.categoryId, organizationId },
-        select: { id: true },
-      })
-      if (!category) throw new ValidationError('Choose a valid expense category')
-      const expense = await prisma.expense.create({
-        data: {
-          organizationId,
-          propertyId: body.propertyId,
-          categoryId: body.categoryId,
-          title: body.title,
-          amount: body.amount,
-          spentOn: startOfDay(new Date(body.spentOn)),
-          paidTo: body.paidTo || null,
-          paymentMode: body.paymentMode,
-          reference: body.reference || null,
-          notes: body.notes || null,
-          recordedBy: user.name,
-        },
-        include: { category: true },
-      })
-      await recordActivity({
-        organizationId,
-        propertyId: body.propertyId,
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: user.role,
-        event: 'EXPENSE_CREATED',
-        entityType: 'Expense',
-        entityId: expense.id,
-        summary: `${expense.title} · ${formatMoney(expense.amount)} (${expense.category.name})`,
-      })
-      return ok(
-        { expense, message: `${formatMoney(expense.amount)} expense recorded` },
-        { status: 201 },
-      )
+      // Bill no., attachment, recurrence and approval live in the expenses service.
+      const { expense, message } = await createExpense(user, body)
+      return ok({ expense, message }, { status: 201 })
     }
 
     // ------------------------------------------------------------ staff --

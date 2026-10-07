@@ -1,144 +1,37 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { parseCsv, toCsv } from '@/lib/csv'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import { formatMoney } from '@/lib/utils'
 import { checkInResident } from './residents'
+import {
+  cellOf,
+  displayDate,
+  EMAIL_RE,
+  findDuplicates,
+  matchKey,
+  normalizePhone,
+  parseAmount,
+  parseImportDate,
+  parseYesNo,
+  type ColumnMapping,
+  type RowCheck,
+  type RowOutcome,
+  type SheetRow,
+} from './import-fields'
+import { applyPlanLimit } from './import-jobs'
 
 /**
  * Bulk resident import for PGs moving off notebooks and spreadsheets.
  *
- * validateImport() reads the CSV and checks every row against the PGs the
- * person can reach — nothing is written. runImport() re-validates, then
- * checks each valid row in through checkInResident on its own, so beds,
- * invoices, ledgers, deposits and logins are created exactly as a manual
- * check-in would, and one bad row never undoes the others.
+ * validateResidentRows() checks every mapped row against the PGs the person
+ * can reach — nothing is written. importResidentRows() checks each ready row
+ * in through checkInResident on its own (one transaction per resident), so
+ * beds, invoices, ledgers, deposits and logins are created exactly as a
+ * manual check-in would, and one bad row never undoes the others.
  */
 
-export const MAX_IMPORT_ROWS = 500
-
-type FieldKey =
-  | 'fullName'
-  | 'phone'
-  | 'pg'
-  | 'room'
-  | 'bed'
-  | 'joiningDate'
-  | 'rent'
-  | 'deposit'
-  | 'depositCollected'
-  | 'email'
-  | 'whatsapp'
-  | 'guardianName'
-  | 'guardianPhone'
-  | 'city'
-  | 'idType'
-  | 'idNumber'
-  | 'food'
-
-const COLUMNS: { key: FieldKey; header: string; required?: boolean; aliases: string[] }[] = [
-  { key: 'fullName', header: 'Full name*', required: true, aliases: ['fullname', 'name', 'residentname', 'tenantname'] },
-  { key: 'phone', header: 'Phone*', required: true, aliases: ['phone', 'mobile', 'phonenumber', 'mobilenumber', 'contact'] },
-  { key: 'pg', header: 'PG name*', required: true, aliases: ['pgname', 'pg', 'property', 'propertyname', 'hostel'] },
-  { key: 'room', header: 'Room*', required: true, aliases: ['room', 'roomno', 'roomnumber'] },
-  { key: 'bed', header: 'Bed*', required: true, aliases: ['bed', 'bedno', 'bedlabel', 'bednumber'] },
-  { key: 'joiningDate', header: 'Joining date*', required: true, aliases: ['joiningdate', 'joindate', 'joined', 'checkindate', 'dateofjoining'] },
-  { key: 'rent', header: 'Monthly rent*', required: true, aliases: ['monthlyrent', 'rent', 'rentamount'] },
-  { key: 'deposit', header: 'Deposit', aliases: ['deposit', 'securitydeposit', 'depositamount'] },
-  { key: 'depositCollected', header: 'Deposit collected (yes/no)', aliases: ['depositcollected', 'depositcollectedyesno', 'depositpaid'] },
-  { key: 'email', header: 'Email', aliases: ['email', 'emailid', 'emailaddress'] },
-  { key: 'whatsapp', header: 'WhatsApp', aliases: ['whatsapp', 'whatsappnumber', 'whatsappphone'] },
-  { key: 'guardianName', header: 'Guardian name', aliases: ['guardianname', 'guardian', 'parentname'] },
-  { key: 'guardianPhone', header: 'Guardian phone', aliases: ['guardianphone', 'guardianmobile', 'parentphone'] },
-  { key: 'city', header: 'City', aliases: ['city', 'hometown', 'nativeplace'] },
-  { key: 'idType', header: 'ID type', aliases: ['idtype', 'idprooftype', 'kyctype'] },
-  { key: 'idNumber', header: 'ID number', aliases: ['idnumber', 'idno', 'idproofnumber', 'aadhaarnumber', 'aadhaar'] },
-  { key: 'food', header: 'Food (yes/no)', aliases: ['food', 'foodyesno', 'meals', 'foodoptin'] },
-]
-
-const normHeader = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '')
-const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
-
-// ------------------------------------------------------------------ template
-
-export function importTemplateCsv() {
-  const example: Record<FieldKey, string> = {
-    fullName: 'Arun Kumar',
-    phone: '9876543210',
-    pg: 'Sunrise Mens PG',
-    room: '101',
-    bed: 'A',
-    joiningDate: '01/09/2026',
-    rent: '8500',
-    deposit: '10000',
-    depositCollected: 'yes',
-    email: 'arun@example.com',
-    whatsapp: '',
-    guardianName: 'Kumar S',
-    guardianPhone: '9876500000',
-    city: 'Madurai',
-    idType: 'Aadhaar',
-    idNumber: '',
-    food: 'yes',
-  }
-  return toCsv(
-    COLUMNS.map((c) => c.header),
-    [COLUMNS.map((c) => example[c.key])],
-  )
-}
-
-// ------------------------------------------------------------------ parsing
-
-/** 98765 43210, +91-9876543210, 09876543210 → 9876543210 (or null). */
-export function normalizePhone(value: string): string | null {
-  let digits = value.replace(/\D/g, '')
-  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)
-  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
-  return /^[6-9]\d{9}$/.test(digits) ? digits : null
-}
-
-/** DD/MM/YYYY (also - or .) or YYYY-MM-DD → local Date, or null. */
-export function parseImportDate(value: string): Date | null {
-  const v = value.trim()
-  let y: number, m: number, d: number
-  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v)
-  if (match) {
-    ;[y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  } else {
-    match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v)
-    if (!match) return null
-    ;[d, m, y] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  }
-  const date = new Date(y, m - 1, d)
-  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null
-  return date
-}
-
-/** "₹ 8,500", "Rs.8500", "8500.00" → 8500 (whole rupees), or null. */
-export function parseRupees(value: string): number | null {
-  const clean = value.replace(/₹|rs\.?|inr|,|\s/gi, '')
-  if (!/^\d+(\.\d+)?$/.test(clean)) return null
-  return Math.round(Number(clean))
-}
-
-function parseYesNo(value: string): boolean | null {
-  const v = value.trim().toLowerCase()
-  if (!v) return null
-  if (['yes', 'y', 'true', '1', 'paid', 'collected'].includes(v)) return true
-  if (['no', 'n', 'false', '0', 'pending', 'not paid'].includes(v)) return false
-  return null
-}
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function displayDate(d: Date) {
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-}
-
-// --------------------------------------------------------------- validation
-
-type ImportScope = { organizationId: string; propertyIds: string[] }
+export type ImportScope = { organizationId: string; propertyIds: string[] }
 
 type ParsedRow = {
   fullName: string
@@ -161,57 +54,27 @@ type ParsedRow = {
   idNumber?: string
 }
 
-export type ImportRowResult = {
-  /** Line number in the file (the header is line 1). */
-  row: number
-  fullName: string
-  phone: string
-  pg: string
-  room: string
-  bed: string
-  joiningDate: string
-  rent: string
-  errors: string[]
-  warnings: string[]
-}
-
-export type ImportValidation = {
-  rows: ImportRowResult[]
-  valid: number
-  invalid: number
+export type ResidentValidation = {
+  checks: RowCheck[]
+  notes: string[]
   parsed: Map<number, ParsedRow>
 }
 
-export async function validateImport(scope: ImportScope, csv: string): Promise<ImportValidation> {
-  if (csv.startsWith('PK') || csv.includes('\u0000')) {
-    throw new ValidationError(
-      'This looks like an Excel (.xlsx) file. In Excel choose File → Save As → "CSV UTF-8 (Comma delimited) (*.csv)" and upload that file.',
-    )
-  }
+const REQUIRED: { key: string; label: string }[] = [
+  { key: 'fullName', label: 'Resident name' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'pg', label: 'PG name' },
+  { key: 'room', label: 'Room' },
+  { key: 'bed', label: 'Bed' },
+  { key: 'joiningDate', label: 'Joining date' },
+  { key: 'rent', label: 'Monthly rent' },
+]
 
-  const [headerRow, ...body] = parseCsv(csv)
-  if (!headerRow) throw new ValidationError('The file is empty. Download the template and fill one row per resident.')
-
-  // Map each known column to its index in this file.
-  const index = new Map<FieldKey, number>()
-  headerRow.forEach((h, i) => {
-    const n = normHeader(h)
-    const col = COLUMNS.find((c) => normHeader(c.header) === n || c.aliases.includes(n))
-    if (col && !index.has(col.key)) index.set(col.key, i)
-  })
-  const missing = COLUMNS.filter((c) => c.required && !index.has(c.key)).map((c) => c.header.replace('*', ''))
-  if (missing.length) {
-    throw new ValidationError(
-      `Missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Use the template's header row.`,
-    )
-  }
-  if (!body.length) throw new ValidationError('The file has a header row but no residents.')
-  if (body.length > MAX_IMPORT_ROWS) {
-    throw new ValidationError(
-      `The file has ${body.length} rows. Import at most ${MAX_IMPORT_ROWS} at a time — split it into smaller files.`,
-    )
-  }
-
+export async function validateResidentRows(
+  scope: ImportScope,
+  rows: SheetRow[],
+  mapping: ColumnMapping,
+): Promise<ResidentValidation> {
   const properties = await prisma.property.findMany({
     where: { id: { in: scope.propertyIds }, organizationId: scope.organizationId, archivedAt: null },
     select: {
@@ -231,8 +94,8 @@ export async function validateImport(scope: ImportScope, csv: string): Promise<I
     },
   })
   const propertyByKey = new Map<string, (typeof properties)[number]>()
-  for (const p of properties) propertyByKey.set(key(p.name), p)
-  for (const p of properties) if (!propertyByKey.has(key(p.code))) propertyByKey.set(key(p.code), p)
+  for (const p of properties) propertyByKey.set(matchKey(p.name), p)
+  for (const p of properties) if (!propertyByKey.has(matchKey(p.code))) propertyByKey.set(matchKey(p.code), p)
 
   const current = await prisma.resident.findMany({
     where: { organizationId: scope.organizationId, status: { in: ['PENDING', 'ACTIVE', 'NOTICE'] } },
@@ -244,65 +107,63 @@ export async function validateImport(scope: ImportScope, csv: string): Promise<I
     if (p) currentByPhone.set(p, `${r.fullName} (${r.code})`)
   }
 
-  const phonesSeen = new Map<string, number>()
+  const get = (row: SheetRow, key: string) => cellOf(row, mapping, key)
+  const phones = rows.map((r) => normalizePhone(get(r, 'phone')))
+  const phoneDups = findDuplicates(phones)
+
   const bedsSeen = new Map<string, number>()
-  const rows: ImportRowResult[] = []
+  const checks: RowCheck[] = []
   const parsed = new Map<number, ParsedRow>()
   const today = new Date()
 
-  body.forEach((cells, i) => {
-    const line = i + 2
-    const get = (k: FieldKey) => {
-      const idx = index.get(k)
-      return idx === undefined ? '' : (cells[idx] ?? '').trim()
-    }
+  rows.forEach((row, i) => {
     const errors: string[] = []
     const warnings: string[] = []
-    const result: ImportRowResult = {
-      row: line,
-      fullName: get('fullName'),
-      phone: get('phone'),
-      pg: get('pg'),
-      room: get('room'),
-      bed: get('bed'),
-      joiningDate: get('joiningDate'),
-      rent: get('rent'),
+    const check: RowCheck = {
+      row: row.line,
+      status: 'ready',
+      title: get(row, 'fullName') || '—',
+      subtitle: [get(row, 'phone'), get(row, 'pg'), get(row, 'room') && `Room ${get(row, 'room')}`, get(row, 'bed') && `Bed ${get(row, 'bed')}`]
+        .filter(Boolean)
+        .join(' · '),
       errors,
       warnings,
     }
-    rows.push(result)
+    checks.push(check)
 
-    for (const c of COLUMNS) {
-      if (c.required && !get(c.key)) errors.push(`${c.header.replace('*', '')} is required`)
-    }
+    for (const f of REQUIRED) if (!get(row, f.key)) errors.push(`${f.label} is missing`)
 
-    const fullName = get('fullName')
-    if (fullName && (fullName.length < 2 || fullName.length > 120)) errors.push('Full name must be 2–120 characters')
+    const fullName = get(row, 'fullName')
+    if (fullName && (fullName.length < 2 || fullName.length > 120)) errors.push('Name must be 2–120 characters')
 
-    const phone = get('phone') ? normalizePhone(get('phone')) : null
-    if (get('phone') && !phone) errors.push('Phone must be a 10-digit Indian mobile number')
+    const phone = phones[i]
+    if (get(row, 'phone') && !phone) errors.push(`Phone "${get(row, 'phone')}" is not a valid 10-digit mobile number`)
     if (phone) {
-      const dupLine = phonesSeen.get(phone)
-      if (dupLine) errors.push(`Same phone as row ${dupLine} in this file`)
-      else phonesSeen.set(phone, line)
+      const dup = phoneDups.get(i)
+      if (dup !== undefined) errors.push(`Same phone as row ${rows[dup].line} in this file`)
       const holder = currentByPhone.get(phone)
-      if (holder) errors.push(`Already a current resident with this phone: ${holder}`)
+      if (holder) {
+        check.status = 'skip'
+        check.errors.length = 0
+        check.warnings.push(`Already in StayFlow: ${holder}`)
+        return
+      }
     }
 
     let property: (typeof properties)[number] | undefined
     let bedId: string | undefined
-    if (get('pg')) {
-      property = propertyByKey.get(key(get('pg')))
-      if (!property) errors.push(`PG "${get('pg')}" not found, or you do not have access to it`)
+    if (get(row, 'pg')) {
+      property = propertyByKey.get(matchKey(get(row, 'pg')))
+      if (!property) errors.push(`PG "${get(row, 'pg')}" not found, or you do not have access to it`)
     }
-    if (property && get('room')) {
-      const room = property.rooms.find((r) => key(r.number) === key(get('room')))
-      if (!room) errors.push(`Room ${get('room')} not found in ${property.name}`)
-      else if (get('bed')) {
-        const bed = room.beds.find((b) => key(b.label) === key(get('bed')))
+    if (property && get(row, 'room')) {
+      const room = property.rooms.find((r) => matchKey(r.number) === matchKey(get(row, 'room')))
+      if (!room) errors.push(`Room ${get(row, 'room')} not found in ${property.name} — import rooms & beds first`)
+      else if (get(row, 'bed')) {
+        const bed = room.beds.find((b) => matchKey(b.label) === matchKey(get(row, 'bed')))
         if (!bed) {
           errors.push(
-            `Bed ${get('bed')} not found in room ${room.number} (beds: ${room.beds.map((b) => b.label).join(', ') || 'none'})`,
+            `Bed ${get(row, 'bed')} not found in room ${room.number} (beds: ${room.beds.map((b) => b.label).join(', ') || 'none'})`,
           )
         } else if (bed.residentId || bed.status === 'OCCUPIED') {
           errors.push(`Bed ${bed.label} in room ${room.number} is already occupied`)
@@ -315,62 +176,64 @@ export async function validateImport(scope: ImportScope, csv: string): Promise<I
         } else {
           const dupLine = bedsSeen.get(bed.id)
           if (dupLine) errors.push(`Same bed as row ${dupLine} in this file`)
-          else bedsSeen.set(bed.id, line)
+          else bedsSeen.set(bed.id, row.line)
           bedId = bed.id
         }
       }
     }
 
-    const joiningDate = get('joiningDate') ? parseImportDate(get('joiningDate')) : null
-    if (get('joiningDate') && !joiningDate) errors.push('Joining date must be DD/MM/YYYY or YYYY-MM-DD')
+    const joiningDate = get(row, 'joiningDate') ? parseImportDate(get(row, 'joiningDate')) : null
+    if (get(row, 'joiningDate') && !joiningDate) {
+      errors.push(`Joining date "${get(row, 'joiningDate')}" is not a date — use DD/MM/YYYY`)
+    }
     if (joiningDate) {
       const ageDays = (today.getTime() - joiningDate.getTime()) / 86_400_000
       if (ageDays < -365) errors.push('Joining date is more than a year in the future')
       else if (ageDays > 45) {
         warnings.push(
-          `First rent invoice is raised for ${joiningDate.toLocaleString('en-IN', { month: 'short', year: 'numeric' })}; waive it from Rent if already paid`,
+          `First rent invoice is raised for ${joiningDate.toLocaleString('en-IN', { month: 'short', year: 'numeric' })}; import opening balances afterwards instead of back-dated rent`,
         )
       }
-      result.joiningDate = displayDate(joiningDate)
     }
 
-    const rent = get('rent') ? parseRupees(get('rent')) : null
-    if (get('rent') && (rent === null || rent <= 0)) errors.push('Monthly rent must be a number greater than 0')
-    else if (rent && rent > 500_000) errors.push('Monthly rent looks too high — check the amount')
+    let rent: number | null = null
+    if (get(row, 'rent')) {
+      const r = parseAmount(get(row, 'rent'))
+      if (!r.ok) errors.push(r.error === 'negative' ? 'Monthly rent cannot be negative' : `Monthly rent "${get(row, 'rent')}" is not a number`)
+      else if (r.value <= 0) errors.push('Monthly rent must be more than 0')
+      else if (r.value > 500_000) errors.push('Monthly rent looks too high — check the amount')
+      else rent = r.value
+    }
 
     let deposit = property?.standardDeposit ?? 0
-    if (get('deposit')) {
-      const d = parseRupees(get('deposit'))
-      if (d === null) errors.push('Deposit must be a number')
-      else deposit = d
+    if (get(row, 'deposit')) {
+      const d = parseAmount(get(row, 'deposit'))
+      if (!d.ok) errors.push(d.error === 'negative' ? 'Deposit cannot be negative' : `Deposit "${get(row, 'deposit')}" is not a number`)
+      else deposit = d.value
     } else if (property) {
       warnings.push(`No deposit given — the PG standard ${formatMoney(deposit)} is used`)
     }
 
-    const depositCollected = get('depositCollected') ? parseYesNo(get('depositCollected')) : false
+    const depositCollected = get(row, 'depositCollected') ? parseYesNo(get(row, 'depositCollected')) : false
     if (depositCollected === null) errors.push('Deposit collected must be yes or no')
 
-    const food = get('food') ? parseYesNo(get('food')) : (property?.foodIncluded ?? true)
+    const food = get(row, 'food') ? parseYesNo(get(row, 'food')) : (property?.foodIncluded ?? true)
     if (food === null) errors.push('Food must be yes or no')
 
-    const email = get('email')
-    if (email && !EMAIL_RE.test(email)) errors.push('Email is not valid')
-    const whatsapp = get('whatsapp') ? normalizePhone(get('whatsapp')) : null
-    if (get('whatsapp') && !whatsapp) errors.push('WhatsApp must be a 10-digit mobile number')
-    const guardianPhone = get('guardianPhone') ? normalizePhone(get('guardianPhone')) : null
-    if (get('guardianPhone') && !guardianPhone) errors.push('Guardian phone must be a 10-digit mobile number')
+    const email = get(row, 'email')
+    if (email && !EMAIL_RE.test(email)) errors.push(`Email "${email}" is not valid`)
+    const whatsapp = get(row, 'whatsapp') ? normalizePhone(get(row, 'whatsapp')) : null
+    if (get(row, 'whatsapp') && !whatsapp) errors.push('WhatsApp must be a 10-digit mobile number')
+    const guardianPhone = get(row, 'guardianPhone') ? normalizePhone(get(row, 'guardianPhone')) : null
+    if (get(row, 'guardianPhone') && !guardianPhone) warnings.push('Guardian phone is not a 10-digit number — left empty')
 
-    if (
-      !errors.length &&
-      property &&
-      bedId &&
-      phone &&
-      joiningDate &&
-      rent &&
-      depositCollected !== null &&
-      food !== null
-    ) {
-      parsed.set(line, {
+    if (errors.length) {
+      check.status = 'error'
+      return
+    }
+    if (property && bedId && phone && joiningDate && rent && depositCollected !== null && food !== null) {
+      check.subtitle = `${phone} · ${property.name} · Room ${get(row, 'room')} · Bed ${get(row, 'bed')} · ${displayDate(joiningDate)} · ${formatMoney(rent)}`
+      parsed.set(row.line, {
         fullName,
         phone,
         propertyId: property.id,
@@ -384,43 +247,44 @@ export async function validateImport(scope: ImportScope, csv: string): Promise<I
         foodCharge: food ? property.foodCharge : 0,
         email: email || undefined,
         whatsapp: whatsapp ?? undefined,
-        guardianName: get('guardianName') || undefined,
+        guardianName: get(row, 'guardianName') || undefined,
         guardianPhone: guardianPhone ?? undefined,
-        city: get('city') || undefined,
-        idType: get('idType') || undefined,
-        idNumber: get('idNumber') || undefined,
+        city: get(row, 'city') || undefined,
+        idType: get(row, 'idType') || undefined,
+        idNumber: get(row, 'idNumber') || undefined,
       })
+    } else {
+      check.status = 'error'
+      errors.push('This row could not be read')
     }
   })
 
-  return { rows, valid: parsed.size, invalid: rows.length - parsed.size, parsed }
+  const notes: string[] = []
+  const planNote = await applyPlanLimit(scope.organizationId, 'residents', checks, () => 1)
+  if (planNote) {
+    notes.push(planNote)
+    for (const c of checks) if (c.status === 'error') parsed.delete(c.row)
+  }
+  return { checks, notes, parsed }
 }
 
-// ------------------------------------------------------------------- commit
-
-export type ImportOutcome = {
-  row: number
-  fullName: string
-  status: 'imported' | 'failed' | 'skipped'
-  residentId?: string
-  residentCode?: string
-  message?: string
-}
-
-export async function runImport(params: {
+export async function importResidentRows(params: {
   scope: ImportScope
-  csv: string
+  validation: ResidentValidation
   createLogins: boolean
   sendWelcome: boolean
   actor: { id: string; name: string }
-}) {
-  const validation = await validateImport(params.scope, params.csv)
-  const outcomes: ImportOutcome[] = []
-
-  for (const row of validation.rows) {
-    const data = validation.parsed.get(row.row)
-    if (!data) {
-      outcomes.push({ row: row.row, fullName: row.fullName, status: 'skipped', message: row.errors[0] })
+}): Promise<RowOutcome[]> {
+  const outcomes: RowOutcome[] = []
+  for (const check of params.validation.checks) {
+    const data = params.validation.parsed.get(check.row)
+    if (!data || check.status !== 'ready') {
+      outcomes.push({
+        row: check.row,
+        title: check.title,
+        status: check.status === 'skip' ? 'skipped' : 'failed',
+        message: check.status === 'skip' ? check.warnings[0] : check.errors.join('; ') || 'Not imported',
+      })
       continue
     }
     try {
@@ -450,34 +314,24 @@ export async function runImport(params: {
         whatsappConsent: params.sendWelcome,
         actor: params.actor,
       })
-      const notes = [
-        result.firstInvoiceError && `First invoice not raised: ${result.firstInvoiceError}`,
-      ].filter(Boolean)
       outcomes.push({
-        row: row.row,
-        fullName: data.fullName,
+        row: check.row,
+        title: `${data.fullName} (${result.resident.code})`,
         status: 'imported',
-        residentId: result.resident.id,
-        residentCode: result.resident.code,
-        message: notes.length ? notes.join('; ') : undefined,
+        link: `/app/residents/${result.resident.id}`,
+        message: result.firstInvoiceError ? `Checked in; first invoice not raised: ${result.firstInvoiceError}` : undefined,
       })
     } catch (error) {
       const known =
         error instanceof ValidationError || error instanceof ConflictError || error instanceof NotFoundError
-      if (!known) console.error('[resident-import] row failed', { row: row.row, error })
+      if (!known) console.error('[resident-import] row failed', { row: check.row, error })
       outcomes.push({
-        row: row.row,
-        fullName: data.fullName,
+        row: check.row,
+        title: data.fullName,
         status: 'failed',
         message: known ? error.message : 'Could not check this resident in. Try this row again.',
       })
     }
   }
-
-  return {
-    outcomes,
-    imported: outcomes.filter((o) => o.status === 'imported').length,
-    failed: outcomes.filter((o) => o.status === 'failed').length,
-    skipped: outcomes.filter((o) => o.status === 'skipped').length,
-  }
+  return outcomes
 }

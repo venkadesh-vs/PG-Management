@@ -129,3 +129,32 @@ export function csvCell(value: string | number | boolean | null | undefined) {
 export function toCsv(header: string[], rows: (string | number | boolean | null | undefined)[][]) {
   return '﻿' +[header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n'
 }
+
+/**
+ * Error report for an import preview: row number, the row's original values
+ * and its problems, for every row that has errors or warnings (or every row
+ * with `all`). Opens straight in Excel so the owner can fix and re-upload.
+ */
+export function errorReportCsv(
+  headers: string[],
+  rows: { line: number; cells: string[] }[],
+  checks: { row: number; status: string; errors: string[]; warnings: string[] }[],
+  options?: { all?: boolean },
+) {
+  const byRow = new Map(checks.map((c) => [c.row, c]))
+  const out: (string | number)[][] = []
+  for (const r of rows) {
+    const c = byRow.get(r.line)
+    if (!c) continue
+    if (!options?.all && !c.errors.length && !c.warnings.length) continue
+    const status = c.status === 'ready' ? 'Ready' : c.status === 'skip' ? 'Skipped' : 'Error'
+    out.push([
+      r.line,
+      status,
+      c.errors.join('; '),
+      c.warnings.join('; '),
+      ...headers.map((_, i) => r.cells[i] ?? ''),
+    ])
+  }
+  return toCsv(['Row', 'Status', 'Errors', 'Warnings', ...headers], out)
+}

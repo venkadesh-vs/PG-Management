@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
 
-export const metadata: Metadata = { title: 'Support' }
+export const metadata: Metadata = { title: 'Customer health' }
 
 export default async function SupportPage() {
   await requireSuperAdmin()
@@ -74,10 +74,10 @@ export default async function SupportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Support"
+        title="Customer health"
         subtitle="Where accounts look like they need a hand — long-open complaints, quiet logins, and owners carrying a backlog."
         icon="messages"
-        breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Support' }]}
+        breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Customer health' }]}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">

@@ -25,9 +25,11 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Dashboard', href: '/app', icon: 'dashboard', exact: true, module: 'dashboard', permission: 'dashboard.view' },
       { label: 'Properties', href: '/app/properties', icon: 'building', module: 'properties', permission: 'properties.view' },
       { label: 'Rooms & Beds', href: '/app/beds', icon: 'bed', module: 'properties', permission: 'properties.view' },
+      { label: 'Vacancy', href: '/app/vacancy', icon: 'trendingDown', module: 'properties', permission: 'properties.view' },
       { label: 'Residents', href: '/app/residents', icon: 'user', module: 'residents', permission: 'residents.view' },
       { label: 'Enquiries', href: '/app/leads', icon: 'clipboard', module: 'leads', permission: 'leads.view' },
       { label: 'Bookings', href: '/app/bookings', icon: 'calendar', module: 'leads', permission: 'leads.view' },
+      { label: 'Import data', href: '/app/import', icon: 'file', module: 'residents', permission: 'residents.manage' },
     ],
   },
   {
@@ -36,6 +38,7 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Rent & Payments', href: '/app/rent', icon: 'wallet', module: 'rent', permission: 'rent.view' },
       { label: 'Payments', href: '/app/payments', icon: 'card', module: 'rent', permission: 'rent.view' },
       { label: 'Expenses', href: '/app/expenses', icon: 'receipt', module: 'expenses', permission: 'expenses.view' },
+      { label: 'Profit & loss', href: '/app/reports/pnl', icon: 'chart', module: 'reports', permission: 'reports.view' },
     ],
   },
   {
@@ -74,9 +77,9 @@ export const ADMIN_NAV: NavSection[] = [
   {
     items: [
       { label: 'Dashboard', href: '/admin', icon: 'gauge', exact: true },
-      { label: 'Organizations', href: '/admin/organizations', icon: 'building' },
+      { label: 'Customers', href: '/admin/organizations', icon: 'building' },
       { label: 'PG Properties', href: '/admin/properties', icon: 'door' },
-      { label: 'Leads', href: '/admin/leads', icon: 'clipboard', badge: 'leads' },
+      { label: 'Sales CRM', href: '/admin/leads', icon: 'clipboard', badge: 'leads' },
     ],
   },
   {
@@ -91,7 +94,9 @@ export const ADMIN_NAV: NavSection[] = [
     title: 'Platform',
     items: [
       { label: 'Feature Controls', href: '/admin/features', icon: 'shield' },
-      { label: 'Support', href: '/admin/support', icon: 'messages' },
+      { label: 'System Health', href: '/admin/health', icon: 'alert' },
+      { label: 'Announcements', href: '/admin/announcements', icon: 'megaphone' },
+      { label: 'Customer health', href: '/admin/support', icon: 'messages' },
       { label: 'Notifications', href: '/admin/notifications', icon: 'bell', badge: 'notifications' },
       { label: 'Audit Logs', href: '/admin/audit', icon: 'history' },
       { label: 'System Settings', href: '/admin/settings', icon: 'settings' },

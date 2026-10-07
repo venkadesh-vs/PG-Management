@@ -163,6 +163,14 @@ export default async function ReportsPage({
           <>
           {user.modules.includes('rent') && user.permissions.includes('rent.view') && (
             <Link
+              href="/app/reports/pnl"
+              className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Profit &amp; loss
+            </Link>
+          )}
+          {user.modules.includes('rent') && user.permissions.includes('rent.view') && (
+            <Link
               href="/app/reports/daily-collection"
               className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >

@@ -5,6 +5,7 @@ import { filterNavSections, OWNER_NAV } from '@/lib/navigation'
 import { ensureOrgDefaults } from '@/server/services/org-defaults'
 import { AppShell } from '@/components/app/app-shell'
 import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
+import { PlatformAnnouncementBanner } from '@/components/app/platform-announcement-banner'
 
 export const metadata: Metadata = pwaMetadata('owner')
 export const viewport: Viewport = { themeColor: PWA_APPS.owner.color }
@@ -52,6 +53,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       restricted={isOrgRestricted(user)}
       access={{ role: user.role, modules: user.modules, permissions: user.permissions }}
     >
+      <PlatformAnnouncementBanner />
       {children}
     </AppShell>
   )

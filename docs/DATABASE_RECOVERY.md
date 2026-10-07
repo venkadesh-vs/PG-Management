@@ -5,8 +5,8 @@ Status: **not configured** — no production database exists yet. Full procedure
 
 | Item | Value |
 | --- | --- |
-| Provider | Neon (recommended) — to be created |
-| Region | AWS Asia Pacific (Mumbai) `aws-ap-south-1` |
+| Provider | Neon, project `stayflow-us` (free plan) |
+| Region | AWS US East 2 (Ohio), next to Netlify's free function region. Planned move to Singapore with Netlify Pro. |
 | Point-in-time recovery | Neon restores to any moment inside its history window. The free plan's window is short; paid plans allow days (check Neon's current pricing page). **Pilot target: at least 7 days on a paid plan.** Not yet enabled. |
 | Daily logical backup | `pg_dump` job (GitHub Actions or a small VM) to a separate private bucket. Not yet set up. |
 | Retention | Daily 30 days, monthly 12 months, yearly 8 years |
@@ -34,7 +34,7 @@ Status: **not configured** — no production database exists yet. Full procedure
 
 | Date | Action | By |
 | --- | --- | --- |
-| | Project created in Mumbai | |
+| 7 Oct 2026 | Project created in Ohio; data moved from Singapore with pg_dump/pg_restore, row counts verified | Claude |
 | | Restore window set | |
 | | Daily dump running | |
 | | First restore test passed | |

@@ -126,6 +126,12 @@ enum InvoiceLineKind {
   DEPOSIT
   ADJUSTMENT
   OTHER
+  LAUNDRY
+  JOINING
+  NOTICE
+  FINE
+  CREDIT_NOTE
+  DEBIT_NOTE
 }
 
 enum PaymentPurpose {
@@ -148,6 +154,7 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   REFUNDED
+  REVERSED
 }
 
 enum LedgerEntryKind {
@@ -351,6 +358,9 @@ enum LeadStatus {
   TRIAL
   CONVERTED
   LOST
+  FOLLOW_UP
+  DISQUALIFIED
+  ACTIVE_CUSTOMER
 }
 
 enum EventType {
@@ -389,6 +399,26 @@ enum EventType {
   AUTH_LOGIN
   AUTH_PASSWORD_CHANGED
   SETTINGS_UPDATED
+  PAYMENT_REVERSED
+  PAYMENT_EDITED
+  RENT_REVISED
+  CHARGE_ADDED
+  CHARGE_VOIDED
+  INVOICE_ADJUSTED
+  INVOICE_WAIVED
+  EXPENSE_UPDATED
+  EXPENSE_VOIDED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  SUBSCRIPTION_CHANGED
+  SUBSCRIPTION_CANCELLED
+  IMPORT_COMPLETED
+  SUPPORT_TICKET
+  ADMIN_ACTION
+  AUTH_LOGIN_FAILED
+  SETTLEMENT_ADJUSTED
+  MAINTENANCE_UPDATED
+  ASSET_UPDATED
 }
 
 // ============================ PLATFORM =====================================
@@ -452,6 +482,12 @@ model Organization {
   uploadedFiles     UploadedFile[]
   residentRequests  ResidentRequest[]
 
+  residentCharges    ResidentCharge[]
+  rentRevisions      RentRevision[]
+  invoiceAdjustments InvoiceAdjustment[]
+  importJobs         ImportJob[]
+  supportTickets     SupportTicket[]
+
   @@index([status])
 }
 
@@ -489,8 +525,14 @@ model OrgSetting {
   /// Modules the owner has switched off (see src/lib/modules.ts).
   disabledModules String[] @default([])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  /// Owner onboarding wizard progress.
+  onboardingStep        String?
+  onboardingData        Json?
+  onboardingCompletedAt DateTime?
+  /// Per notification type, which channels are on.
+  notificationSettings  Json?
 }
 
 model User {
@@ -814,6 +856,9 @@ model Resident {
   announcementTargets AnnouncementTarget[]
   residentRequests    ResidentRequest[]
 
+  charges       ResidentCharge[]
+  rentRevisions RentRevision[]
+
   @@unique([organizationId, code])
   @@index([propertyId, status])
   @@index([organizationId, status])
@@ -858,8 +903,13 @@ model Checkout {
   settlementNote  String?
   processedBy     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  /// Room inspection and clearance checklist captured at exit.
+  inspection Json?
+  clearance  Json?
+  /// Set when the settlement is closed; later changes go through adjustments.
+  lockedAt   DateTime?
 }
 
 // ============================ BILLING ======================================
@@ -898,6 +948,8 @@ model RentInvoice {
 
   lines       InvoiceLine[]
   allocations PaymentAllocation[]
+
+  adjustments InvoiceAdjustment[]
 
   @@unique([residentId, periodStart])
   @@unique([organizationId, number])
@@ -950,6 +1002,14 @@ model RentPayment {
   updatedAt DateTime @updatedAt
 
   allocations PaymentAllocation[]
+
+  /// UPI or bank reference (UTR) for reconciliation.
+  utr            String?
+  attachmentUrl  String?
+  reversedAt     DateTime?
+  reversedBy     String?
+  reversalReason String?
+  refundedAmount Int       @default(0)
 
   @@unique([organizationId, receiptNumber])
   @@unique([gatewayPaymentId])
@@ -1201,6 +1261,18 @@ model Expense {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
+  billNumber        String?
+  isRecurring       Boolean         @default(false)
+  /// MONTHLY | QUARTERLY | YEARLY
+  recurrence        String?
+  recurringFromId   String?
+  approvalStatus    ExpenseApproval @default(APPROVED)
+  approvedBy        String?
+  approvedAt        DateTime?
+  voidedAt          DateTime?
+  voidReason        String?
+  maintenanceTaskId String?
+
   @@index([organizationId, spentOn])
   @@index([propertyId, spentOn])
   @@index([categoryId])
@@ -1297,6 +1369,14 @@ model MaintenanceTask {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  vendorName         String?
+  vendorPhone        String?
+  estimateAmount     Int?
+  estimateApprovedAt DateTime?
+  estimateApprovedBy String?
+  actualCost         Int?
+  expenseId          String?
 
   @@index([organizationId, status])
   @@index([assignedStaffId, status])
@@ -1396,6 +1476,12 @@ model Asset {
   notes        String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+
+  floorId      String?
+  bedId        String?
+  /// IN_USE | IN_STORE | UNDER_REPAIR | DISPOSED | MISSING
+  status       String  @default("IN_USE")
+  currentValue Int?
 
   @@index([propertyId, category])
 }
@@ -1518,7 +1604,16 @@ model Plan {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  subscriptions Subscription[]
+  subscriptions         Subscription[]
+  /// Discount for paying a year upfront: yearly = 12 x monthly x (100 - x)%.
+  yearlyDiscountPercent Int            @default(17)
+  maxBeds               Int?
+  maxStaff              Int?
+  whatsappMonthlyLimit  Int?
+  storageLimitMb        Int?
+  sortOrder             Int            @default(0)
+  tagline               String?
+  highlighted           Boolean        @default(false)
 }
 
 model FeatureFlag {
@@ -1571,6 +1666,16 @@ model Subscription {
   invoices       SubscriptionInvoice[]
   payments       SubscriptionPayment[]
   paymentMethods PaymentMethod[]
+
+  /// Cancel when the paid period ends instead of immediately.
+  cancelAtPeriodEnd   Boolean       @default(false)
+  cancelCategory      String?
+  /// Downgrade or cycle change waiting for the next renewal.
+  pendingPlanId       String?
+  pendingBillingCycle BillingCycle?
+  failedAttempts      Int           @default(0)
+  nextRetryAt         DateTime?
+  lastPaymentError    String?
 
   @@index([organizationId, status])
   @@index([status, nextBillingDate])
@@ -1820,6 +1925,211 @@ model ResidentRequest {
   @@index([residentId, createdAt])
 }
 
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+/// Every inbound webhook (Razorpay, WhatsApp), recorded before it is
+/// processed. The unique (provider, eventId) makes redelivery harmless.
+model WebhookEvent {
+  id          String        @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  status      WebhookStatus @default(RECEIVED)
+  payload     Json
+  error       String?
+  attempts    Int           @default(1)
+  receivedAt  DateTime      @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+  @@index([status, receivedAt])
+}
+
+enum ChargeKind {
+  RECURRING
+  ONE_TIME
+  DISCOUNT
+}
+
+/// Charges on top of rent (laundry, electricity share, joining fee, fine)
+/// and discounts. Recurring ones bill every month between start and end;
+/// one-time ones bill once. Never edited after billing: void and re-add.
+model ResidentCharge {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId      String
+  residentId      String
+  resident        Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  kind            ChargeKind
+  /// LAUNDRY | ELECTRICITY | MAINTENANCE | FOOD | JOINING | NOTICE | FINE | PENALTY | OTHER
+  category        String
+  label           String
+  amount          Int
+  startDate       DateTime
+  endDate         DateTime?
+  billedInvoiceId String?
+  lastBilledFor   DateTime?
+  voidedAt        DateTime?
+  voidReason      String?
+  createdBy       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([residentId, kind])
+  @@index([organizationId, kind])
+}
+
+/// A change to a resident's rent that applies from a date. Past invoices are
+/// never rewritten; invoices for periods on or after effectiveFrom use newRent.
+model RentRevision {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  oldRent        Int
+  newRent        Int
+  effectiveFrom  DateTime
+  reason         String
+  createdBy      String?
+  createdAt      DateTime     @default(now())
+
+  @@index([residentId, effectiveFrom])
+}
+
+enum AdjustmentKind {
+  CREDIT
+  DEBIT
+}
+
+/// Credit or debit note against an issued invoice: the only way to change
+/// what an invoice says after it is raised.
+model InvoiceAdjustment {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        RentInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  kind           AdjustmentKind
+  amount         Int
+  reason         String
+  createdBy      String?
+  createdAt      DateTime       @default(now())
+
+  @@index([invoiceId])
+}
+
+enum ExpenseApproval {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum CronStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+/// One row per automation run, for monitoring and the health page.
+model CronRun {
+  id         String     @id @default(cuid())
+  job        String
+  status     CronStatus @default(RUNNING)
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+  report     Json?
+  error      String?
+
+  @@index([job, startedAt])
+}
+
+/// Bulk import history (residents, rooms and beds, balances) with per-row results.
+model ImportJob {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind           String
+  fileName       String?
+  status         String       @default("PREVIEWED")
+  totalRows      Int          @default(0)
+  imported       Int          @default(0)
+  skipped        Int          @default(0)
+  failed         Int          @default(0)
+  results        Json?
+  mapping        Json?
+  createdBy      String?
+  createdAt      DateTime     @default(now())
+  finishedAt     DateTime?
+
+  @@index([organizationId, createdAt])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+/// Help requests from PG owners and managers to the StayFlow team.
+model SupportTicket {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String       @unique
+  createdById    String?
+  createdByName  String
+  subject        String
+  category       String
+  priority       String       @default("NORMAL")
+  status         TicketStatus @default(OPEN)
+  assignedTo     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  resolvedAt     DateTime?
+
+  messages SupportMessage[]
+
+  @@index([status, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model SupportMessage {
+  id            String        @id @default(cuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorName    String
+  fromStaff     Boolean       @default(false)
+  body          String
+  attachmentUrl String?
+  createdAt     DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+/// Notices from the StayFlow team to customers (maintenance, new features).
+model PlatformAnnouncement {
+  id        String    @id @default(cuid())
+  title     String
+  body      String
+  /// ALL | TRIAL | ACTIVE | SUSPENDED
+  audience  String    @default("ALL")
+  severity  String    @default("INFO")
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdBy String?
+  createdAt DateTime  @default(now())
+}
+
 enum RoleApp {
   DASHBOARD
   STAFF_APP
@@ -1947,6 +2257,12 @@ model Lead {
 
   notes LeadNote[]
 
+  salesOwnerId    String?
+  followUpAt      DateTime?
+  lostReason      String?
+  /// Software they use today (Excel, notebook, another app).
+  currentSoftware String?
+
   @@index([status, createdAt])
   @@index([phone])
 }
@@ -1993,6 +2309,11 @@ model ActivityLog {
   meta       Json?
   ip         String?
   createdAt  DateTime  @default(now())
+
+  /// Values before and after a change, for audited edits.
+  before    Json?
+  after     Json?
+  userAgent String?
 
   @@index([organizationId, createdAt])
   @@index([event, createdAt])

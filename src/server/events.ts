@@ -23,13 +23,33 @@ export type ActivityInput = {
   entityId?: string
   summary: string
   meta?: Prisma.InputJsonValue
-  /** Caller IP, recorded for public endpoints such as the demo form. */
+  /** Caller IP; filled from the request automatically when omitted. */
   ip?: string
+  /** For audited edits: the values before and after the change. */
+  before?: Prisma.InputJsonValue
+  after?: Prisma.InputJsonValue
 }
 
 type Tx = Prisma.TransactionClient | typeof prisma
 
+/** IP and device of the current request, when there is one (not in cron/CLI). */
+async function requestContext(): Promise<{ ip: string | null; userAgent: string | null }> {
+  try {
+    const { headers } = await import('next/headers')
+    const h = await headers()
+    const ip = h.get('x-nf-client-connection-ip') ?? h.get('x-real-ip') ?? (h.get('x-forwarded-for') ?? '').split(',').pop()?.trim() ?? null
+    return { ip: ip || null, userAgent: h.get('user-agent')?.slice(0, 250) ?? null }
+  } catch {
+    return { ip: null, userAgent: null }
+  }
+}
+
+/**
+ * Append-only audit trail. There is no update or delete path for activity
+ * rows anywhere in the product; corrections are new entries.
+ */
 export async function recordActivity(input: ActivityInput, tx: Tx = prisma) {
+  const ctx = await requestContext()
   return tx.activityLog.create({
     data: {
       organizationId: input.organizationId ?? null,
@@ -42,7 +62,10 @@ export async function recordActivity(input: ActivityInput, tx: Tx = prisma) {
       entityId: input.entityId,
       summary: input.summary,
       meta: input.meta,
-      ip: input.ip ?? null,
+      ip: input.ip ?? ctx.ip,
+      userAgent: ctx.userAgent,
+      before: input.before,
+      after: input.after,
     },
   })
 }

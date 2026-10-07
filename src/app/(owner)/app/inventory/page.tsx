@@ -21,6 +21,7 @@ import {
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { QuickForm, type QuickField } from '@/components/app/quick-form'
 import { RowActions } from '@/components/app/row-actions'
+import { ExportButton } from '@/components/app/export-button'
 import { ASSET_STATUS_LABEL, ASSET_STATUSES, type AssetStatus } from '@/lib/checkout-checklist'
 import { placementOf } from '@/server/services/assets'
 
@@ -186,7 +187,13 @@ export default async function InventoryPage({
         icon="boxes"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Inventory' }]}
         actions={
-          user.permissions.includes('inventory.manage') && (
+          <>
+          {user.permissions.includes('reports.export') && (
+            <Suspense fallback={null}>
+              <ExportButton kind="assets" />
+            </Suspense>
+          )}
+          {user.permissions.includes('inventory.manage') && (
           <QuickForm
             trigger="Add item"
             title="Add an inventory item"
@@ -239,7 +246,8 @@ export default async function InventoryPage({
               { kind: 'textarea', name: 'notes', label: 'Notes', rows: 2 },
             ]}
           />
-          )
+          )}
+          </>
         }
       />
 

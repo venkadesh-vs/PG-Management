@@ -3,6 +3,8 @@ import { fail, ok, route } from '@/lib/api-helpers'
 import { isRateLimited, recordHit } from '@/lib/rate-limit'
 import { assertResidentAccess, ForbiddenError, ValidationError } from '@/lib/tenancy'
 import { newStorageKey, putObject } from '@/server/storage'
+import { assertStorageAvailable } from '@/server/services/plan-limits'
+import { logError } from '@/lib/logger'
 
 /**
  * POST /api/uploads — multipart upload (field `file`, `purpose`, optional
@@ -98,12 +100,23 @@ export const POST = route(async ({ user, request }) => {
     throw new ValidationError('That file does not look like what its name says. Please choose another.')
   }
 
+  // Plan storage allowance (Settings → Subscription shows usage).
+  await assertStorageAvailable(user.organizationId, bytes.length)
+
   const key = newStorageKey(user.organizationId, contentType)
   try {
     await putObject(key, bytes, contentType)
   } catch (error) {
-    console.error('[uploads] store failed', error)
-    return fail('We could not save that file right now. Please try again in a moment.', 502)
+    void logError('storage.put_failed', error, {
+      code: 'INTEGRATION_FAILED',
+      route: '/api/uploads',
+      organizationId: user.organizationId,
+      userId: user.id,
+      purpose,
+    })
+    return fail('We could not save that file right now. Please try again in a moment.', 502, undefined, {
+      code: 'INTEGRATION_FAILED',
+    })
   }
 
   const row = await prisma.uploadedFile.create({

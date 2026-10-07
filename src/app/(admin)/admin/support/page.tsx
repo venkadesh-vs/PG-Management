@@ -1,8 +1,18 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { AlertTriangle, MessageSquare, Phone } from 'lucide-react'
+import { AlertTriangle, ChevronRight, LifeBuoy, MessageSquare, Phone } from 'lucide-react'
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import {
+  ADMIN_STATUS_LABEL,
+  categoryLabel,
+  priorityLabel,
+  PRIORITY_STYLE,
+  TICKET_STATUS_STYLE,
+  type TicketPriority,
+  type TicketStatus,
+} from '@/lib/support'
+import { listAllTickets } from '@/server/services/support'
 import { COMPLAINT_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { addDays, cn, formatPhone, relativeTime } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
@@ -11,13 +21,37 @@ import { Card, CardContent } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
 
-export const metadata: Metadata = { title: 'Customer health' }
+export const metadata: Metadata = { title: 'Support & customer health' }
 
-export default async function SupportPage() {
-  await requireSuperAdmin()
+const TICKET_FILTERS = [
+  { key: 'active', label: 'Needs attention' },
+  { key: 'mine', label: 'Assigned to me' },
+  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'WAITING_ON_CUSTOMER', label: 'Waiting on customer' },
+  { key: 'RESOLVED', label: 'Resolved' },
+  { key: 'CLOSED', label: 'Closed' },
+  { key: 'all', label: 'All' },
+] as const
+
+const PRIORITY_RANK: Record<string, number> = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 }
+
+export default async function SupportPage({ searchParams }: { searchParams: Promise<{ tickets?: string }> }) {
+  const admin = await requireSuperAdmin()
   const weekAgo = addDays(new Date(), -7)
+  const { tickets: rawFilter } = await searchParams
+  const filter = TICKET_FILTERS.find((f) => f.key === rawFilter)?.key ?? 'active'
 
-  const [strugglingOrgs, staleComplaints, quietOrgs, totals] = await Promise.all([
+  const [tickets, strugglingOrgs, staleComplaints, quietOrgs, totals, openTickets] = await Promise.all([
+    listAllTickets(
+      filter === 'active' || filter === 'mine' || filter === 'unassigned'
+        ? {
+            status: 'ACTIVE',
+            assignedTo: filter === 'mine' ? admin.id : filter === 'unassigned' ? 'none' : undefined,
+          }
+        : filter === 'all'
+          ? {}
+          : { status: filter },
+    ),
     // Accounts with a lot of unresolved complaints — the best early signal
     // that an owner is about to churn.
     prisma.organization.findMany({
@@ -65,7 +99,17 @@ export default async function SupportPage() {
       take: 10,
     }),
     prisma.complaint.count({ where: { status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS'] } } }),
+    prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
   ])
+  // Within "needs attention", the most urgent and oldest come first.
+  const sortedTickets =
+    filter === 'active' || filter === 'mine' || filter === 'unassigned'
+      ? [...tickets].sort(
+          (a, b) =>
+            (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2) ||
+            a.updatedAt.getTime() - b.updatedAt.getTime(),
+        )
+      : tickets
 
   const atRisk = strugglingOrgs
     .filter((o) => o._count.complaints >= 3)
@@ -74,12 +118,82 @@ export default async function SupportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Customer health"
-        subtitle="Where accounts look like they need a hand — long-open complaints, quiet logins, and owners carrying a backlog."
-        icon="messages"
-        breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Customer health' }]}
+        title="Support & customer health"
+        subtitle="Tickets from PG owners, plus the accounts that look like they need a hand — long-open complaints, quiet logins and backlogs."
+        icon="lifebuoy"
+        breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Support' }]}
       />
 
+      <SectionHeader
+        title="Support tickets"
+        description={`${openTickets} waiting for the StayFlow team.`}
+        icon="lifebuoy"
+      />
+      <nav aria-label="Ticket filter" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {TICKET_FILTERS.map((f) => (
+          <Link
+            key={f.key}
+            href={f.key === 'active' ? '/admin/support' : `/admin/support?tickets=${f.key}`}
+            className={cn(
+              'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              f.key === filter
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+            )}
+            aria-current={f.key === filter ? 'page' : undefined}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </nav>
+      {sortedTickets.length === 0 ? (
+        <EmptyState
+          compact
+          icon="check"
+          title="No tickets here"
+          description={filter === 'active' ? 'Every ticket has an answer.' : 'Nothing matches this filter.'}
+        />
+      ) : (
+        <div className="space-y-2">
+          {sortedTickets.map((t) => {
+            const status = t.status as TicketStatus
+            return (
+              <Link key={t.id} href={`/admin/support/${t.id}`} className="block">
+                <Card className="transition-colors hover:border-slate-300">
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <LifeBuoy className="size-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-900">{t.subject}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {t.code} · {t.organization.name} · {categoryLabel(t.category)} · updated {relativeTime(t.updatedAt)}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <StatusChip label={ADMIN_STATUS_LABEL[status]} chip={TICKET_STATUS_STYLE[status].chip} />
+                        {t.priority !== 'NORMAL' && (
+                          <StatusChip
+                            label={priorityLabel(t.priority)}
+                            chip={PRIORITY_STYLE[t.priority as TicketPriority] ?? PRIORITY_STYLE.NORMAL}
+                          />
+                        )}
+                        {!t.assignedTo && status !== 'CLOSED' && (
+                          <span className="text-[11px] text-slate-400">unassigned</span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+
+      <SectionHeader
+        title="Customer health"
+        description="Accounts that may need a call before they turn into a ticket."
+        icon="messages"
+      />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
           label="Open complaints platform-wide"

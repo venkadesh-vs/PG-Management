@@ -395,6 +395,42 @@ export default async function SubscriptionPage() {
             </Card>
           )
         })}
+        {usage.metered.map((row) => {
+          const near = row.percent != null && row.percent >= 80
+          const full = row.limit != null && row.used >= row.limit
+          const unit = row.unit ? ` ${row.unit}` : ''
+          return (
+            <Card key={row.key} className="min-w-0">
+              <CardContent className="space-y-2 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.label}</p>
+                <p className="font-display text-xl font-semibold tabular text-slate-900">
+                  {row.used}
+                  <span className="text-sm font-normal text-slate-500">
+                    {row.limit == null ? `${unit} · unlimited` : ` of ${row.limit}${unit}`}
+                  </span>
+                </p>
+                {row.limit != null && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="meter" aria-valuenow={row.used} aria-valuemin={0} aria-valuemax={row.limit} aria-label={row.label}>
+                    <div
+                      className={cn('h-full rounded-full', full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-emerald-500')}
+                      style={{ width: `${row.percent ?? 0}%` }}
+                    />
+                  </div>
+                )}
+                {full && (
+                  <p className="text-[11px] text-red-600">
+                    {row.key === 'whatsapp'
+                      ? 'Used up — WhatsApp messages are paused until the 1st. In-app notifications still work.'
+                      : 'Full — new uploads are refused until you upgrade.'}
+                  </p>
+                )}
+                {!full && row.key === 'whatsapp' && (
+                  <p className="text-[11px] text-slate-400">Live messages only; demo mode is not counted.</p>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {plans.length > 0 && (

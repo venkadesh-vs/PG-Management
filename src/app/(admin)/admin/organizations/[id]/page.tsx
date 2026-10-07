@@ -316,12 +316,15 @@ export default async function AdminOrganizationPage({
             <p className="text-xs text-slate-500">{usage.planNames.join(', ') || 'Default plan'}</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {usage.rows.map((row) => (
+            {[
+              ...usage.rows.map((row) => ({ ...row, label: row.key === 'properties' ? 'PGs' : row.key, unit: '' })),
+              ...usage.metered.map((row) => ({ ...row, unit: row.unit ? ` ${row.unit}` : '' })),
+            ].map((row) => (
               <div key={row.key}>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="capitalize text-slate-600">{row.key === 'properties' ? 'PGs' : row.key}</span>
-                  <span className="font-medium text-slate-800 tabular">
-                    {row.used} / {row.limit == null ? 'Unlimited' : row.limit}
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate capitalize text-slate-600">{row.label}</span>
+                  <span className="shrink-0 font-medium text-slate-800 tabular">
+                    {row.used} / {row.limit == null ? 'Unlimited' : `${row.limit}${row.unit}`}
                   </span>
                 </div>
                 {row.percent != null && (

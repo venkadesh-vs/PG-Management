@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { orgAuditWhere } from '@/server/services/audit-log'
+import { parseAuditFilters } from '@/lib/audit-filters'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -145,8 +147,10 @@ export default async function OwnerDashboard({
     skip(
       show.activity,
       () =>
+        // Same rule as the Activity page: the picked PG (or the PGs this
+        // person may see) plus account-wide entries.
         prisma.activityLog.findMany({
-          where: { organizationId: scope.organizationId },
+          where: orgAuditWhere(user, scope, parseAuditFilters({ range: 'all' })),
           orderBy: { createdAt: 'desc' },
           take: 8,
         }),
@@ -647,7 +651,16 @@ export default async function OwnerDashboard({
       {/* ------------------------------------------------ PG comparison */}
       {show.money && comparison.length > 1 && !scope.propertyId && (
         <section className="space-y-4">
-          <SectionHeader title="Your PGs side by side" description="Same month, same metrics." icon="building" />
+          <SectionHeader
+            title="Your PGs side by side"
+            description="Same month, same metrics."
+            icon="building"
+            actions={
+              <Link href="/app/reports#pg-performance" className="text-sm font-medium text-blue-700 hover:underline">
+                Full comparison
+              </Link>
+            }
+          />
           <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
             <Card className="lg:col-span-2">
               <CardContent className="pt-6">

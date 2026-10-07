@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/primitives'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, SearchInput } from '@/components/app/filters'
 import { ResendInviteButton } from '@/components/app/invite-link'
+import { ExportButton } from '@/components/app/export-button'
 import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { AddStaffButton } from './add-staff-button'
 import { AttendanceGrid } from './attendance-grid'
@@ -111,7 +112,16 @@ export default async function StaffPage({
         icon="users"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Staff' }]}
         actions={
-          has('staff.manage') && (
+          <>
+          {has('reports.export') && (
+            <Suspense fallback={null}>
+              <ExportButton kind="staff" label="Export staff" />
+              {user.modules.includes('complaints') && has('complaints.view') && (
+                <ExportButton kind="maintenance" label="Export tasks" />
+              )}
+            </Suspense>
+          )}
+          {has('staff.manage') && (
           <AddStaffButton
             fields={[
               { kind: 'text', name: 'name', label: 'Full name', required: true, half: true },
@@ -168,7 +178,8 @@ export default async function StaffPage({
                 : []),
             ]}
           />
-          )
+          )}
+          </>
         }
       />
 

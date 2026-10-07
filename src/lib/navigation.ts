@@ -68,6 +68,8 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Subscription', href: '/app/subscription', icon: 'sparkles', module: 'settings', permission: 'billing.manage' },
       { label: 'Notifications', href: '/app/notifications', icon: 'bell', badge: 'notifications' },
       { label: 'Settings', href: '/app/settings', icon: 'settings', module: 'settings' },
+      { label: 'Help centre', href: '/app/help', icon: 'help' },
+      { label: 'Support', href: '/app/support', icon: 'lifebuoy', permission: 'settings.manage' },
     ],
   },
 ]
@@ -96,7 +98,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: 'Feature Controls', href: '/admin/features', icon: 'shield' },
       { label: 'System Health', href: '/admin/health', icon: 'alert' },
       { label: 'Announcements', href: '/admin/announcements', icon: 'megaphone' },
-      { label: 'Customer health', href: '/admin/support', icon: 'messages' },
+      { label: 'Support & health', href: '/admin/support', icon: 'lifebuoy' },
       { label: 'Notifications', href: '/admin/notifications', icon: 'bell', badge: 'notifications' },
       { label: 'Audit Logs', href: '/admin/audit', icon: 'history' },
       { label: 'System Settings', href: '/admin/settings', icon: 'settings' },

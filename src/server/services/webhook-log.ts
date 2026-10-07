@@ -3,6 +3,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { webhookEventKey } from '@/lib/webhook-key'
+import { logError } from '@/lib/logger'
 
 export { webhookEventKey }
 
@@ -120,7 +121,12 @@ export async function runLoggedWebhook(params: {
     return { duplicate: false, status, ...result }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error(`[webhooks/${params.provider}]`, params.type, params.eventId, error)
+    void logError('webhook.failed', error, {
+      code: 'WEBHOOK_FAILED',
+      provider: params.provider,
+      webhookType: params.type,
+      eventId: params.eventId,
+    })
     await finishWebhook(claim.id, { status: 'FAILED', error: message })
     return { duplicate: false, status: 'FAILED', handled: false, note: 'processing failed; logged for retry' }
   }

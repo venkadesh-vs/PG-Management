@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fail, route } from '@/lib/api-helpers'
 import type { SessionUser } from '@/lib/auth'
-import { assertResidentAccess, ForbiddenError, inScope, NotFoundError, workerPropertyId } from '@/lib/tenancy'
+import { assertResidentAccess, ForbiddenError, hasPermission, inScope, NotFoundError, workerPropertyId } from '@/lib/tenancy'
 import { getDownloadUrl, readLocal } from '@/server/storage'
 
 /**
@@ -54,7 +54,21 @@ async function referencingRecords(file: FileRow) {
   return { complaints, tasks }
 }
 
+/** True when the file is attached to one of its organization's support tickets. */
+async function onSupportTicket(file: FileRow) {
+  const hit = await prisma.supportMessage.findFirst({
+    where: { attachmentUrl: `/api/uploads/${file.id}`, ticket: { organizationId: file.organizationId } },
+    select: { id: true },
+  })
+  return !!hit
+}
+
 async function assertCanRead(user: SessionUser, file: FileRow) {
+  // The StayFlow team sees only what a customer attached to a support ticket.
+  if (user.role === 'SUPER_ADMIN') {
+    if (await onSupportTicket(file)) return
+    throw new NotFoundError('File not found')
+  }
   if (!user.organizationId || user.organizationId !== file.organizationId) throw new NotFoundError('File not found')
 
   if (user.role === 'TENANT') {
@@ -83,6 +97,8 @@ async function assertCanRead(user: SessionUser, file: FileRow) {
     return
   }
   if (user.propertyIds.length) {
+    // Support attachments belong to the account, not a PG: anyone who can follow the tickets may open them.
+    if (hasPermission(user, 'settings.manage') && (await onSupportTicket(file))) return
     const refs = await referencingRecords(file)
     const records = [...refs.complaints, ...refs.tasks]
     // Unreferenced files (just uploaded, not yet attached) stay visible to the uploader only.

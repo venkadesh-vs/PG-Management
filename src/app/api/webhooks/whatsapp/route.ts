@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { logError } from '@/lib/logger'
 import { NextResponse } from 'next/server'
 import type { MessageStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
       }
     }
   } catch (error) {
-    console.error('[whatsapp webhook] processing failed', error)
+    void logError('webhook.failed', error, { code: 'WEBHOOK_FAILED', provider: 'whatsapp', route: '/api/webhooks/whatsapp' })
   }
   return NextResponse.json({ received: true })
 }

@@ -2,11 +2,13 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { isActive, type NavItem, type NavSection } from '@/lib/navigation'
 import { Icon, type IconName } from '@/lib/icons'
+import { withPgScope } from '@/lib/pg-scope'
 import type { ShellBadges } from './app-shell'
 
 /** Preferred phone tabs, in order. Labels are shortened for the bar. */
@@ -57,6 +59,7 @@ export function MobileBottomNav({
   onMore: () => void
 }) {
   const tabs = React.useMemo(() => bottomTabs(nav), [nav])
+  const property = useSearchParams().get('property')
   const activeHref = moreOpen ? null : (tabs.find((t) => isActive(pathname, t))?.href ?? null)
   const moreActive = moreOpen || activeHref === null
 
@@ -72,7 +75,7 @@ export function MobileBottomNav({
           return (
             <li key={tab.href} className="flex-1">
               <Link
-                href={tab.href}
+                href={withPgScope(tab.href, property)}
                 aria-current={active ? 'page' : undefined}
                 className="relative flex flex-col items-center gap-0.5 rounded-2xl px-1 py-1.5"
               >

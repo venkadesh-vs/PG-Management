@@ -9,11 +9,17 @@
 export class ApiError extends Error {
   status: number
   details?: unknown
-  constructor(message: string, status: number, details?: unknown) {
+  /** Error code from lib/error-codes, e.g. PLAN_LIMIT. */
+  code?: string
+  /** Request reference to quote to support. */
+  ref?: string
+  constructor(message: string, status: number, details?: unknown, code?: string, ref?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.details = details
+    this.code = code
+    this.ref = ref
   }
 }
 
@@ -40,8 +46,9 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const payload = text ? safeParse(text) : null
 
   if (!res.ok) {
-    const message = (payload as { error?: string } | null)?.error ?? FALLBACK[res.status] ?? FALLBACK[500]
-    throw new ApiError(message, res.status, (payload as { details?: unknown } | null)?.details)
+    const body = payload as { error?: string; details?: unknown; code?: string; ref?: string } | null
+    const message = body?.error ?? FALLBACK[res.status] ?? FALLBACK[500]
+    throw new ApiError(message, res.status, body?.details, body?.code, body?.ref ?? res.headers.get('x-request-id') ?? undefined)
   }
 
   return payload as T
@@ -70,7 +77,11 @@ export function friendlyError(error: unknown, action?: string): { title: string;
     if (error.status === 402) return { title: 'Subscription paused', description: error.message }
     if (error.status === 403) return { title: 'Not allowed', description: error.message }
     if (error.status === 429) return { title: 'Slow down a little', description: error.message }
-    if (error.status >= 500) return { title: doing, description: error.message }
+    if (error.status >= 500) {
+      // Server messages already carry the reference; add it when they don't.
+      const ref = error.ref && !error.message.includes(error.ref) ? ` Reference: ${error.ref}.` : ''
+      return { title: doing, description: error.message + ref }
+    }
     return { title: doing, description: error.message }
   }
   return { title: doing, description: FALLBACK[500] }

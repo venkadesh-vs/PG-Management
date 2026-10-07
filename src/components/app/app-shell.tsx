@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { isActive, type NavSection } from '@/lib/navigation'
+import { withPgScope } from '@/lib/pg-scope'
 import { Icon } from '@/lib/icons'
 import { PROPERTY_THEMES } from '@/lib/theme'
 import { Logo, LogoMark } from '@/components/marketing/logo'
@@ -242,6 +243,8 @@ function SidebarNav({
   pathname: string
   badges: ShellBadges
 }) {
+  // Keep the PG picked in the switcher when moving between pages.
+  const property = useSearchParams().get('property')
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5 scrollbar-slim">
       {nav.map((section, i) => (
@@ -257,7 +260,7 @@ function SidebarNav({
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={withPgScope(item.href, property)}
                 className={cn(
                   'group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                   active

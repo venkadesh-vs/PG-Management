@@ -121,3 +121,70 @@ export function normalisePlanFeatures(selected: string[]): string[] {
   const optional = selected.filter((k) => OPTIONAL_KEYS.has(k))
   return [...CORE_KEYS, ...new Set(optional)]
 }
+
+// ------------------------------------------------------- metered limits ----
+
+/**
+ * Usage limits measured over time rather than counted records: WhatsApp
+ * messages per calendar month (IST) and total file storage. null = unlimited.
+ */
+export type MeteredKey = 'whatsapp' | 'storage'
+
+export type MeteredPlanLimits = {
+  name: string
+  whatsappMonthlyLimit?: number | null
+  storageLimitMb?: number | null
+}
+
+export const METERED_FIELD: Record<MeteredKey, 'whatsappMonthlyLimit' | 'storageLimitMb'> = {
+  whatsapp: 'whatsappMonthlyLimit',
+  storage: 'storageLimitMb',
+}
+
+/** Most generous among the org's plans; any unlimited plan (or none) = unlimited. */
+export function effectiveMeteredLimit(plans: MeteredPlanLimits[], key: MeteredKey): number | null {
+  if (!plans.length) return null
+  const values = plans.map((p) => p[METERED_FIELD[key]])
+  if (values.some((v) => v == null)) return null
+  return Math.max(...(values as number[]))
+}
+
+const IST_OFFSET_MS = 330 * 60 * 1000
+
+/** First instant of the current calendar month in India, as a UTC Date. */
+export function istMonthStart(now: Date): Date {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS)
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), 1) - IST_OFFSET_MS)
+}
+
+/** "2026-10": the IST month a moment falls in (for once-a-month notices). */
+export function istMonthKey(now: Date): string {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS)
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/** Whether another WhatsApp message may go out this month. */
+export function whatsappAllowed(sentThisMonth: number, limit: number | null): boolean {
+  return limit == null || sentThisMonth < limit
+}
+
+export const MB = 1024 * 1024
+
+/** Whether a file of `addingBytes` fits in the storage limit. */
+export function storageAllowed(usedBytes: number, addingBytes: number, limitMb: number | null): boolean {
+  return limitMb == null || usedBytes + addingBytes <= limitMb * MB
+}
+
+/** Megabytes with one decimal, for usage displays. */
+export function toMb(bytes: number): number {
+  return Math.round((bytes / MB) * 10) / 10
+}
+
+export function whatsappLimitMessage(planName: string, limit: number): string {
+  return `Your ${planName} plan includes ${limit} WhatsApp message${limit === 1 ? '' : 's'} a month, and this month's are used up. Upgrade at ${UPGRADE_PATH} to keep sending; messages resume on the 1st.`
+}
+
+export function storageLimitMessage(planName: string, limitMb: number): string {
+  const size = limitMb >= 1024 ? `${Math.round((limitMb / 1024) * 10) / 10} GB` : `${limitMb} MB`
+  return `Your ${planName} plan includes ${size} of file storage and it is full. Upgrade at ${UPGRADE_PATH} for more space.`
+}

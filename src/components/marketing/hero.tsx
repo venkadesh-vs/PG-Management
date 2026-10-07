@@ -29,7 +29,8 @@ export function Hero() {
   const ref = React.useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
   const dashY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 90])
-  const chipY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60])
+  // A small counter-drift only: larger values pull the chips off the frame and over the hero text.
+  const chipY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -16])
 
   const rise = (delay: number) =>
     reduce
@@ -109,7 +110,9 @@ export function Hero() {
           </Tilt>
 
           <motion.div style={{ y: chipY }} className="pointer-events-none absolute inset-0">
-            <FloatingChip className="-left-3 top-[18%] sm:-left-8" delay={0.9}>
+            {/* Chips sit on empty parts of the mock-up — the title bar, the sidebar below its menu, and under
+                the frame — so they never cover its figures or the hero text. */}
+            <FloatingChip className="-right-3 -top-6" delay={0.9}>
               <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                 <IndianRupee className="size-3.5" />
               </span>
@@ -118,7 +121,7 @@ export function Hero() {
                 <span className="block text-xs font-semibold text-slate-900">₹9,000 paid</span>
               </span>
             </FloatingChip>
-            <FloatingChip className="-right-2 top-[46%] sm:-right-6" delay={1.15} slow>
+            <FloatingChip className="-left-3 top-[60%] lg:-left-5" delay={1.15} slow>
               <span className="flex size-7 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
                 <Wrench className="size-3.5" />
               </span>
@@ -127,7 +130,7 @@ export function Hero() {
                 <span className="block text-xs font-semibold text-emerald-700">Resolved by Ravi</span>
               </span>
             </FloatingChip>
-            <FloatingChip className="bottom-[-14px] left-[12%]" delay={1.4}>
+            <FloatingChip className="-bottom-9 right-[18%]" delay={1.4}>
               <span className="flex size-7 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
                 <BedDouble className="size-3.5" />
               </span>

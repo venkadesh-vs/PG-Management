@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       ].join(', '),
     })
   } catch (error) {
-    return handleError(error)
+    return handleError(error, { path: '/api/cron/run', method: 'POST' })
   }
 }
 

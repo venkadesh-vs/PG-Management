@@ -361,14 +361,16 @@ export async function propertyComparison(organizationId: string, propertyIds: st
         prisma.resident.count({
           where: { propertyId: property.id, status: { in: ['ACTIVE', 'NOTICE'] } },
         }),
+        // Net of refunds, like the P&L: partly refunded payments count only
+        // what was kept; reversed payments are out.
         prisma.rentPayment.aggregate({
           where: {
             propertyId: property.id,
-            status: 'SUCCESS',
+            status: { in: ['SUCCESS', 'REFUNDED'] },
             purpose: 'RENT',
             paidAt: { gte: monthStart, lte: monthEnd },
           },
-          _sum: { amount: true },
+          _sum: { amount: true, refundedAmount: true },
         }),
         prisma.rentInvoice.aggregate({
           where: {
@@ -395,7 +397,9 @@ export async function propertyComparison(organizationId: string, propertyIds: st
         city: property.city,
         occupancy,
         residents,
-        collection: collection._sum.amount ?? 0,
+        beds: occupancy.total,
+        occupied: occupancy.occupied,
+        collection: (collection._sum.amount ?? 0) - (collection._sum.refundedAmount ?? 0),
         pending: pending._sum.balance ?? 0,
         expenses: expenses._sum.amount ?? 0,
         complaints,

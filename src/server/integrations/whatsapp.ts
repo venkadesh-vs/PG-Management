@@ -11,6 +11,8 @@ import {
   type WhatsAppTemplateName,
 } from './whatsapp-templates'
 import { isChannelOn, parseNotificationPrefs, typeForTemplate } from '@/lib/notification-prefs'
+import { log } from '@/lib/logger'
+import { noticeWhatsAppLimitOnce, whatsappQuota } from '@/server/services/plan-limits'
 
 /**
  * WhatsApp Business delivery.
@@ -49,7 +51,8 @@ export type WhatsAppRequest = {
 }
 
 /** 'disabled' — the organization switched the WhatsApp module off; nothing was stored or sent. */
-export type WhatsAppOutcome = 'sent' | 'demo' | 'failed' | 'opted_out' | 'invalid' | 'disabled'
+/** 'limit' — the plan's monthly WhatsApp allowance is used up; stored as FAILED, not sent. */
+export type WhatsAppOutcome = 'sent' | 'demo' | 'failed' | 'opted_out' | 'invalid' | 'disabled' | 'limit'
 
 export type WhatsAppResult = {
   id: string
@@ -64,6 +67,7 @@ export type WhatsAppResult = {
 export const OPT_OUT_ERROR = 'Recipient opted out'
 export const INVALID_PREFIX = 'Not sent:'
 export const REJECTED_PREFIX = 'Rejected by WhatsApp:'
+export const PLAN_LIMIT_PREFIX = 'Not sent (plan limit):'
 
 export const MAX_ATTEMPTS = 3
 
@@ -325,8 +329,34 @@ export async function sendWhatsApp(req: WhatsAppRequest): Promise<WhatsAppResult
     return { id: record.id, status: 'FAILED', delivered: false, demo: false, outcome: 'opted_out', error: OPT_OUT_ERROR }
   }
 
+  const blocked = await quotaBlock(req.organizationId, req.template)
+  if (blocked) {
+    const record = await prisma.outboundMessage.create({ data: { ...base, status: 'FAILED', error: blocked } })
+    return { id: record.id, status: 'FAILED', delivered: false, demo: false, outcome: 'limit', error: blocked }
+  }
+
   const record = await prisma.outboundMessage.create({ data: { ...base, status: 'QUEUED' } })
   return deliver(record.id, channel, req.template, checked.def, phone, checked.variables)
+}
+
+/**
+ * The plan's monthly WhatsApp allowance (live sends only; login links are
+ * exempt so people can always sign in). Returns the stored error when the
+ * allowance is used up, after telling the owner once this month. A failure
+ * to check never blocks the message: the business action must go through.
+ */
+async function quotaBlock(organizationId: string | null, template: string): Promise<string | null> {
+  if (!organizationId || LOGIN_CRITICAL_TEMPLATES.has(template)) return null
+  try {
+    const quota = await whatsappQuota(organizationId)
+    if (quota.allowed) return null
+    await noticeWhatsAppLimitOnce(organizationId, quota.message ?? '').catch(() => undefined)
+    log('warn', 'whatsapp.plan_limit', { organizationId, code: 'PLAN_LIMIT', used: quota.used, limit: quota.limit })
+    return `${PLAN_LIMIT_PREFIX} ${quota.message}`
+  } catch (error) {
+    log('warn', 'whatsapp.quota_check_failed', { organizationId, message: (error as Error).message })
+    return null
+  }
 }
 
 type MetaError = {
@@ -472,6 +502,12 @@ export async function retryWhatsAppMessage(message: OutboundMessage): Promise<Wh
     return { ...base, status: 'FAILED', demo: false, outcome: 'opted_out', error: OPT_OUT_ERROR }
   }
 
+  const blocked = await quotaBlock(message.organizationId, message.template)
+  if (blocked) {
+    await prisma.outboundMessage.update({ where: { id: message.id }, data: { error: blocked } })
+    return { ...base, status: 'FAILED', demo: false, outcome: 'limit', error: blocked }
+  }
+
   const claim = await prisma.outboundMessage.updateMany({
     where: { id: message.id, status: 'FAILED', attempts: message.attempts },
     data: { status: 'QUEUED', provider: providerFor(channel), isDemo: false },
@@ -515,6 +551,7 @@ export async function retryFailedWhatsApp(options?: {
         { error: { startsWith: OPT_OUT_ERROR } },
         { error: { startsWith: INVALID_PREFIX } },
         { error: { startsWith: REJECTED_PREFIX } },
+        { error: { startsWith: PLAN_LIMIT_PREFIX } },
       ],
       ...(options?.organizationId ? { organizationId: options.organizationId } : {}),
     },
@@ -535,7 +572,7 @@ export async function retryFailedWhatsApp(options?: {
       }),
     )
     if (result.outcome === 'demo') break
-    if (result.outcome === 'disabled') continue
+    if (result.outcome === 'disabled' || result.outcome === 'limit') continue
     report.retried++
     if (result.outcome === 'sent') report.sent++
     else report.failed++

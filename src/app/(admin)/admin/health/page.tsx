@@ -3,10 +3,8 @@ import { CreditCard, Database, HardDrive, Mail, MessageCircle, Server } from 'lu
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { addDays, cn, formatDateTime, relativeTime } from '@/lib/utils'
-import { paymentMode } from '@/server/integrations/payments'
-import { whatsappMode } from '@/server/integrations/whatsapp'
-import { emailMode } from '@/server/integrations/email'
-import { storageProvider } from '@/server/storage'
+import { integrationHealth } from '@/server/services/integration-health'
+import { VERDICT_LABEL, VERDICT_VARIANT } from '@/lib/integration-health'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,17 +76,15 @@ export default async function HealthPage() {
       ])
     : [[], [], [], []]
 
+  const providers = db.ok ? await integrationHealth(now) : []
+
   const lastRun = runs.find((r) => r.job === 'daily-automation') ?? runs[0]
   const webhookCount = (s: string) => webhookCounts.find((c) => c.status === s)?._count._all ?? 0
   const failedBy = (c: string) => failedMessages.find((m) => m.channel === c)?._count._all ?? 0
   const lastRunStale = !lastRun || now.getTime() - lastRun.startedAt.getTime() > 26 * 3600_000
 
-  const integrations = [
-    { name: 'Payments (Razorpay)', icon: CreditCard, live: paymentMode() === 'live' },
-    { name: 'WhatsApp', icon: MessageCircle, live: whatsappMode() === 'meta' },
-    { name: 'Email', icon: Mail, live: emailMode() !== 'demo' },
-    { name: 'File storage', icon: HardDrive, live: storageProvider() === 's3', demoLabel: 'Local disk' },
-  ]
+  const ICONS = { payment: CreditCard, whatsapp: MessageCircle, email: Mail, storage: HardDrive } as const
+  const when = (d: Date | null) => (d ? relativeTime(d) : 'never')
 
   return (
     <div className="space-y-6">
@@ -132,36 +128,86 @@ export default async function HealthPage() {
         />
       </div>
 
-      <SectionHeader title="Integrations" description="Demo mode means nothing leaves StayFlow — records are labelled as simulations." icon="shield" />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-slate-100">
-              <Server className="size-4 text-slate-500" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-800">App</p>
-              <p className="text-xs text-slate-500">
-                {process.env.NODE_ENV} · Node {process.version} · up {Math.round(process.uptime() / 60)} min
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        {integrations.map((i) => (
-          <Card key={i.name}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className={cn('flex size-9 items-center justify-center rounded-xl', i.live ? 'bg-emerald-50' : 'bg-amber-50')}>
-                <i.icon className={cn('size-4', i.live ? 'text-emerald-600' : 'text-amber-600')} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-800">{i.name}</p>
-                <Badge variant={i.live ? 'success' : 'warning'} size="sm">
-                  {i.live ? 'Live' : (i.demoLabel ?? 'Demo')}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <SectionHeader
+        title="Integrations"
+        description="Mode, last success and failures in the last 7 days, from the webhook log, message log and uploads. Demo means nothing leaves StayFlow."
+        icon="shield"
+      />
+      <Card>
+        <CardContent className="flex items-center gap-3 p-4">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-slate-100">
+            <Server className="size-4 text-slate-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-800">App</p>
+            <p className="text-xs text-slate-500">
+              {process.env.NODE_ENV} · Node {process.version} · up {Math.round(process.uptime() / 60)} min · uptime check: GET /api/health
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {providers.map((p) => {
+          const Icon = ICONS[p.key]
+          const tone = p.verdict === 'failing' ? 'red' : p.verdict === 'degraded' ? 'amber' : p.verdict === 'healthy' ? 'emerald' : 'slate'
+          return (
+            <Card key={p.key} className="min-w-0">
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-xl',
+                      tone === 'red' && 'bg-red-50',
+                      tone === 'amber' && 'bg-amber-50',
+                      tone === 'emerald' && 'bg-emerald-50',
+                      tone === 'slate' && 'bg-slate-100',
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        'size-4',
+                        tone === 'red' && 'text-red-600',
+                        tone === 'amber' && 'text-amber-600',
+                        tone === 'emerald' && 'text-emerald-600',
+                        tone === 'slate' && 'text-slate-500',
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-800">{p.name}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {p.mode}
+                      {p.ownConnections ? ` · ${p.ownConnections} own account${p.ownConnections === 1 ? '' : 's'}` : ''}
+                    </p>
+                  </div>
+                  <Badge variant={VERDICT_VARIANT[p.verdict]} size="sm">
+                    {VERDICT_LABEL[p.verdict]}
+                  </Badge>
+                </div>
+                <dl className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-slate-500">Last success</dt>
+                    <dd className="font-medium text-slate-800">{when(p.lastSuccessAt)}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-slate-500">Last failure</dt>
+                    <dd className={cn('font-medium', p.lastFailureAt ? 'text-red-600' : 'text-slate-800')}>{when(p.lastFailureAt)}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-slate-500">OK (7 days)</dt>
+                    <dd className="font-medium tabular text-slate-800">{p.successes}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-slate-500">Failed (7 days)</dt>
+                    <dd className={cn('font-medium tabular', p.failures ? 'text-red-600' : 'text-slate-800')}>{p.failures}</dd>
+                  </div>
+                </dl>
+                {p.lastError && <p className="line-clamp-2 break-words text-xs text-red-600">{p.lastError}</p>}
+                <p className="text-[11px] text-slate-400">{p.note}</p>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       <SectionHeader title="Automation runs" description="Each daily pass, newest first." icon="history" />

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
+import { log, logError, sendAlert } from '@/lib/logger'
 import { addDays, startOfDay, startOfMonth } from '@/lib/utils'
 import { sweepRateLimits } from '@/lib/rate-limit'
 import {
@@ -126,16 +127,31 @@ export async function runDailyAutomation(options?: AutomationOptions): Promise<A
           .catch((error) => console.error('[automation] could not finish cron run', error))
       : Promise.resolve()
 
+  const started = Date.now()
   try {
     const report = await runAutomationPass(options)
+    const status = report.errors.length ? 'PARTIAL' : 'SUCCESS'
     await finish({
-      status: report.errors.length ? 'PARTIAL' : 'SUCCESS',
+      status,
       report,
       error: report.errors.length ? report.errors.slice(0, 10).join('\n') : undefined,
     })
+    log(status === 'SUCCESS' ? 'info' : 'warn', 'cron.finished', {
+      job,
+      cronRunId: run?.id ?? null,
+      organizationId: options?.organizationId ?? null,
+      outcome: status,
+      ran: report.ran,
+      durationMs: Date.now() - started,
+      ...(report.errors.length ? { code: 'CRON_FAILED', errors: report.errors.slice(0, 10) } : {}),
+    })
+    if (report.errors.length) {
+      await sendAlert(`StayFlow daily automation finished with ${report.errors.length} error(s) [CRON_FAILED]: ${report.errors[0]}`)
+    }
     return report
   } catch (error) {
     await finish({ status: 'FAILED', error: error instanceof Error ? error.message : String(error) })
+    await logError('cron.failed', error, { code: 'CRON_FAILED', job, cronRunId: run?.id ?? null, durationMs: Date.now() - started })
     throw error
   }
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { consolidatePgs } from '@/lib/pg-scope'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { ArrowDownRight, ArrowUpRight, Download, Printer } from 'lucide-react'
@@ -134,6 +135,7 @@ export default async function ReportsPage({
       take: 30,
     }),
   ])
+  const pgTotals = consolidatePgs(comparison)
 
   // StatCard wants a {value} object, and no badge at all when there is no
   // previous period to compare against.
@@ -310,8 +312,12 @@ export default async function ReportsPage({
 
       {/* ----------------------------------------------- PG performance */}
       {comparison.length > 1 && (
-        <section className="space-y-4">
-          <SectionHeader title="PG performance" description="Every property, same yardstick." icon="building" />
+        <section id="pg-performance" className="scroll-mt-20 space-y-4">
+          <SectionHeader
+            title="PG performance"
+            description="Every PG this month, same yardstick. Collected is net of refunds; pending is all unpaid rent to date."
+            icon="building"
+          />
           <Card>
             <CardContent className="pt-6">
               <ComparisonChart
@@ -330,12 +336,14 @@ export default async function ReportsPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>PG</TableHead>
+                  <TableHead className="text-right">Beds</TableHead>
                   <TableHead className="text-right">Residents</TableHead>
                   <TableHead className="text-right">Occupancy</TableHead>
                   <TableHead className="text-right">Collected</TableHead>
                   <TableHead className="text-right">Pending</TableHead>
                   <TableHead className="text-right">Expenses</TableHead>
                   <TableHead className="text-right">Net</TableHead>
+                  <TableHead className="text-right">Open complaints</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -345,11 +353,12 @@ export default async function ReportsPage({
                   return (
                     <TableRow key={property.id}>
                       <TableCell>
-                        <span className="flex items-center gap-2">
+                        <Link href={`/app?property=${property.id}`} className="flex items-center gap-2 hover:underline">
                           <span className={cn('size-2 rounded-full', theme.bgSolid)} />
                           <span className="font-medium text-slate-800">{property.name}</span>
-                        </span>
+                        </Link>
                       </TableCell>
+                      <TableCell className="text-right tabular">{property.beds}</TableCell>
                       <TableCell className="text-right tabular">{property.residents}</TableCell>
                       <TableCell className="text-right tabular">{property.occupancy.rate}%</TableCell>
                       <TableCell className="text-right text-emerald-600 tabular">
@@ -369,31 +378,26 @@ export default async function ReportsPage({
                       >
                         {formatMoney(net)}
                       </TableCell>
+                      <TableCell className={cn('text-right tabular', property.complaints ? 'text-amber-600' : 'text-slate-500')}>
+                        {property.complaints}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableCell className="font-semibold">Total</TableCell>
-                  <TableCell className="text-right font-semibold tabular">
-                    {comparison.reduce((s, p) => s + p.residents, 0)}
+                  <TableCell className="font-semibold">All PGs</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{pgTotals.beds}</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{pgTotals.residents}</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{pgTotals.occupancyRate}%</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.collection)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.pending)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular">{formatMoney(pgTotals.expenses)}</TableCell>
+                  <TableCell className={cn('text-right font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-red-700')}>
+                    {formatMoney(pgTotals.net)}
                   </TableCell>
-                  <TableCell />
-                  <TableCell className="text-right font-semibold tabular">
-                    {formatMoney(comparison.reduce((s, p) => s + p.collection, 0))}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular">
-                    {formatMoney(comparison.reduce((s, p) => s + p.pending, 0))}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular">
-                    {formatMoney(comparison.reduce((s, p) => s + p.expenses, 0))}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular">
-                    {formatMoney(
-                      comparison.reduce((s, p) => s + p.collection - p.expenses, 0),
-                    )}
-                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular">{pgTotals.complaints}</TableCell>
                 </TableRow>
               </TableFooter>
             </Table>
@@ -415,7 +419,7 @@ export default async function ReportsPage({
                       <span className="truncate font-medium text-slate-900">{property.name}</span>
                     </p>
                     <span className="shrink-0 text-xs text-slate-500 tabular">
-                      {property.residents} residents · {property.occupancy.rate}%
+                      {property.occupied}/{property.beds} beds · {property.occupancy.rate}%
                     </span>
                   </div>
                   <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
@@ -439,7 +443,9 @@ export default async function ReportsPage({
                     </div>
                   </dl>
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
-                    <span className="text-xs text-slate-500">Net</span>
+                    <span className="text-xs text-slate-500">
+                      Net{property.complaints ? ` · ${property.complaints} open complaint${property.complaints === 1 ? '' : 's'}` : ''}
+                    </span>
                     <span
                       className={cn(
                         'font-semibold tabular',
@@ -453,11 +459,11 @@ export default async function ReportsPage({
               )
             })}
             <li className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-              <span className="font-semibold text-slate-800">
-                Total · {comparison.reduce((s, p) => s + p.residents, 0)} residents
+              <span className="min-w-0 font-semibold text-slate-800">
+                All PGs · {pgTotals.occupied}/{pgTotals.beds} beds · {pgTotals.occupancyRate}%
               </span>
-              <span className="font-semibold tabular">
-                {formatMoney(comparison.reduce((s, p) => s + p.collection - p.expenses, 0))}
+              <span className={cn('shrink-0 font-semibold tabular', pgTotals.net >= 0 ? 'text-emerald-700' : 'text-red-700')}>
+                {formatMoney(pgTotals.net)}
               </span>
             </li>
           </ul>

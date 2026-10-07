@@ -9,47 +9,25 @@ export async function register() {
 }
 
 /**
- * Every server-side error (pages, route handlers, server actions) lands
- * here. It is written as one structured JSON line — searchable in Netlify /
- * any log drain — and, when ERROR_WEBHOOK_URL is set, posted to a Slack /
- * Discord / Google Chat webhook so someone is told without watching logs.
+ * Every unhandled server-side error (pages, route handlers, server actions)
+ * lands here and goes through lib/logger: one structured JSON line, plus an
+ * ERROR_WEBHOOK_URL alert when configured.
  */
 export async function onRequestError(
   err: unknown,
   request: { path: string; method: string },
   context: { routerKind: string; routePath: string; routeType: string },
 ) {
-  const error = err instanceof Error ? err : new Error(String(err))
   const digest =
     typeof err === 'object' && err !== null && 'digest' in err ? String((err as { digest: unknown }).digest) : undefined
-  const entry = {
-    level: 'error',
-    at: new Date().toISOString(),
-    message: error.message,
-    digest,
+  const { logError } = await import('./lib/logger')
+  const { errorCodeFor } = await import('./lib/error-codes')
+  await logError('request.unhandled', err, {
+    requestId: digest,
     method: request.method,
-    path: request.path,
-    route: context.routePath,
+    route: request.path,
+    routePath: context.routePath,
     kind: context.routeType,
-    stack: error.stack?.split('\n').slice(0, 8).join('\n'),
-  }
-  console.error(JSON.stringify(entry))
-
-  const hook = process.env.ERROR_WEBHOOK_URL
-  if (hook) {
-    try {
-      await fetch(hook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // `text` (Slack/Google Chat) and `content` (Discord) cover the common hooks.
-        body: JSON.stringify({
-          text: `StayFlow error on ${entry.method} ${entry.path}: ${entry.message}${digest ? ` (ref ${digest})` : ''}`,
-          content: `StayFlow error on ${entry.method} ${entry.path}: ${entry.message}${digest ? ` (ref ${digest})` : ''}`,
-        }),
-        signal: AbortSignal.timeout(3000),
-      })
-    } catch {
-      // Reporting must never take the request down with it.
-    }
-  }
+    code: errorCodeFor(500, request.path),
+  })
 }

@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -14,6 +15,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
+import { ExportButton } from '@/components/app/export-button'
 import { assertResidentAccess } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import {
@@ -501,6 +503,16 @@ export default async function ResidentDetailPage({
               }))}
             />
           </div>
+          {has('reports.export') && has('rent.view') && user.modules.includes('rent') && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="w-full sm:w-auto">Export for all residents:</span>
+              <Suspense fallback={null}>
+                <ExportButton kind="charges" label="Charges" />
+                <ExportButton kind="rent-revisions" label="Rent changes" />
+                <ExportButton kind="deposits" label="Deposits" />
+              </Suspense>
+            </div>
+          )}
           {resident.invoices.length === 0 ? (
             <EmptyState
               icon="file"

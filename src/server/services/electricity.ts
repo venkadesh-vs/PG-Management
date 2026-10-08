@@ -88,6 +88,23 @@ export const meterCreateSchema = z.object({
   replaceExisting: z.boolean().optional(),
 })
 
+/** Many rooms at once: the one-screen meter setup. */
+export const bulkMeterSchema = z.object({
+  action: z.literal('BULK'),
+  propertyId: z.string().min(1),
+  installedOn: dateText,
+  meters: z
+    .array(
+      z.object({
+        roomId: z.string().min(1),
+        meterNumber: z.string().trim().min(1, 'Enter the meter number').max(40),
+        initialReading: readingValue,
+      }),
+    )
+    .min(1, 'Tick at least one room')
+    .max(500),
+})
+
 export const meterUpdateSchema = z.object({
   meterId: z.string().min(1),
   meterNumber: z.string().trim().min(1).max(40).optional(),
@@ -570,6 +587,46 @@ export async function createMeter(user: SessionUser, input: z.infer<typeof meter
     }
     throw error
   }
+}
+
+/**
+ * Adds a meter to many rooms in one go. Each room is saved on its own, so
+ * one bad row (a used meter number, a room that already has a meter) never
+ * blocks the others; those come back in `errors` with the reason.
+ */
+export async function createMetersBulk(user: SessionUser, input: z.infer<typeof bulkMeterSchema>) {
+  assertInScope(user, input.propertyId)
+  const rooms = await prisma.room.findMany({
+    where: { id: { in: input.meters.map((m) => m.roomId) }, propertyId: input.propertyId, property: { organizationId: user.organizationId! } },
+    select: { id: true, number: true },
+  })
+  const roomNumber = new Map(rooms.map((r) => [r.id, r.number]))
+  const created: { meterId: string; roomId: string; roomNumber: string; meterNumber: string }[] = []
+  const errors: { roomId: string; roomNumber: string; error: string }[] = []
+  const seen = new Set<string>()
+  for (const m of input.meters) {
+    const number = roomNumber.get(m.roomId) ?? '?'
+    if (seen.has(m.roomId)) {
+      errors.push({ roomId: m.roomId, roomNumber: number, error: `Room ${number} is listed twice` })
+      continue
+    }
+    seen.add(m.roomId)
+    try {
+      const meter = await createMeter(user, {
+        propertyId: input.propertyId,
+        roomId: m.roomId,
+        meterNumber: m.meterNumber,
+        installedOn: input.installedOn,
+        initialReading: m.initialReading,
+      })
+      created.push({ meterId: meter.id, roomId: m.roomId, roomNumber: number, meterNumber: meter.meterNumber })
+    } catch (e) {
+      if (e instanceof ValidationError || e instanceof ConflictError || e instanceof NotFoundError) {
+        errors.push({ roomId: m.roomId, roomNumber: number, error: e.message })
+      } else throw e
+    }
+  }
+  return { created, errors }
 }
 
 export async function updateMeter(user: SessionUser, input: z.infer<typeof meterUpdateSchema>) {

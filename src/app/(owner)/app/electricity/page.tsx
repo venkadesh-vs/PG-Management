@@ -5,13 +5,14 @@ import { requireAccess } from '@/lib/auth'
 import { resolveScope, hasPermission } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { CHART_COLORS } from '@/lib/theme'
-import { billingMonthLabel, monthKeyOf } from '@/lib/electricity'
+import { billingMonthLabel, monthKeyOf, monthStart } from '@/lib/electricity'
 import {
   electricitySettings,
   electricitySummary,
   electricityTrend,
   listBills,
   listMeters,
+  rateFor,
 } from '@/server/services/electricity'
 import { PageHeader } from '@/components/app/page-header'
 import { StatCard, StatGrid } from '@/components/app/stat-card'
@@ -19,10 +20,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CategoryBarChart } from '@/components/app/charts'
 import { ExportButton } from '@/components/app/export-button'
 import { FilterBar, FilterSelect } from '@/components/app/filters'
-import { EmptyState } from '@/components/ui/feedback'
 import { Button } from '@/components/ui/button'
 import { ElectricityTabs } from './electricity-tabs'
-import { MonthlyFlow } from './monthly-flow'
+import { meterCycleState } from '@/server/services/electricity-cycle'
+import { MonthlyReadings, type MonthlyRoom } from './monthly-readings'
+import { ElectricitySetup, type SetupRoom } from './setup'
 import { BillHistory } from './bill-history'
 
 export const metadata: Metadata = { title: 'Electricity' }
@@ -65,6 +67,8 @@ export default async function ElectricityPage({
     electricitySettings(user.organizationId!),
   ])
   const activeMeters = meters.filter((m) => m.status === 'ACTIVE')
+  const setup = propertyId ? await loadSetup(propertyId, month, activeMeters) : null
+  const showSetup = Boolean(setup && (setup.anyRate === null || !activeMeters.length || params.setup === '1'))
 
   // Filter options come from the bills themselves.
   const rooms = [...new Map(bills.map((b) => [b.room.id, b.room.number])).entries()]
@@ -89,15 +93,6 @@ export default async function ElectricityPage({
       />
       <ElectricityTabs active="billing" />
 
-      <StatGrid cols={3}>
-        <StatCard label={`Electricity · ${billingMonthLabel(month)}`} value={summary.amount} format="money" icon="zap" hint={`${formatUnits(summary.units)} units`} />
-        <StatCard label="Readings due" value={summary.readingsDue} icon="clock" tone={summary.readingsDue ? 'amber' : 'default'} hint={`${summary.activeMeters} active meter${summary.activeMeters === 1 ? '' : 's'}`} />
-        <StatCard label="Drafts to finalize" value={summary.drafts} icon="file" tone={summary.drafts ? 'amber' : 'default'} hint={`${summary.finalized} finalized`} />
-        <StatCard label="Finalized bills" value={summary.finalized} icon="check" />
-        <StatCard label="Paid by the owner" value={summary.ownerCost} format="money" icon="wallet" hint="Empty rooms and residents already gone" />
-        <StatCard label="Units this month" value={Math.round(summary.units)} icon="gauge" />
-      </StatGrid>
-
       {/* ---------------------------------------------------- Monthly flow */}
       {!propertyId ? (
         <Card>
@@ -113,45 +108,45 @@ export default async function ElectricityPage({
             {!properties.length && <p className="text-sm text-slate-500">Add a PG first.</p>}
           </CardContent>
         </Card>
-      ) : !activeMeters.length ? (
-        <EmptyState
-          icon="zap"
-          title="No meters yet"
-          description="Add each room's meter with its starting reading. Then you can bill electricity room by room every month."
-          action={
-            canManage ? (
-              <Button variant="primary" asChild>
-                <Link href="/app/electricity/meters">Add meters</Link>
-              </Button>
-            ) : undefined
-          }
+      ) : showSetup && setup ? (
+        <ElectricitySetup
+          propertyId={propertyId}
+          propertyName={properties.find((p) => p.id === propertyId)?.name ?? ''}
+          currentRate={setup.anyRate}
+          rooms={setup.setupRooms}
+          canManage={canManage}
         />
-      ) : (
-        <MonthlyFlow
+      ) : setup ? (
+        <MonthlyReadings
           propertyId={propertyId}
           propertyName={properties.find((p) => p.id === propertyId)?.name ?? ''}
           month={month}
+          monthLabel={billingMonthLabel(month)}
           monthOptions={monthOptions}
-          meters={activeMeters.map((m) => ({
-            id: m.id,
-            meterNumber: m.meterNumber,
-            roomNumber: m.room.number,
-            floor: m.room.floor,
-            lastReading: m.lastReading
-              ? { value: m.lastReading.value, date: m.lastReading.readingDate.toISOString() }
-              : null,
-          }))}
+          rate={setup.monthRate}
+          rooms={setup.monthlyRooms}
           drafts={drafts.map(toRow)}
+          roomsWithoutMeter={setup.setupRooms.filter((r) => !r.meterNumber).length}
           canReadings={canReadings}
           canManage={canManage}
-          splitMethod={settings.splitMethod}
-          billingMode={settings.billingMode}
+          splitText={SPLIT_TEXT[settings.splitMethod] ?? ''}
+          modeText={MODE_TEXT[settings.billingMode] ?? ''}
         />
-      )}
+      ) : null}
 
+      {!showSetup && (
+      <StatGrid cols={3}>
+        <StatCard label={`Electricity · ${billingMonthLabel(month)}`} value={summary.amount} format="money" icon="zap" hint={`${formatUnits(summary.units)} units`} />
+        <StatCard label="Readings due" value={summary.readingsDue} icon="clock" tone={summary.readingsDue ? 'amber' : 'default'} hint={`${summary.activeMeters} active meter${summary.activeMeters === 1 ? '' : 's'}`} />
+        <StatCard label="Saved, not charged" value={summary.drafts} icon="file" tone={summary.drafts ? 'amber' : 'default'} hint={`${summary.finalized} charged`} />
+        <StatCard label="Charged bills" value={summary.finalized} icon="check" />
+        <StatCard label="Paid by the owner" value={summary.ownerCost} format="money" icon="wallet" hint="Empty rooms and residents already gone" />
+        <StatCard label="Units this month" value={Math.round(summary.units)} icon="gauge" />
+      </StatGrid>
+      )}
       {/* --------------------------------------------------------- History */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="min-w-0 lg:col-span-2">
+        <Card id="electricity-history" className="min-w-0 scroll-mt-20 lg:col-span-2">
           <CardHeader className="space-y-3">
             <CardTitle className="text-sm">Room bills · {billingMonthLabel(month)}</CardTitle>
             <Suspense>
@@ -244,3 +239,70 @@ function toRow(b: BillRow) {
 }
 
 export type ElectricityBillRow = ReturnType<typeof toRow>
+
+const SPLIT_TEXT: Record<string, string> = {
+  DAYS_STAYED: 'Each room’s bill is shared by the people who stayed, by their days in the room.',
+  EQUAL_PRESENT: 'Each room’s bill is shared equally by the people living there on the reading date.',
+}
+const MODE_TEXT: Record<string, string> = {
+  NEXT_RENT_INVOICE: 'Shares go on the next rent invoice.',
+  SEPARATE_INVOICE: 'Each resident gets a separate electricity bill.',
+}
+
+type ActiveMeter = Awaited<ReturnType<typeof listMeters>>[number]
+
+/**
+ * Everything the setup and monthly screens need for one PG: the rate, every
+ * room with its people and meter, and for each meter the reading the next
+ * bill starts from plus any reading already taken this cycle (e.g. by the
+ * warden) that is not billed yet.
+ */
+async function loadSetup(propertyId: string, month: string, activeMeters: ActiveMeter[]) {
+  const meterIds = activeMeters.map((m) => m.id)
+  const [rooms, occupied, cycle, monthRate, nowRate, latestRate] = await Promise.all([
+    prisma.room.findMany({
+      where: { propertyId },
+      select: { id: true, number: true, floor: { select: { name: true, level: true } } },
+      orderBy: [{ floor: { level: 'asc' } }, { number: 'asc' }],
+    }),
+    prisma.bed.groupBy({ by: ['roomId'], where: { propertyId, residentId: { not: null } }, _count: { _all: true } }),
+    meterCycleState(meterIds),
+    rateFor(prisma, propertyId, monthStart(month)),
+    rateFor(prisma, propertyId, new Date()),
+    prisma.electricityRate.findFirst({ where: { propertyId }, orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }] }),
+  ])
+  const people = new Map(occupied.map((o) => [o.roomId, o._count._all]))
+  const meterByRoom = new Map(activeMeters.map((m) => [m.room.id, m]))
+
+  const setupRooms: SetupRoom[] = rooms.map((r) => ({
+    id: r.id,
+    number: r.number,
+    floor: r.floor.name,
+    people: people.get(r.id) ?? 0,
+    meterNumber: meterByRoom.get(r.id)?.meterNumber ?? null,
+  }))
+
+  const monthlyRooms: MonthlyRoom[] = rooms
+    .filter((r) => meterByRoom.has(r.id))
+    .map((r) => {
+      const meter = meterByRoom.get(r.id)!
+      const state = cycle.get(meter.id)
+      return {
+        meterId: meter.id,
+        meterNumber: meter.meterNumber,
+        roomNumber: r.number,
+        floor: r.floor.name,
+        people: people.get(r.id) ?? 0,
+        baseline: state?.baseline ?? null,
+        pending: state?.pending ?? null,
+      }
+    })
+
+  const rateNumber = (r: { ratePerUnit: unknown } | null) => (r ? Number(String(r.ratePerUnit)) : null)
+  return {
+    setupRooms,
+    monthlyRooms,
+    monthRate: rateNumber(monthRate),
+    anyRate: rateNumber(nowRate) ?? rateNumber(latestRate),
+  }
+}

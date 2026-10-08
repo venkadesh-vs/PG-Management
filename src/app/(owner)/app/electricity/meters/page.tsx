@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope, hasPermission } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
 import { listMeters } from '@/server/services/electricity'
 import { PageHeader } from '@/components/app/page-header'
+import { Button } from '@/components/ui/button'
 import { ElectricityTabs } from '../electricity-tabs'
 import { MeterManager } from './meter-manager'
 
@@ -31,6 +33,13 @@ export default async function MetersPage({ searchParams }: { searchParams: Promi
         subtitle="One meter per room, with its own readings. Replace a meter here when the electricity board changes it."
         icon="zap"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Electricity', href: '/app/electricity' }, { label: 'Meters' }]}
+        actions={
+          hasPermission(user, 'electricity.manage') && scope.propertyId ? (
+            <Button variant="primary" asChild>
+              <Link href={`/app/electricity?property=${scope.propertyId}&setup=1`}>Add meters to all rooms</Link>
+            </Button>
+          ) : undefined
+        }
       />
       <ElectricityTabs active="meters" />
       <MeterManager

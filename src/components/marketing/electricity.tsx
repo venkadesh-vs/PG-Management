@@ -39,7 +39,7 @@ export function ElectricitySection() {
       problem="One EB bill, a calculator and an argument every month. Someone who moved in last week pays the same as everyone else, and empty beds get counted anyway."
       solution="Each room has its own meter. Enter the reading, and StayFlow multiplies the units by that month’s rate and splits the room’s bill by the days each resident actually stayed. Their share lands on the rent invoice by itself."
       benefits={[
-        'Every room’s own meter',
+        'Set up every room’s meter in one screen',
         'A rate per month; old bills never change',
         'Split by people who lived there, never by beds',
         'Added to the rent invoice automatically',

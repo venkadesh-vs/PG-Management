@@ -24,6 +24,11 @@ export default async function TenantRentPage() {
       invoices: { orderBy: { periodStart: 'desc' }, include: { lines: true } },
       payments: { where: { status: 'SUCCESS' }, orderBy: { paidAt: 'desc' } },
       ledger: { orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }], take: 40 },
+      // One-time charges confirmed but not yet on an invoice (e.g. last month's electricity share).
+      charges: {
+        where: { kind: 'ONE_TIME', billedInvoiceId: null, voidedAt: null },
+        orderBy: { startDate: 'asc' },
+      },
     },
   })
   if (!resident) return null
@@ -86,6 +91,37 @@ export default async function TenantRentPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ------------------------------------- Coming on next invoice */}
+      {resident.charges.length > 0 && (
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Coming on your next rent invoice</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Your PG has added these. They will be included in your next rent invoice, so you pay them together with your rent.
+              </p>
+            </div>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {resident.charges.map((charge) => (
+                <li key={charge.id} className="flex items-start justify-between gap-3 py-2">
+                  <LineLabel label={charge.label} kind={charge.category} />
+                  <span className="shrink-0 font-medium tabular-nums text-slate-900">{formatMoney(charge.amount)}</span>
+                </li>
+              ))}
+            </ul>
+            {resident.charges.length > 1 && (
+              <p className="flex justify-between border-t border-slate-100 pt-2 text-sm">
+                <span className="text-slate-500">Total to be added</span>
+                <span className="font-semibold tabular-nums text-slate-900">
+                  {formatMoney(resident.charges.reduce((sum, c) => sum + c.amount, 0))}
+                </span>
+              </p>
+            )}
+            {resident.charges.some((c) => isElectricityLine({ kind: c.category, label: c.label })) && <ElectricityExplainer />}
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="invoices">
         <TabsList className="w-full">

@@ -8,6 +8,9 @@ describe('suggestMeterNumber', () => {
     expect(suggestMeterNumber('101')).toBe('MTR-101')
     expect(suggestMeterNumber(' 2b ')).toBe('MTR-2B')
     expect(suggestMeterNumber('Room 3')).toBe('MTR-ROOM-3')
+    // With the PG's short code, two PGs' room 101 never collide.
+    expect(suggestMeterNumber('101', 'SFM')).toBe('SFM-101')
+    expect(suggestMeterNumber('101', 'sfw ')).toBe('SFW-101')
   })
 })
 

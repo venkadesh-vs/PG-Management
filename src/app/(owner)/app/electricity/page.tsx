@@ -41,7 +41,7 @@ export default async function ElectricityPage({
   const scope = await resolveScope(user, params.property)
   const properties = await prisma.property.findMany({
     where: { id: { in: scope.allowedPropertyIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, code: true },
     orderBy: { name: 'asc' },
   })
 
@@ -112,6 +112,7 @@ export default async function ElectricityPage({
         <ElectricitySetup
           propertyId={propertyId}
           propertyName={properties.find((p) => p.id === propertyId)?.name ?? ''}
+          propertyCode={properties.find((p) => p.id === propertyId)?.code ?? null}
           currentRate={setup.anyRate}
           rooms={setup.setupRooms}
           canManage={canManage}

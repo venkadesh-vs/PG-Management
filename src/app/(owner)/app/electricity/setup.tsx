@@ -31,12 +31,14 @@ const monthInput = (d: Date) => toISODate(d).slice(0, 7)
 export function ElectricitySetup({
   propertyId,
   propertyName,
+  propertyCode,
   currentRate,
   rooms,
   canManage,
 }: {
   propertyId: string
   propertyName: string
+  propertyCode?: string | null
   currentRate: number | null
   rooms: SetupRoom[]
   canManage: boolean
@@ -71,7 +73,7 @@ export function ElectricitySetup({
   // ---------------------------------------------------------------- step 2
   const [installedOn, setInstalledOn] = React.useState(() => toISODate(new Date()))
   const [rows, setRows] = React.useState<Record<string, Row>>(() =>
-    Object.fromEntries(pending.map((r) => [r.id, { include: true, meterNumber: suggestMeterNumber(r.number), initialReading: '' }])),
+    Object.fromEntries(pending.map((r) => [r.id, { include: true, meterNumber: suggestMeterNumber(r.number, propertyCode), initialReading: '' }])),
   )
   const [serverErrors, setServerErrors] = React.useState<Record<string, string>>({})
   const [savingMeters, setSavingMeters] = React.useState(false)
@@ -81,7 +83,7 @@ export function ElectricitySetup({
     // Rooms added elsewhere since the last render get a row too.
     setRows((prev) => {
       const next = { ...prev }
-      for (const r of pending) next[r.id] ??= { include: true, meterNumber: suggestMeterNumber(r.number), initialReading: '' }
+      for (const r of pending) next[r.id] ??= { include: true, meterNumber: suggestMeterNumber(r.number, propertyCode), initialReading: '' }
       return next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,7 +210,7 @@ export function ElectricitySetup({
                     {pending
                       .filter((r) => r.floor === floor)
                       .map((r) => {
-                        const row = rows[r.id] ?? { include: true, meterNumber: suggestMeterNumber(r.number), initialReading: '' }
+                        const row = rows[r.id] ?? { include: true, meterNumber: suggestMeterNumber(r.number, propertyCode), initialReading: '' }
                         const problem = row.include ? serverErrors[r.id] ?? (row.initialReading || row.meterNumber.trim() === '' ? problems[r.id] : undefined) : undefined
                         return (
                           <li

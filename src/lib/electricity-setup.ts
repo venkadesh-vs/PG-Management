@@ -7,8 +7,12 @@
 export type BulkMeterRow = { roomId: string; roomNumber: string; meterNumber: string; initialReading: string }
 
 /** A suggested meter number for a room; the owner can change it. */
-export function suggestMeterNumber(roomNumber: string) {
-  return `MTR-${roomNumber.trim().replace(/\s+/g, '-').toUpperCase()}`
+export function suggestMeterNumber(roomNumber: string, propertyCode?: string | null) {
+  // Meter numbers are unique across the whole account, and two PGs often both have a
+  // room 101, so the PG's short code goes in front when there is one (SFM-101).
+  const clean = (v: string) => v.trim().replace(/\s+/g, '-').toUpperCase()
+  const prefix = propertyCode?.trim() ? clean(propertyCode) : 'MTR'
+  return `${prefix}-${clean(roomNumber)}`
 }
 
 /** Parses a reading typed by a person: up to one decimal place, never negative. */

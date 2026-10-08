@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertTriangle, Calculator, Camera, CheckCircle2, Loader2, PartyPopper } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
-import { liveEstimate } from '@/lib/electricity-setup'
+import { liveEstimate, readingFromUnits, unitsFromReading } from '@/lib/electricity-setup'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -95,8 +95,35 @@ export function MonthlyReadings({
   const [done, setDone] = React.useState<{ amount: number; residents: number; rooms: number; finalized: boolean } | null>(null)
   const inputs = React.useRef<Record<string, HTMLInputElement | null>>({})
 
+  // Owners type either the number on the meter or the units used; the server always gets the reading.
+  const [mode, setMode] = React.useState<'reading' | 'units'>('reading')
   const entryOf = (id: string): Entry => entries[id] ?? { value: '', photos: [], ownerAbsorbs: false }
-  const estimates = rooms.map((r) => ({ room: r, est: r.baseline ? liveEstimate(r.baseline.value, entryOf(r.meterId).value, rate) : null }))
+  const readingOf = (room: MonthlyRoom) => {
+    const typed = entryOf(room.meterId).value
+    return mode === 'units' && room.baseline ? readingFromUnits(room.baseline.value, typed) : typed
+  }
+  const estimates = rooms.map((r) => ({ room: r, est: r.baseline ? liveEstimate(r.baseline.value, readingOf(r), rate) : null }))
+
+  function switchMode(next: 'reading' | 'units') {
+    if (next === mode) return
+    setEntries((prev) => {
+      const out: Record<string, Entry> = {}
+      for (const [id, entry] of Object.entries(prev)) {
+        const room = rooms.find((r) => r.meterId === id)
+        if (!room?.baseline || !entry.value.trim()) {
+          out[id] = entry
+          continue
+        }
+        out[id] = {
+          ...entry,
+          value: next === 'units' ? unitsFromReading(room.baseline.value, entry.value) : readingFromUnits(room.baseline.value, entry.value),
+        }
+      }
+      return out
+    })
+    setMode(next)
+    setPreview(null)
+  }
   const entered = estimates.filter((e) => e.est?.state === 'ok')
   const hasProblems = estimates.some((e) => e.est?.state === 'lower' || e.est?.state === 'invalid')
   const liveUnits = entered.reduce((s, e) => s + (e.est?.state === 'ok' ? e.est.units : 0), 0)
@@ -129,7 +156,7 @@ export function MonthlyReadings({
       readingDate,
       readings: entered.map(({ room }) => ({
         meterId: room.meterId,
-        value: entryOf(room.meterId).value.trim(),
+        value: readingOf(room).trim(),
         // A reading already saved this cycle (e.g. by the warden) keeps its date,
         // so a correction replaces it instead of starting a second period.
         ...(room.pending ? { readingDate: toISODate(new Date(room.pending.date)) } : {}),
@@ -305,6 +332,38 @@ export function MonthlyReadings({
           <p className="text-sm text-slate-500">Your role can see electricity bills but not enter readings.</p>
         ) : (
           <>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] sm:items-start">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-slate-900">I’m entering</p>
+                <div role="radiogroup" aria-label="What you are entering" className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                  {(
+                    [
+                      ['reading', 'Meter reading'],
+                      ['units', 'Units used'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === key}
+                      onClick={() => switchMode(key)}
+                      className={cn(
+                        'rounded-md px-3 py-1.5 text-sm font-medium transition',
+                        mode === key ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-900',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">
+                  {mode === 'reading'
+                    ? 'Type the number shown on each room’s meter today. We subtract last month’s reading to get the units.'
+                    : 'Type how many units each room used since the last reading. We add them to last month’s reading.'}
+                </p>
+              </div>
+            </div>
             <div className="grid gap-3 sm:max-w-xs">
               <Field label="Reading date" htmlFor="reading-date" hint="The day you read the meters">
                 <Input
@@ -323,7 +382,7 @@ export function MonthlyReadings({
             <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_5rem_6rem_4rem] gap-3 px-3 text-xs font-medium text-slate-500 md:grid">
               <span>Room</span>
               <span>Last reading</span>
-              <span>This month’s reading</span>
+              <span>{mode === 'reading' ? 'Meter reading today' : 'Units used'}</span>
               <span className="text-right">Units</span>
               <span className="text-right">Amount</span>
               <span className="text-right">People</span>
@@ -367,18 +426,21 @@ export function MonthlyReadings({
                             inputs.current[room.meterId] = el
                           }}
                           inputMode="decimal"
-                          aria-label={`This month's reading for room ${room.roomNumber}`}
-                          placeholder="Type the meter reading"
+                          aria-label={mode === 'reading' ? `This month's reading for room ${room.roomNumber}` : `Units used by room ${room.roomNumber}`}
+                          placeholder={mode === 'reading' ? 'Number on the meter today' : 'Units used this month'}
                           value={entry.value}
                           disabled={!room.baseline}
                           onKeyDown={(e) => nextOnEnter(e, room.meterId)}
                           onChange={(e) => update(room.meterId, { value: e.target.value.replace(/[^\d.]/g, '') })}
                           className={cn('tabular-nums', lower && 'border-rose-300')}
                         />
+                        {mode === 'units' && est?.state === 'ok' && (
+                          <p className="mt-1 text-[11px] text-slate-500">Meter becomes {units(Number(readingOf(room)))}</p>
+                        )}
                         {room.pending && (
                           <p className="mt-1 text-[11px] text-slate-500">
                             Read on {formatDate(room.pending.date)}
-                            {entry.value !== String(room.pending.value) && ` (was ${units(room.pending.value)})`}
+                            {readingOf(room) !== String(room.pending.value) && ` (was ${units(room.pending.value)})`}
                           </p>
                         )}
                       </div>

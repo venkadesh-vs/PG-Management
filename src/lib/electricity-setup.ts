@@ -58,3 +58,20 @@ export function liveEstimate(lastReading: number, typed: string, ratePerUnit: nu
   const amount = ratePerUnit === null ? null : Math.round(units * ratePerUnit)
   return { state: 'ok' as const, units, amount }
 }
+
+/**
+ * Owners who note "units used" instead of the meter number: today's reading is the last
+ * reading plus those units. Returns '' while the input is empty or not a number.
+ */
+export function readingFromUnits(lastReading: number, typedUnits: string) {
+  const used = parseReadingInput(typedUnits)
+  if (used === null) return typedUnits.trim() ? typedUnits : ''
+  return String(Math.round((lastReading + used) * 10) / 10)
+}
+
+/** The reverse, for switching an already-typed reading over to "units used". */
+export function unitsFromReading(lastReading: number, typedReading: string) {
+  const value = parseReadingInput(typedReading)
+  if (value === null || value < lastReading) return ''
+  return String(Math.round((value - lastReading) * 10) / 10)
+}

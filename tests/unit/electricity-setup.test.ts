@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkBulkMeterRows, liveEstimate, parseReadingInput, suggestMeterNumber } from '@/lib/electricity-setup'
+import { checkBulkMeterRows, liveEstimate, parseReadingInput, readingFromUnits, suggestMeterNumber, unitsFromReading } from '@/lib/electricity-setup'
 
 const row = (roomId: string, roomNumber: string, meterNumber: string, initialReading: string) => ({ roomId, roomNumber, meterNumber, initialReading })
 
@@ -64,5 +64,18 @@ describe('liveEstimate', () => {
   })
   it('leaves the amount empty when the month has no rate yet', () => {
     expect(liveEstimate(1250, '1340', null)).toEqual({ state: 'ok', units: 90, amount: null })
+  })
+})
+
+describe('units-used entry', () => {
+  it('turns units used into the meter reading for today', () => {
+    expect(readingFromUnits(1500, '90')).toBe('1590')
+    expect(readingFromUnits(1340.5, '9.5')).toBe('1350')
+    expect(readingFromUnits(1500, '')).toBe('')
+    expect(liveEstimate(1500, readingFromUnits(1500, '90'), 13)).toEqual({ state: 'ok', units: 90, amount: 1170 })
+  })
+  it('switches a typed reading back to units', () => {
+    expect(unitsFromReading(1500, '1590')).toBe('90')
+    expect(unitsFromReading(1500, '1400')).toBe('')
   })
 })

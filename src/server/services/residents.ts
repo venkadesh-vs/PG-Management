@@ -47,6 +47,7 @@ import {
 } from '@/lib/settlement'
 import { lineKindFor, prorationFor, rentOnDay, rentSegments } from '@/lib/billing-calc'
 import { assetDeductionLabel, type AssetDamage, type Checklist } from '@/lib/checkout-checklist'
+import { previewCheckoutElectricity, settleCheckoutElectricityTx } from './electricity'
 
 /**
  * Resident lifecycle.
@@ -795,6 +796,8 @@ async function loadSettlement(
     exitDate: Date
     deductions: SettlementDeduction[]
     assetDamages?: AssetDamage[]
+    /** Charges not saved yet (the preview's electricity share at checkout). */
+    extraOneTime?: { label: string; category: string; amount: number }[]
   },
 ) {
   const exitDate = startOfDay(params.exitDate)
@@ -961,7 +964,10 @@ async function loadSettlement(
       recurring,
       invoicedCharge,
     },
-    oneTimeCharges: oneTime.map((c) => ({ label: c.label, category: c.category, amount: c.amount })),
+    oneTimeCharges: [
+      ...oneTime.map((c) => ({ label: c.label, category: c.category, amount: c.amount })),
+      ...(params.extraOneTime ?? []),
+    ],
     depositCollected: depositHeld,
     advance,
   })
@@ -1081,12 +1087,22 @@ export async function previewCheckout(params: {
   damageDeduction?: number
   otherCharges?: number
   assetDamages?: AssetDamage[]
+  /** Room meter reading on the exit date; adds the leaver's electricity share. */
+  meterReading?: string
 }): Promise<CheckoutPreview> {
+  const electricity = params.meterReading
+    ? await previewCheckoutElectricity({
+        residentId: params.residentId,
+        exitDate: params.exitDate,
+        meterReading: params.meterReading,
+      })
+    : null
   const loaded = await loadSettlement(prisma, {
     residentId: params.residentId,
     exitDate: params.exitDate,
     deductions: normaliseDeductions(params),
     assetDamages: params.assetDamages,
+    extraOneTime: electricity ? [electricity] : undefined,
   })
   return toPreview(loaded)
 }
@@ -1124,6 +1140,8 @@ export async function completeCheckout(params: {
   clearance?: Checklist | null
   /** Assets in the room found damaged or missing; each amount is a deduction. */
   assetDamages?: AssetDamage[]
+  /** Room meter reading on the exit date: bills the room up to the exit. */
+  meterReading?: string
   actor: { id?: string; name: string }
 }) {
   const deductions = normaliseDeductions(params)
@@ -1155,6 +1173,17 @@ export async function completeCheckout(params: {
           if (resident.status === 'CHECKED_OUT') throw new ConflictError('Already checked out')
           if (resident.status === 'PENDING') {
             throw new ConflictError('This resident has not checked in yet')
+          }
+
+          // Electricity up to the exit date, from the reading taken at checkout:
+          // the leaver's share becomes a charge the settlement below includes.
+          if (params.meterReading) {
+            await settleCheckoutElectricityTx(tx, {
+              residentId: resident.id,
+              exitDate: params.exitDate,
+              meterReading: params.meterReading,
+              actor: params.actor,
+            })
           }
 
           const s = await loadSettlement(tx, {

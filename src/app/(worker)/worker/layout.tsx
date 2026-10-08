@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireWorker } from '@/lib/auth'
-import { filterNavItems, WORKER_NAV } from '@/lib/navigation'
+import { filterNavItems, WORKER_MORE, WORKER_NAV } from '@/lib/navigation'
 import { MobileShell } from '@/components/app/mobile-shell'
 import { PWA_APPS, pwaMetadata } from '@/lib/pwa'
 
@@ -26,6 +26,7 @@ export default async function WorkerLayout({ children }: { children: React.React
   return (
     <MobileShell
       nav={filterNavItems(WORKER_NAV, user)}
+      moreNav={filterNavItems(WORKER_MORE, user)}
       user={{ name: user.name, email: user.email }}
       subtitle={subtitle}
       unread={unread}

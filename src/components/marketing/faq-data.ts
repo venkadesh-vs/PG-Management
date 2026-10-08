@@ -24,6 +24,10 @@ export const FAQS: { q: string; a: string }[] = [
     a: 'By UPI from the resident app, or in cash which you record in one tap. Online payments are only marked paid after the payment gateway confirms them, so a receipt always means the money arrived.',
   },
   {
+    q: 'How is electricity split?',
+    a: 'Each room has its own meter. Every month the units used (this reading minus the last) are multiplied by that month’s rate per unit to get the room’s bill. The bill is shared only by the residents who actually stayed in the room during that period, in proportion to their days there. Empty beds never count, and someone who moved in halfway pays about half a share. Each share is added to the resident’s rent invoice, and changing the rate later never changes an old bill.',
+  },
+  {
     q: 'Are reminders automatic?',
     a: 'Yes. Reminders go out before the due date, on it, and after it. WhatsApp reminders need your WhatsApp Business account connected; until then the app shows exactly what each resident would receive and marks it as not sent.',
   },

@@ -101,6 +101,21 @@ export default async function ResidentDetailPage({
     },
   })
   if (!resident) notFound()
+  // The room's electricity meter, so checkout can take a final reading.
+  const roomMeter =
+    user.modules.includes('electricity') && resident.status !== 'CHECKED_OUT'
+      ? await prisma.electricityMeter.findFirst({
+          where: {
+            organizationId: user.organizationId!,
+            status: 'ACTIVE',
+            room: { OR: [{ beds: { some: { residentId: resident.id } } }, { residents: { some: { id: resident.id } } }] },
+          },
+          select: {
+            meterNumber: true,
+            readings: { orderBy: { readingDate: 'desc' }, take: 1, select: { value: true, readingDate: true } },
+          },
+        })
+      : null
 
   const theme = themeFor(resident.property.type)
   // rentAmount already holds a revision scheduled for later; show what is in force today.
@@ -153,6 +168,14 @@ export default async function ResidentDetailPage({
               outstanding,
               exitDate: resident.exitDate?.toISOString() ?? null,
               noticeDate: resident.noticeDate?.toISOString() ?? null,
+              meter: roomMeter
+                ? {
+                    meterNumber: roomMeter.meterNumber,
+                    lastReading: roomMeter.readings[0]
+                      ? { value: Number(String(roomMeter.readings[0].value)), date: roomMeter.readings[0].readingDate.toISOString() }
+                      : null,
+                  }
+                : null,
             }}
             openInvoices={openInvoices.map((i) => ({
               id: i.id,

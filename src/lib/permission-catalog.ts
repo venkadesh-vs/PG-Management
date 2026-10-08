@@ -54,6 +54,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    module: 'electricity',
+    label: 'Electricity meters',
+    permissions: [
+      { key: 'electricity.view', label: 'See meters, readings and electricity bills' },
+      { key: 'electricity.readings', label: 'Enter meter readings', hint: 'Also works from the staff app' },
+      { key: 'electricity.manage', label: 'Set rates, add meters and finalize or void bills' },
+    ],
+  },
+  {
     module: 'expenses',
     label: 'Expenses',
     permissions: [
@@ -187,14 +196,14 @@ export const ROLE_TEMPLATES: {
     description: 'Rent, payments, expenses and reports only.',
     app: 'DASHBOARD',
     color: 'emerald',
-    permissions: ['dashboard.view', 'residents.view', 'rent.view', 'payments.record', 'rent.manage', 'expenses.view', 'expenses.manage', 'reports.view', 'reports.export'],
+    permissions: ['dashboard.view', 'residents.view', 'rent.view', 'payments.record', 'rent.manage', 'expenses.view', 'expenses.manage', 'reports.view', 'reports.export', 'electricity.view', 'electricity.manage'],
   },
   {
     name: 'Warden',
     description: 'Looks after residents: check-ins, complaints, visitors and notices.',
     app: 'DASHBOARD',
     color: 'violet',
-    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'requests.view', 'requests.manage', 'leads.view', 'leads.manage', 'bookings.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view'],
+    permissions: ['dashboard.view', 'properties.view', 'residents.view', 'residents.manage', 'requests.view', 'requests.manage', 'leads.view', 'leads.manage', 'bookings.manage', 'complaints.view', 'complaints.manage', 'complaints.assign', 'visitors.view', 'visitors.manage', 'announcements.send', 'food.view', 'electricity.view', 'electricity.readings'],
   },
   {
     name: 'Cook',

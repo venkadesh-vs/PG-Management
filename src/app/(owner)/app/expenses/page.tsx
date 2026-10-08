@@ -19,7 +19,6 @@ import {
   toISODate,
 } from '@/lib/utils'
 import {
-  APPROVAL_THRESHOLD,
   canApproveExpenses,
   COUNTED_EXPENSE,
   expenseStatus,
@@ -47,6 +46,7 @@ import { CategoryBarChart, DonutChart } from '@/components/app/charts'
 import { ExpenseForm } from './expense-form'
 import { ExpenseActions } from './expense-actions'
 import { DateRange } from './date-range'
+import { approvalThreshold } from '@/server/services/expenses'
 
 export const metadata: Metadata = { title: 'Expenses' }
 
@@ -193,6 +193,7 @@ export default async function ExpensesPage({
   const spent = sum._sum.amount ?? 0
   const canManage = user.permissions.includes('expenses.manage')
   const canApprove = canApproveExpenses(user)
+  const threshold = await approvalThreshold(user.organizationId!)
   const canSeeRent = user.modules.includes('rent') && user.permissions.includes('rent.view')
   const income = collected._sum.amount ?? 0
   const activeFilters = [q, vendor, categoryId, params.range, params.status, params.from, params.to].filter(Boolean).length
@@ -298,7 +299,7 @@ export default async function ExpensesPage({
                 approvalNote={
                   canApprove
                     ? undefined
-                    : `${formatMoney(APPROVAL_THRESHOLD)} or more needs the owner's approval before it counts.`
+                    : `${formatMoney(threshold)} or more needs the owner's approval before it counts.`
                 }
               />
             )}

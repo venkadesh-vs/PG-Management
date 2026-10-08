@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
 import { settingsSchema } from '@/lib/validation'
@@ -5,7 +6,10 @@ import { slaSettingsSchema } from '@/lib/sla'
 import { recordActivity } from '@/server/events'
 
 /** Complaint SLA targets (PRD §43) ride along with the rent settings. */
-const settingsWithSlaSchema = settingsSchema.merge(slaSettingsSchema)
+const settingsWithSlaSchema = settingsSchema.merge(slaSettingsSchema).extend({
+  /** Expenses of this amount or more, recorded by someone who cannot approve, wait for approval. */
+  expenseApprovalThreshold: z.coerce.number().int().min(0).max(10_000_000).optional(),
+})
 
 /**
  * POST /api/settings — organization-wide automation settings. These drive
@@ -35,6 +39,7 @@ export const POST = route(
       ...(body.slaHighHours !== undefined ? { slaHighHours: body.slaHighHours } : {}),
       ...(body.slaMediumHours !== undefined ? { slaMediumHours: body.slaMediumHours } : {}),
       ...(body.slaLowHours !== undefined ? { slaLowHours: body.slaLowHours } : {}),
+      ...(body.expenseApprovalThreshold !== undefined ? { expenseApprovalThreshold: body.expenseApprovalThreshold } : {}),
     }
 
     const settings = await prisma.orgSetting.upsert({

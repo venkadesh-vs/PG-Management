@@ -57,6 +57,8 @@ import { Onboarding } from './onboarding'
 import { shouldStartSetup } from '@/server/services/onboarding'
 import { AttentionPanel } from './attention-panel'
 import { VacancyCard } from './vacancy-card'
+import { ElectricityCard } from './electricity-card'
+import { electricitySummary } from '@/server/services/electricity'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
@@ -172,6 +174,11 @@ export default async function OwnerDashboard({
     attentionSummary(scope, attentionFlags),
     skip(show.money, () => vacancyIntelligence(scope), null),
   ])
+
+  const electricity =
+    user.modules.includes('electricity') && (user.role === 'OWNER' || user.permissions.includes('electricity.view'))
+      ? await electricitySummary(user, scope.propertyId)
+      : null
 
   const noProperties = scope.allowedPropertyIds.length === 0
 
@@ -392,6 +399,8 @@ export default async function OwnerDashboard({
 
         {vacancy && <VacancyCard insight={vacancy} showPerProperty={!scope.propertyId} />}
       </section>
+
+      {electricity && electricity.activeMeters > 0 && <ElectricityCard summary={electricity} />}
 
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MotionItem>

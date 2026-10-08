@@ -37,6 +37,7 @@ export const OWNER_NAV: NavSection[] = [
       { label: 'Rent & Payments', href: '/app/rent', icon: 'wallet', module: 'rent', permission: 'rent.view' },
       { label: 'Payments', href: '/app/payments', icon: 'card', module: 'rent', permission: 'rent.view' },
       { label: 'Expenses', href: '/app/expenses', icon: 'receipt', module: 'expenses', permission: 'expenses.view' },
+      { label: 'Electricity', href: '/app/electricity', icon: 'zap', module: 'electricity', permission: 'electricity.view' },
       { label: 'Profit & loss', href: '/app/reports/pnl', icon: 'trendingUp', module: 'reports', permission: 'reports.view' },
     ],
   },
@@ -128,6 +129,10 @@ export const WORKER_NAV: NavItem[] = [
   { label: 'Food', href: '/worker/food', icon: 'utensils', module: 'food', permission: 'food.view' },
   { label: 'Grocery', href: '/worker/grocery', icon: 'cart', module: 'grocery', permission: 'grocery.view' },
   { label: 'Profile', href: '/worker/profile', icon: 'user' },
+]
+
+export const WORKER_MORE: NavItem[] = [
+  { label: 'Meter readings', href: '/worker/meters', icon: 'zap', module: 'electricity', permission: 'electricity.readings' },
 ]
 
 type Access = { role: string; modules: string[]; permissions: string[] }

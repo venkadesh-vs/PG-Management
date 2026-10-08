@@ -16,7 +16,7 @@ import { notifyUsers, recordActivity } from '@/server/events'
 import { formatMoney, startOfDay } from '@/lib/utils'
 import { orgsWithModuleOff } from './org-modules'
 import {
-  APPROVAL_THRESHOLD,
+  DEFAULT_APPROVAL_THRESHOLD,
   canApproveExpenses,
   dueOccurrences,
   initialApprovalStatus,
@@ -119,6 +119,12 @@ export async function notifyApprovers(organizationId: string, expense: { title: 
   )
 }
 
+/** The organization's approval threshold (Settings), or the default when none is saved. */
+export async function approvalThreshold(organizationId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  const row = await db.orgSetting.findUnique({ where: { organizationId }, select: { expenseApprovalThreshold: true } })
+  return row?.expenseApprovalThreshold ?? DEFAULT_APPROVAL_THRESHOLD
+}
+
 export async function createExpense(
   user: SessionUser,
   body: ExpenseInput,
@@ -137,7 +143,8 @@ export async function createExpense(
   const category = await assertCategory(organizationId, body.categoryId)
   const receiptUrl = await assertReceipt(organizationId, body.receiptUrl)
   const approver = canApproveExpenses(user)
-  const approvalStatus = opts.preApprovedBy ? 'APPROVED' : initialApprovalStatus(body.amount, approver)
+  const threshold = await approvalThreshold(organizationId, db)
+  const approvalStatus = opts.preApprovedBy ? 'APPROVED' : initialApprovalStatus(body.amount, approver, threshold)
 
   const expense = await db.expense.create({
     data: {
@@ -159,7 +166,7 @@ export async function createExpense(
       maintenanceTaskId: opts.maintenanceTaskId ?? null,
       ...(opts.preApprovedBy
         ? { approvedBy: opts.preApprovedBy, approvedAt: new Date() }
-        : approvalStatus === 'APPROVED' && approver && body.amount >= APPROVAL_THRESHOLD
+        : approvalStatus === 'APPROVED' && approver && body.amount >= threshold
           ? { approvedBy: user.name, approvedAt: new Date() }
           : {}),
     },
@@ -220,8 +227,9 @@ export async function updateExpense(user: SessionUser, id: string, body: z.input
   // approve sends it back for approval.
   const approver = canApproveExpenses(user)
   const newAmount = body.amount ?? expense.amount
+  const threshold = await approvalThreshold(expense.organizationId)
   const needsApproval =
-    !approver && newAmount >= APPROVAL_THRESHOLD && newAmount > expense.amount && expense.approvalStatus === 'APPROVED'
+    !approver && newAmount >= threshold && newAmount > expense.amount && expense.approvalStatus === 'APPROVED'
 
   const updated = await prisma.expense.update({
     where: { id: expense.id },

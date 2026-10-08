@@ -61,6 +61,11 @@ export const EVENT_LABEL: Record<EventType, string> = {
   SETTLEMENT_ADJUSTED: 'Settlement adjusted',
   MAINTENANCE_UPDATED: 'Maintenance updated',
   ASSET_UPDATED: 'Asset updated',
+  ELECTRICITY_METER_UPDATED: 'Electricity meter updated',
+  ELECTRICITY_RATE_SET: 'Electricity rate set',
+  METER_READING_RECORDED: 'Meter reading recorded',
+  ELECTRICITY_BILL_FINALIZED: 'Electricity bill finalized',
+  ELECTRICITY_BILL_VOIDED: 'Electricity bill voided',
   SETTINGS_UPDATED: 'Settings updated',
 }
 
@@ -104,6 +109,9 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
       'PAYMENT_FAILED',
       'REFUND_ISSUED',
       'EXPENSE_CREATED',
+      'ELECTRICITY_RATE_SET',
+      'ELECTRICITY_BILL_FINALIZED',
+      'ELECTRICITY_BILL_VOIDED',
     ],
   },
   {
@@ -118,6 +126,8 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
       'STOCK_LOW',
       'STOCK_PURCHASED',
       'VISITOR_LOGGED',
+      'METER_READING_RECORDED',
+      'ELECTRICITY_METER_UPDATED',
     ],
   },
   {

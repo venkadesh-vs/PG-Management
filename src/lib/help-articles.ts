@@ -245,7 +245,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
         items: [
           'Expenses → Record an expense: PG, category, amount, vendor, bill number and a photo of the bill.',
           'Rent, salaries or internet every month? Switch on Repeats and StayFlow adds it on schedule.',
-          'Expenses of ₹5,000 or more recorded by staff wait for the owner’s approval before they count.',
+          'Expenses at or above your approval amount (Settings → Rent & billing) recorded by staff wait for the owner’s approval before they count.',
           'A wrong expense is voided with a reason, not deleted, so your books keep a record.',
           'Profit & loss shows money collected minus approved expenses, by month and by PG. Deposits are not counted as income.',
         ],
@@ -254,6 +254,34 @@ export const HELP_ARTICLES: HelpArticle[] = [
     links: [
       { label: 'Expenses', href: '/app/expenses' },
       { label: 'Profit & loss', href: '/app/reports/pnl' },
+    ],
+  },
+  {
+    slug: 'electricity',
+    title: 'Electricity meters and bills',
+    section: 'Money',
+    summary: 'Each room’s own meter, a rate per month, and bills shared only by the people who actually stayed.',
+    keywords: 'electricity eb meter reading units rate tariff sub-meter split share room bill checkout warden',
+    body: [
+      { type: 'p', text: 'Every room has its own meter. Each month you enter the new reading; StayFlow works out the units, multiplies by that month’s rate and shares the room’s bill among the people who lived in it.' },
+      {
+        type: 'steps',
+        items: [
+          'Electricity → Meters: add each room’s meter with the number printed on it and today’s reading as the starting point.',
+          'Electricity → Rates: set the price per unit for each PG, from a month onwards. A new rate never changes bills already made.',
+          'Electricity → Monthly billing: pick the month, type each room’s reading (a photo of the meter is optional), then Preview the bills.',
+          'Check the split under each room: units, rate, room bill and what each resident pays. Fix any room marked in red.',
+          'Save as drafts, then Finalize. Each share is added to the resident’s next rent invoice, or billed separately if you chose that in Settings.',
+        ],
+      },
+      { type: 'p', text: 'Only the residents who actually stayed in the room during the period pay, in proportion to their days there. Empty beds never count. Settings → Rent & billing can switch this to an equal split among the people living there on the reading date.' },
+      { type: 'p', text: 'At checkout, enter the room’s meter reading on the exit date. The leaver’s share up to that day goes into their settlement; the others pay theirs on their next invoice.' },
+      { type: 'tip', text: 'Wardens with the “Enter meter readings” permission can record readings from the staff app; the owner reviews and finalizes.' },
+    ],
+    links: [
+      { label: 'Electricity', href: '/app/electricity' },
+      { label: 'Meters', href: '/app/electricity/meters' },
+      { label: 'Rates', href: '/app/electricity/rates' },
     ],
   },
   {

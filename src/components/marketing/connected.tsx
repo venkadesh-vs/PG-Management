@@ -11,6 +11,7 @@ import {
   MessageSquareWarning,
   Users,
   UtensilsCrossed,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { LogoMark } from './logo'
@@ -25,6 +26,7 @@ const NODES: Node[] = [
   { label: 'Complaints', icon: MessageSquareWarning, color: 'text-blue-700 bg-blue-50', note: 'Raised, assigned, resolved' },
   { label: 'Staff', icon: HardHat, color: 'text-blue-700 bg-blue-50', note: 'Tasks for every worker' },
   { label: 'Food', icon: UtensilsCrossed, color: 'text-blue-700 bg-blue-50', note: 'Menus, meal counts, grocery' },
+  { label: 'Electricity', icon: Zap, color: 'text-blue-700 bg-blue-50', note: 'Room meters, split by days stayed' },
   { label: 'Enquiries', icon: Inbox, color: 'text-blue-700 bg-blue-50', note: 'Leads to bookings to beds' },
   { label: 'Reports', icon: BarChart3, color: 'text-blue-700 bg-blue-50', note: 'Collections, expenses, profit' },
 ]

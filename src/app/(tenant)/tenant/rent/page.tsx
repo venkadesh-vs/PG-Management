@@ -109,6 +109,8 @@ export default async function TenantRentPage() {
               description="Your first rent invoice will appear here once it is generated."
             />
           ) : (
+            <div className="space-y-3">
+            {resident.invoices.some((i) => i.lines.some(isElectricityLine)) && <ElectricityExplainer />}
             <ul className="space-y-3">
               {resident.invoices.map((invoice) => {
                 const overdueDays = daysBetween(invoice.dueDate, today)
@@ -136,7 +138,7 @@ export default async function TenantRentPage() {
                               key={line.id}
                               className="flex items-start justify-between gap-3 text-sm"
                             >
-                              <span className="text-slate-600">{line.label}</span>
+                              <LineLabel label={line.label} kind={line.kind} />
                               <span
                                 className={cn(
                                   'shrink-0 font-medium tabular',
@@ -192,6 +194,7 @@ export default async function TenantRentPage() {
                 )
               })}
             </ul>
+            </div>
           )}
         </TabsContent>
 
@@ -298,5 +301,36 @@ export default async function TenantRentPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function isElectricityLine(line: { kind: string; label: string }) {
+  return line.kind === 'ELECTRICITY' || line.label.startsWith('Electricity ')
+}
+
+/** Electricity lines carry their working ("90 units × ₹13 = ₹1170, 30 of 30 days, 3 sharing"); show it as a second line. */
+function LineLabel({ label, kind }: { label: string; kind: string }) {
+  if (!isElectricityLine({ kind, label })) return <span className="text-slate-600">{label}</span>
+  const parts = label.split(' · ')
+  return (
+    <span className="min-w-0">
+      <span className="block text-slate-600">{parts.slice(0, 2).join(' · ')}</span>
+      {parts.length > 2 && <span className="block text-xs text-slate-500">{parts.slice(2).join(' · ')}</span>}
+    </span>
+  )
+}
+
+function ElectricityExplainer() {
+  return (
+    <details className="group rounded-xl border border-slate-200 bg-white p-4 text-sm">
+      <summary className="cursor-pointer list-none font-medium text-slate-900 marker:hidden">
+        How is my electricity calculated?
+      </summary>
+      <div className="mt-2 space-y-2 text-slate-600">
+        <p>Your room has its own meter. Each month the units used (this reading minus the last one) are multiplied by that month&apos;s rate per unit to give the room&apos;s bill.</p>
+        <p>The room&apos;s bill is shared only by the people who actually stayed in the room during that period, never by empty beds. If someone moved in or out partway, everyone pays for their own days.</p>
+        <p>Your share is shown under each electricity line, and it is added to your rent invoice so you pay once.</p>
+      </div>
+    </details>
   )
 }

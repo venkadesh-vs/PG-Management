@@ -8,6 +8,7 @@ import { SettingsForm } from './settings-form'
 import { ensureOrgDefaults } from '@/server/services/org-defaults'
 import { platformWithheldModules } from '@/components/settings/platform.server'
 import { SETTINGS_TABS, type SettingsTab } from '@/components/settings/shared'
+import { approvalThreshold } from '@/server/services/expenses'
 
 export const metadata: Metadata = { title: 'Settings' }
 
@@ -92,6 +93,7 @@ export default async function SettingsPage({
       />
       <SettingsForm
         organization={organization}
+        expenseApprovalThreshold={await approvalThreshold(user.organizationId)}
         settings={
           settings
             ? {

@@ -32,6 +32,12 @@ const deductions = z
 
 const assetDamages = z.array(assetDamageSchema).max(30, 'Mark at most 30 items').optional()
 
+/** Room meter reading on the exit date (electricity sub-meters). */
+const meterReading = z
+  .union([z.number().nonnegative(), z.string().trim().regex(/^\d+(\.\d)?$/, 'Enter the meter reading, e.g. 1340 or 1340.5')])
+  .transform(String)
+  .optional()
+
 const refundMethod = z.enum(['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE'], {
   errorMap: () => ({ message: 'Choose how the refund was paid' }),
 })
@@ -53,13 +59,14 @@ const schema = z.discriminatedUnion('action', [
     .merge(transferSchema),
   z.object({ action: z.literal('NOTICE') }).merge(noticeSchema),
   z
-    .object({ action: z.literal('CHECKOUT_PREVIEW'), deductions, assetDamages })
+    .object({ action: z.literal('CHECKOUT_PREVIEW'), deductions, assetDamages, meterReading })
     .merge(checkoutSchema.partial({ exitDate: true }).required({ residentId: true })),
   z
     .object({
       action: z.literal('CHECKOUT'),
       deductions,
       assetDamages,
+      meterReading,
       inspection: checklistSchema.nullable().optional(),
       clearance: checklistSchema.nullable().optional(),
       refund: refund.nullable().optional(),
@@ -155,6 +162,7 @@ export const POST = route(
           damageDeduction: body.damageDeduction,
           otherCharges: body.otherCharges,
           assetDamages: body.assetDamages,
+          meterReading: body.meterReading === undefined ? undefined : String(body.meterReading),
         })
         return ok({ preview })
       }
@@ -187,6 +195,7 @@ export const POST = route(
           inspection: body.inspection ?? null,
           clearance: body.clearance ?? null,
           assetDamages: body.assetDamages,
+          meterReading: body.meterReading === undefined ? undefined : String(body.meterReading),
           refund: body.refund
             ? {
                 method: body.refund.method,

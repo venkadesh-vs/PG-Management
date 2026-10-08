@@ -32,6 +32,7 @@ export type ModuleKey =
   | 'residentApp'
   | 'requests'
   | 'staffApp'
+  | 'electricity'
 
 export type ModuleDef = {
   key: ModuleKey
@@ -55,6 +56,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'settings', label: 'Settings & billing', description: 'Your account, team, roles and subscription.', icon: 'settings', core: true, routes: ['/app/settings', '/app/subscription', '/app/notifications'] },
 
   { key: 'leads', label: 'Enquiries & bookings', description: 'Track people asking for a bed, visits, token payments and bookings.', icon: 'clipboard', core: false, routes: ['/app/leads', '/app/bookings'] },
+  { key: 'electricity', label: 'Electricity meters', description: 'Room sub-meters, monthly readings and each resident’s share of the bill.', icon: 'zap', core: false, routes: ['/app/electricity'] },
   { key: 'expenses', label: 'Expenses', description: 'Record spending and see profit per PG.', icon: 'receipt', core: false, routes: ['/app/expenses'] },
   { key: 'complaints', label: 'Complaints & maintenance', description: 'Residents raise issues; staff fix them with tasks.', icon: 'wrench', core: false, routes: ['/app/complaints'] },
   { key: 'food', label: 'Food & meals', description: 'Menus, meal plans, opt-outs and meal counts.', icon: 'utensils', core: false, routes: ['/app/food'], flag: 'food_module' },

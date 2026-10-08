@@ -28,6 +28,7 @@ export default async function WorkerHome() {
     kitchen: user.permissions.includes('food.view'),
     grocery: user.permissions.includes('grocery.view'),
     attendance: user.permissions.includes('attendance.self'),
+    meters: user.modules.includes('electricity') && user.permissions.includes('electricity.readings'),
   }
 
   const staff = await prisma.staff.findUnique({
@@ -113,6 +114,19 @@ export default async function WorkerHome() {
           )}
         </div>
       </div>
+
+      {can.meters && (
+        <Link
+          href="/worker/meters"
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Meter readings</span>
+            <span className="block text-xs text-slate-500">Enter each room&apos;s electricity reading with a photo</span>
+          </span>
+          <span className="text-sm font-medium text-blue-700">Open</span>
+        </Link>
+      )}
 
       {/* ---------------------------------------------------------- Tasks */}
       {can.tasks && (

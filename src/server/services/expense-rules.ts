@@ -5,7 +5,8 @@ import { dayOfMonth, startOfDay } from '@/lib/utils'
  * Pure expense rules — approval, voiding and recurrence. No database here so
  * the rules are unit-tested (tests/unit/expense-rules.test.ts).
  *
- * Approval: an expense of APPROVAL_THRESHOLD (₹5,000) or more, recorded by
+ * Approval: an expense of the organization's approval threshold (Settings,
+ * OrgSetting.expenseApprovalThreshold; ₹5,000 unless changed) or more, recorded by
  * someone who cannot approve expenses, starts PENDING. Approvers are the
  * owner, or anyone holding both expenses.manage and invoices.waive (the
  * "money sign-off" permission). PENDING and REJECTED expenses, and every
@@ -15,7 +16,8 @@ import { dayOfMonth, startOfDay } from '@/lib/utils'
  * visible (struck through) with who voided it in the activity log.
  */
 
-export const APPROVAL_THRESHOLD = 5000
+/** Used only when an organization has no setting row yet. */
+export const DEFAULT_APPROVAL_THRESHOLD = 5000
 
 export const RECURRENCES = ['MONTHLY', 'QUARTERLY', 'YEARLY'] as const
 export type Recurrence = (typeof RECURRENCES)[number]
@@ -48,8 +50,12 @@ export function canApproveExpenses(user: { role: string; permissions: string[] }
   return user.permissions.includes('expenses.manage') && user.permissions.includes('invoices.waive')
 }
 
-export function initialApprovalStatus(amount: number, canApprove: boolean): 'APPROVED' | 'PENDING' {
-  return canApprove || amount < APPROVAL_THRESHOLD ? 'APPROVED' : 'PENDING'
+export function initialApprovalStatus(
+  amount: number,
+  canApprove: boolean,
+  threshold: number = DEFAULT_APPROVAL_THRESHOLD,
+): 'APPROVED' | 'PENDING' {
+  return canApprove || amount < threshold ? 'APPROVED' : 'PENDING'
 }
 
 export function expenseStatus(e: { voidedAt: Date | null; approvalStatus: string }): ExpenseStatus {

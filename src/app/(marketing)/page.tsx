@@ -5,6 +5,7 @@ import { SiteFooter, SiteHeader } from '@/components/marketing/site-chrome'
 import { Hero } from '@/components/marketing/hero'
 import { StorySection } from '@/components/marketing/story'
 import { ConnectedSection } from '@/components/marketing/connected'
+import { ElectricitySection } from '@/components/marketing/electricity'
 import {
   BedsSection,
   ComplaintsSection,
@@ -116,6 +117,7 @@ export default async function LandingPage() {
           'Live bed map',
           'Resident check-in and KYC',
           'Automatic rent invoices and reminders',
+          'Room electricity meters split by days stayed',
           'UPI rent collection',
           'Enquiries and bookings',
           'Food planning and meal counts',
@@ -157,6 +159,7 @@ export default async function LandingPage() {
         <BedsSection />
         <ResidentsSection />
         <RentSection />
+        <ElectricitySection />
         <EnquiriesSection />
         <FoodSection />
         <ComplaintsSection />

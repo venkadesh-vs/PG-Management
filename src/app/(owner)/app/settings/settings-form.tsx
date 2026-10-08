@@ -15,7 +15,7 @@ import {
   Save,
   Timer,
 } from 'lucide-react'
-import type { z } from 'zod'
+import { z } from 'zod'
 import { settingsSchema } from '@/lib/validation'
 import { DEFAULT_SLA_HOURS, slaSettingsSchema } from '@/lib/sla'
 import { api, ApiError } from '@/lib/client'
@@ -26,13 +26,16 @@ import { Field, Input, Select } from '@/components/ui/input'
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { Badge } from '@/components/ui/badge'
 import { TeamPanel, type TeamMember } from './team-panel'
+import { ElectricitySettingsCard } from './electricity-settings'
 import type { ModuleKey } from '@/lib/modules'
 import { FeaturesPanel } from '@/components/settings/features-panel'
 import { RolesPanel } from '@/components/settings/roles-panel'
 import { LookupsPanel } from '@/components/settings/lookups-panel'
 import type { RoleRow, SettingsTab } from '@/components/settings/shared'
 
-const formSchema = settingsSchema.merge(slaSettingsSchema)
+const formSchema = settingsSchema.merge(slaSettingsSchema).extend({
+  expenseApprovalThreshold: z.coerce.number().int('Enter a whole rupee amount').min(0, 'Cannot be negative').max(10_000_000).optional(),
+})
 type Values = z.infer<typeof formSchema>
 
 /** Tabs that belong to the settings form (the others save on their own). */
@@ -40,6 +43,7 @@ const FORM_TABS = ['billing', 'reminders']
 
 export function SettingsForm({
   organization,
+  expenseApprovalThreshold,
   settings,
   team,
   properties,
@@ -51,6 +55,8 @@ export function SettingsForm({
   features,
   roles,
 }: {
+  /** Current expense approval threshold (org setting or the product default). */
+  expenseApprovalThreshold: number
   organization: {
     name: string
     ownerName: string
@@ -78,7 +84,8 @@ export function SettingsForm({
 
   const form = useForm<Values>({
     resolver: zodResolver(formSchema),
-    defaultValues: settings ? { ...DEFAULT_SLA_HOURS, ...settings } : {
+    defaultValues: settings ? { ...DEFAULT_SLA_HOURS, ...settings, expenseApprovalThreshold } : {
+      expenseApprovalThreshold,
       rentDueDay: 5,
       rentGenerateDay: 1,
       lateFeeEnabled: true,
@@ -260,6 +267,22 @@ export function SettingsForm({
                 </Field>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm">Expense approval</CardTitle>
+                <p className="text-xs text-slate-500">
+                  Expenses of this amount or more, recorded by someone who cannot approve them, wait for your approval before they count.
+                </p>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <Field label="Needs approval from (₹)" error={form.formState.errors.expenseApprovalThreshold?.message}>
+                  <Input type="number" min={0} {...form.register('expenseApprovalThreshold')} disabled={!canEdit} />
+                </Field>
+              </CardContent>
+            </Card>
+
+            <ElectricitySettingsCard canEdit={canEdit} />
           </div>
         </TabsContent>
 

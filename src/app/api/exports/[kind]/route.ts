@@ -20,6 +20,7 @@ import type { PnlFigures } from '@/server/services/pnl'
 import { toCsv } from '@/lib/csv'
 import { AUDIT_CSV_HEADER, parseAuditFilters } from '@/lib/audit-filters'
 import { auditCsvRows, orgAuditWhere } from '@/server/services/audit-log'
+import { ELECTRICITY_EXPORT_HEADER, electricityExportRows } from '@/server/services/electricity'
 
 /**
  * GET /api/exports/<kind>.csv?property=&from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -54,6 +55,7 @@ const KINDS = [
   'charges',
   'rent-revisions',
   'activity',
+  'electricity',
 ] as const
 type Kind = (typeof KINDS)[number]
 
@@ -78,6 +80,7 @@ const KIND_ACCESS: Record<Kind, { module: ModuleKey; permission: string }> = {
   charges: { module: 'rent', permission: 'rent.view' },
   'rent-revisions': { module: 'rent', permission: 'rent.view' },
   activity: { module: 'activity', permission: 'activity.view' },
+  electricity: { module: 'electricity', permission: 'electricity.view' },
 }
 
 // Cells are written by toCsv (src/lib/csv.ts), which neutralises spreadsheet
@@ -404,6 +407,19 @@ async function buildExport(kind: Kind, { user, url, scope }: ExportContext): Pro
     ])
   }
 
+  if (kind === 'electricity') {
+    // One row per resident share (?month=YYYY-MM&roomId=&status=&paymentStatus=).
+    header = ELECTRICITY_EXPORT_HEADER
+    rows = await electricityExportRows(user, {
+      propertyId: scope.propertyId,
+      month: url.searchParams.get('month'),
+      roomId: url.searchParams.get('roomId'),
+      residentId: url.searchParams.get('residentId'),
+      status: url.searchParams.get('status'),
+      paymentStatus: url.searchParams.get('paymentStatus'),
+    })
+  }
+
   if (kind === 'activity') {
     // Same filters as the Activity page (q, event, group, actor, entity, range, from/to).
     header = AUDIT_CSV_HEADER
@@ -421,6 +437,7 @@ const ALL_DATA_SHEETS: [Kind, string][] = [
   ['deposits', 'Deposits'],
   ['charges', 'Charges'],
   ['rent-revisions', 'Rent revisions'],
+  ['electricity', 'Electricity'],
   ['expenses', 'Expenses'],
   ['complaints', 'Complaints'],
   ['maintenance', 'Maintenance'],

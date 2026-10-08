@@ -47,6 +47,7 @@ import {
   Utensils,
   Wallet,
   Wrench,
+  Zap,
 } from 'lucide-react'
 
 /**
@@ -106,6 +107,7 @@ export const ICONS = {
   utensils: Utensils,
   wallet: Wallet,
   wrench: Wrench,
+  zap: Zap,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

@@ -421,6 +421,11 @@ enum EventType {
   SETTLEMENT_ADJUSTED
   MAINTENANCE_UPDATED
   ASSET_UPDATED
+  ELECTRICITY_METER_UPDATED
+  ELECTRICITY_RATE_SET
+  METER_READING_RECORDED
+  ELECTRICITY_BILL_FINALIZED
+  ELECTRICITY_BILL_VOIDED
 }
 
 // ============================ PLATFORM =====================================
@@ -490,6 +495,11 @@ model Organization {
   importJobs         ImportJob[]
   supportTickets     SupportTicket[]
 
+  electricityMeters ElectricityMeter[]
+  electricityRates  ElectricityRate[]
+  meterReadings     MeterReading[]
+  electricityBills  RoomElectricityBill[]
+
   @@index([status])
 }
 
@@ -527,14 +537,23 @@ model OrgSetting {
   /// Modules the owner has switched off (see src/lib/modules.ts).
   disabledModules String[] @default([])
 
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
   /// Owner onboarding wizard progress.
-  onboardingStep        String?
-  onboardingData        Json?
-  onboardingCompletedAt DateTime?
+  onboardingStep              String?
+  onboardingData              Json?
+  onboardingCompletedAt       DateTime?
   /// Per notification type, which channels are on.
-  notificationSettings  Json?
+  notificationSettings        Json?
+  /// Electricity sub-meters: how a room's bill is shared.
+  /// DAYS_STAYED = by person-days actually lived in the room; EQUAL_PRESENT = equally among those living there on the reading date.
+  electricitySplitMethod      String    @default("DAYS_STAYED")
+  /// NEXT_RENT_INVOICE = shares are added to each resident's next rent invoice; SEPARATE_INVOICE = an invoice per resident straight away.
+  electricityBillingMode      String    @default("NEXT_RENT_INVOICE")
+  /// When true, approved leave days do not count towards a resident's share.
+  electricityExcludeLeaveDays Boolean   @default(false)
+  /// Expenses of this amount or more, recorded by someone who cannot approve, wait for approval.
+  expenseApprovalThreshold    Int       @default(5000)
 }
 
 model User {
@@ -667,6 +686,10 @@ model Property {
   bookings           Booking[]
   residentRequests   ResidentRequest[]
 
+  electricityMeters ElectricityMeter[]
+  electricityRates  ElectricityRate[]
+  electricityBills  RoomElectricityBill[]
+
   @@unique([organizationId, code])
   @@index([organizationId, status])
 }
@@ -711,6 +734,9 @@ model Room {
   complaints Complaint[]
   assets     Asset[]
   tasks      MaintenanceTask[]
+
+  electricityMeters ElectricityMeter[]
+  electricityBills  RoomElectricityBill[]
 
   @@unique([propertyId, number])
   @@index([floorId])
@@ -860,6 +886,8 @@ model Resident {
 
   charges       ResidentCharge[]
   rentRevisions RentRevision[]
+
+  electricityShares RoomElectricityShare[]
 
   @@unique([organizationId, code])
   @@index([propertyId, status])
@@ -2130,6 +2158,168 @@ model PlatformAnnouncement {
   endsAt    DateTime?
   createdBy String?
   createdAt DateTime  @default(now())
+}
+
+// ============================ ELECTRICITY SUB-METERS ========================
+
+enum ElectricityMeterStatus {
+  ACTIVE
+  REPLACED
+  FAULTY
+}
+
+enum MeterReadingKind {
+  /// Reading when the meter was installed or added to StayFlow.
+  INITIAL
+  /// The monthly reading.
+  REGULAR
+  /// Taken at a checkout, so the leaver pays up to their exit date.
+  INTERIM
+}
+
+enum ElectricityBillStatus {
+  DRAFT
+  FINALIZED
+  VOID
+}
+
+/// One sub-meter per room. Only one ACTIVE meter per room (partial unique index).
+model ElectricityMeter {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property               @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomId         String
+  room           Room                   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  meterNumber    String
+  status         ElectricityMeterStatus @default(ACTIVE)
+  installedOn    DateTime
+  initialReading Decimal                @default(0) @db.Decimal(12, 1)
+  /// The meter that took over when this one was replaced.
+  replacedById   String?
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  readings MeterReading[]
+  bills    RoomElectricityBill[]
+
+  @@unique([organizationId, meterNumber])
+  @@index([roomId, status])
+  @@index([propertyId])
+}
+
+/// Rate per unit for a PG from a month onwards. Append-only: the rate for a
+/// month is the newest row whose effectiveFrom is on or before that month.
+model ElectricityRate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  effectiveFrom  DateTime
+  ratePerUnit    Decimal      @db.Decimal(10, 2)
+  note           String?
+  createdById    String?
+  createdByName  String?
+  createdAt      DateTime     @default(now())
+
+  @@index([propertyId, effectiveFrom])
+}
+
+model MeterReading {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  meterId        String
+  meter          ElectricityMeter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  readingDate    DateTime
+  value          Decimal          @db.Decimal(12, 1)
+  kind           MeterReadingKind @default(REGULAR)
+  photoUrl       String?
+  note           String?
+  takenById      String?
+  takenByName    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([meterId, readingDate])
+  @@index([organizationId, readingDate])
+}
+
+/// A room's electricity for one reading period, with every value used frozen
+/// at finalization. Later rate or occupancy changes never touch it.
+model RoomElectricityBill {
+  id                String                @id @default(cuid())
+  organizationId    String
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId        String
+  property          Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomId            String
+  room              Room                  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  meterId           String
+  meter             ElectricityMeter      @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  /// YYYY-MM the owner billed it under.
+  billingMonth      String
+  /// REGULAR (monthly) | INTERIM (checkout)
+  kind              String                @default("REGULAR")
+  /// Previous and current reading dates: the bill covers [periodStart, periodEnd).
+  periodStart       DateTime
+  periodEnd         DateTime
+  previousReadingId String?
+  currentReadingId  String
+  previousReading   Decimal               @db.Decimal(12, 1)
+  currentReading    Decimal               @db.Decimal(12, 1)
+  units             Decimal               @db.Decimal(12, 1)
+  ratePerUnit       Decimal               @db.Decimal(10, 2)
+  rateId            String?
+  amount            Int
+  splitMethod       String
+  occupantCount     Int
+  /// Room was empty (or the owner chose to pay): nobody is charged.
+  ownerAbsorbed     Boolean               @default(false)
+  /// Shares of people who had already checked out; the owner bears these.
+  uncollectedAmount Int                   @default(0)
+  status            ElectricityBillStatus @default(DRAFT)
+  finalizedAt       DateTime?
+  finalizedById     String?
+  finalizedByName   String?
+  voidedAt          DateTime?
+  voidReason        String?
+  createdById       String?
+  createdByName     String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  shares RoomElectricityShare[]
+
+  @@index([organizationId, billingMonth])
+  @@index([roomId, periodStart])
+  @@index([meterId, status])
+}
+
+model RoomElectricityShare {
+  id               String              @id @default(cuid())
+  billId           String
+  bill             RoomElectricityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  organizationId   String
+  residentId       String
+  resident         Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  residentName     String
+  bedLabel         String?
+  /// Days the resident lived in the room during the period (after leave, if excluded).
+  daysStayed       Int
+  /// What the split used: days for DAYS_STAYED, 1 for EQUAL_PRESENT.
+  weight           Int
+  shareAmount      Int
+  /// False when the resident had already checked out (the owner bears it).
+  collectible      Boolean             @default(true)
+  residentChargeId String?             @unique
+  createdAt        DateTime            @default(now())
+
+  @@unique([billId, residentId])
+  @@index([residentId])
 }
 
 enum RoleApp {

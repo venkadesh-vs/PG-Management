@@ -506,7 +506,7 @@ async function generateInvoiceOnce(
  * invoice, exactly as recordPayment would have if the invoice had existed.
  * Deposits are held money and are never used for rent.
  */
-async function applyAdvanceToInvoice<T extends RentInvoice>(tx: Tx, invoice: T): Promise<T> {
+export async function applyAdvanceToInvoice<T extends RentInvoice>(tx: Tx, invoice: T): Promise<T> {
   if (invoice.balance <= 0) return invoice
 
   // Lock this resident's payments so two invoices generated at once cannot

@@ -19,6 +19,9 @@ describe('approval', () => {
     expect(initialApprovalStatus(4999, false)).toBe('APPROVED')
     expect(initialApprovalStatus(5000, false)).toBe('PENDING')
     expect(initialApprovalStatus(90000, true)).toBe('APPROVED')
+    // The organization's own threshold replaces the default.
+    expect(initialApprovalStatus(2500, false, 2000)).toBe('PENDING')
+    expect(initialApprovalStatus(7000, false, 10000)).toBe('APPROVED')
   })
 
   it('voided wins over approval', () => {

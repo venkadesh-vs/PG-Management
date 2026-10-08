@@ -48,6 +48,8 @@ type Resident = {
   outstanding: number
   exitDate: string | null
   noticeDate?: string | null
+  /** The room's active electricity meter, when the Electricity feature is on. */
+  meter?: { meterNumber: string; lastReading: { value: number; date: string } | null } | null
 }
 
 type Invoice = { id: string; number: string; balance: number; dueDate: string }
@@ -698,6 +700,7 @@ function CheckoutDialog({
   const [inspection, setInspection] = React.useState<Checklist>(() => blankChecklist('inspection'))
   const [clearance, setClearance] = React.useState<Checklist>(() => blankChecklist('clearance'))
   const [damages, setDamages] = React.useState<Record<string, DamageRow>>({})
+  const [meterReading, setMeterReading] = React.useState('')
   const nextKey = React.useRef(1)
 
   React.useEffect(() => {
@@ -747,6 +750,7 @@ function CheckoutDialog({
           exitDate,
           deductions: JSON.parse(deductionKey),
           assetDamages: JSON.parse(damageKey),
+          ...(meterReading.trim() ? { meterReading: meterReading.trim() } : {}),
         })
         .then((data) => {
           if (cancelled) return
@@ -766,7 +770,7 @@ function CheckoutDialog({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, resident.id, exitDate, deductionKey, damageKey])
+  }, [open, resident.id, exitDate, deductionKey, damageKey, meterReading])
 
   // Notice check
   const exit = new Date(`${exitDate}T00:00:00`)
@@ -789,6 +793,7 @@ function CheckoutDialog({
         reason: reason || undefined,
         deductions,
         assetDamages,
+        ...(meterReading.trim() ? { meterReading: meterReading.trim() } : {}),
         inspection,
         clearance,
         settlementNote: note || undefined,
@@ -887,6 +892,25 @@ function CheckoutDialog({
                         />
                       </Field>
                     </div>
+
+                    {resident.meter && (
+                      <Field
+                        label="Room meter reading on exit date"
+                        hint={`Optional. Meter ${resident.meter.meterNumber}${
+                          resident.meter.lastReading
+                            ? `, last read ${resident.meter.lastReading.value} on ${formatDate(resident.meter.lastReading.date)}`
+                            : ''
+                        }. Their electricity share up to the exit date is added to the settlement; the rest of the room pays theirs on the next invoice.`}
+                      >
+                        <Input
+                          inputMode="decimal"
+                          placeholder="e.g. 1340.5"
+                          value={meterReading}
+                          onChange={(e) => setMeterReading(e.target.value.replace(/[^\d.]/g, ''))}
+                          className="tabular-nums"
+                        />
+                      </Field>
+                    )}
 
                     <div
                       className={cn(

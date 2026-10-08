@@ -76,8 +76,6 @@ export function EnquiriesSection() {
       id="enquiries"
       eyebrow="Enquiries & bookings"
       icon={Inbox}
-      reverse
-      className="bg-slate-50/70"
       title="Turn every enquiry into a booked bed."
       problem="Enquiries come by phone, WhatsApp and walk-in. Half are never followed up, and nobody knows which bed was promised to whom."
       solution="Every enquiry lands on one board. Move it from new to visit to booked, take the advance, and the bed is reserved for the joining date."
@@ -93,6 +91,8 @@ export function FoodSection() {
       id="food"
       eyebrow="Food"
       icon={UtensilsCrossed}
+      reverse
+      className="bg-slate-50/70"
       title="Cook for the people who will actually eat."
       problem="The kitchen cooks for everyone, half skip dinner, and groceries run out mid-week without warning."
       solution="Plan the weekly menu, see live meal counts as residents opt in or out, and keep grocery stock with low-stock alerts and purchase lists."
@@ -108,8 +108,6 @@ export function ComplaintsSection() {
       id="complaints"
       eyebrow="Complaints"
       icon={MessageSquareWarning}
-      reverse
-      className="bg-slate-50/70"
       title="Every complaint has an owner — and an ending."
       problem="“The fan is still not fixed” — and you have no idea who was told, when, or whether anyone went."
       solution="Residents raise complaints from their app. You assign a worker, they see it in their own app, and the resident sees it move from Open to Resolved."
@@ -125,6 +123,8 @@ export function RevenueSection() {
       id="reports"
       eyebrow="Revenue intelligence"
       icon={LineChart}
+      reverse
+      className="bg-slate-50/70"
       title="See the money you’re losing to empty beds."
       problem="An empty bed doesn’t feel like a loss until the month ends. Profit is a guess made from three different books."
       solution="StayFlow turns vacancy into a rupee figure, floor by floor, and puts collections, expenses and profit for each PG on one screen."
@@ -149,8 +149,6 @@ export function ResidentAppSection() {
       id="resident-app"
       eyebrow="Resident app"
       icon={Smartphone}
-      reverse
-      className="bg-gradient-to-b from-slate-50/70 to-white"
       title="Give every resident their own PG app."
       problem="Residents message you at 11 PM for the menu, the Wi-Fi password, their rent amount and a receipt."
       solution="Residents get an app in their phone browser — no install needed. They pay rent, raise complaints, see the menu and read notices themselves."

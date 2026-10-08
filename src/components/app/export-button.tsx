@@ -20,6 +20,7 @@ export type ExportKind =
   | 'deposits'
   | 'charges'
   | 'rent-revisions'
+  | 'electricity'
   | 'activity'
 
 /**

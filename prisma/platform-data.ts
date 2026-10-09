@@ -10,6 +10,8 @@ export const PLATFORM_PLANS = [
   {
     name: 'Starter',
     slug: 'starter',
+    // One plan for now (Growth = one bed's rent); kept for later, switched off.
+    active: false,
     description: 'For a single PG getting off notebooks.',
     pricingBasis: 'STANDARD_RENT',
     multiplier: 100,
@@ -41,6 +43,8 @@ export const PLATFORM_PLANS = [
   {
     name: 'Scale',
     slug: 'scale',
+    // One plan for now (Growth = one bed's rent); kept for later, switched off.
+    active: false,
     description: 'Per-bed pricing for operators running many properties.',
     pricingBasis: 'PER_BED',
     perBedPrice: 90,

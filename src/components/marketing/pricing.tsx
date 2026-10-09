@@ -87,8 +87,8 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
         <SectionHeading
           eyebrow="Pricing"
           icon={Tag}
-          title={<span id="pricing-title">Simple pricing. Per PG.</span>}
-          description="One PG costs roughly what one resident pays you in rent. No per-tenant charges, no feature tiers, no surprises."
+          title={<span id="pricing-title">One bed’s rent a month. That’s the whole price.</span>}
+          description="Each PG pays what one resident pays you in rent. Every feature included, no per-tenant charges, no tiers, no surprises."
         />
 
         <div className="mt-12 grid gap-5 lg:grid-cols-[1.1fr_1fr] lg:gap-6">

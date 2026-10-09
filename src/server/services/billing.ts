@@ -369,7 +369,11 @@ async function generateInvoiceOnce(
 
     const settings = resident.organization.settings
     const dueDay = resident.rentDueDay || settings?.rentDueDay || 5
-    const dueDate = startOfDay(dayOfMonth(periodStart.getFullYear(), periodStart.getMonth(), dueDay))
+    const regularDue = startOfDay(dayOfMonth(periodStart.getFullYear(), periodStart.getMonth(), dueDay))
+    // Someone who joins after this month's due day can't already be late on their first
+    // invoice: it falls due on the joining day instead (usually paid at check-in).
+    const joinedOn = startOfDay(new Date(resident.joiningDate))
+    const dueDate = joinedOn > regularDue && joinedOn <= periodEnd ? joinedOn : regularDue
 
     // Rent (with any revision in force), the resident's charges and discounts.
     const [revisions, charges] = await Promise.all([

@@ -63,10 +63,20 @@ async function onSupportTicket(file: FileRow) {
   return !!hit
 }
 
+/** True when the file is the proof on one of its organization's payment reports. */
+async function onPaymentClaim(file: FileRow) {
+  const hit = await prisma.subscriptionPaymentClaim.findFirst({
+    where: { proofUrl: `/api/uploads/${file.id}`, organizationId: file.organizationId },
+    select: { id: true },
+  })
+  return !!hit
+}
+
 async function assertCanRead(user: SessionUser, file: FileRow) {
-  // The StayFlow team sees only what a customer attached to a support ticket.
+  // The StayFlow team sees only what a customer attached to a support ticket
+  // or sent as proof of a subscription payment.
   if (user.role === 'SUPER_ADMIN') {
-    if (await onSupportTicket(file)) return
+    if ((await onSupportTicket(file)) || (await onPaymentClaim(file))) return
     throw new NotFoundError('File not found')
   }
   if (!user.organizationId || user.organizationId !== file.organizationId) throw new NotFoundError('File not found')

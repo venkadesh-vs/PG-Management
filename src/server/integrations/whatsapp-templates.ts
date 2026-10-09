@@ -33,6 +33,11 @@ export type WhatsAppTemplateDef = {
   bypassOptOut?: boolean
   /** Shown next to the template on the settings page. */
   note?: string
+  /**
+   * 'owner': StayFlow's own billing messages to PG owners, sent from the
+   * platform number. Not a resident message, so no per-PG on/off switch.
+   */
+  audience?: 'owner'
 }
 
 export const DEFAULT_TEMPLATE_LANGUAGE = 'en'
@@ -126,6 +131,55 @@ export const WHATSAPP_TEMPLATES = {
     variables: ['Name', 'Reset link'],
     bypassOptOut: true,
     note: 'Account access message — sent even after a STOP. Submit as UTILITY: Meta’s AUTHENTICATION category only accepts its fixed one-time-code layout and no links.',
+  },
+  // ---- StayFlow billing to PG owners, sent from the platform number ----
+  owner_trial_ending: {
+    audience: 'owner',
+    label: 'Owner — trial ending',
+    category: 'UTILITY',
+    language: DEFAULT_TEMPLATE_LANGUAGE,
+    body:
+      'Hi {{1}}, your StayFlow free trial for {{2}} ends on {{3}}. After that the plan is {{4}} a month. ' +
+      'You can pay or set up AutoPay here: {{5}}',
+    variables: ['Owner name', 'PG name', 'Trial end date', 'Monthly amount', 'Pay link'],
+    note: 'Sent from the StayFlow platform number to the PG owner.',
+  },
+  owner_invoice_due: {
+    audience: 'owner',
+    label: 'Owner — invoice due',
+    category: 'UTILITY',
+    language: DEFAULT_TEMPLATE_LANGUAGE,
+    body: 'Hi {{1}}, your StayFlow invoice {{2}} of {{3}} for {{4}} is due {{5}}. Pay securely here: {{6}}',
+    variables: ['Owner name', 'Invoice number', 'Amount', 'PG name', 'When it is due (e.g. "tomorrow, 12 Oct")', 'Pay link'],
+    note: 'Sent when the invoice is raised and again before the due date.',
+  },
+  owner_grace_reminder: {
+    audience: 'owner',
+    label: 'Owner — payment pending (grace)',
+    category: 'UTILITY',
+    language: DEFAULT_TEMPLATE_LANGUAGE,
+    body:
+      'Hi {{1}}, your StayFlow payment of {{2}} for {{3}} is pending. Your account stays fully active until {{4}} ({{5}}). ' +
+      'Pay here to avoid a pause: {{6}}',
+    variables: ['Owner name', 'Amount', 'PG name', 'Last active date', 'Days left (e.g. "3 days left")', 'Pay link'],
+  },
+  owner_suspended: {
+    audience: 'owner',
+    label: 'Owner — account paused',
+    category: 'UTILITY',
+    language: DEFAULT_TEMPLATE_LANGUAGE,
+    body:
+      'Hi {{1}}, your StayFlow account for {{2}} is paused because {{3}} is unpaid. Your data is safe. ' +
+      'Pay here to restore access instantly: {{4}}',
+    variables: ['Owner name', 'PG name', 'Amount due', 'Pay link'],
+  },
+  owner_payment_received: {
+    audience: 'owner',
+    label: 'Owner — payment received',
+    category: 'UTILITY',
+    language: DEFAULT_TEMPLATE_LANGUAGE,
+    body: 'Hi {{1}}, we have received {{2}} for StayFlow invoice {{3}} ({{4}}). {{5}} Thank you!',
+    variables: ['Owner name', 'Amount', 'Invoice number', 'PG name', 'Status line (e.g. "Your account is active.")'],
   },
 } satisfies Record<string, WhatsAppTemplateDef>
 

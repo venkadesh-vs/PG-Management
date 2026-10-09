@@ -52,6 +52,7 @@ import {
 import { downgradeBlockers, type PlanLimits } from '@/lib/plan-entitlements'
 import { assertWithinPlan, countUsage } from './plan-limits'
 import { failedWebhooks, finishWebhook, reclaimFailedWebhook } from './webhook-log'
+import { ownerBillingEvents } from './owner-billing'
 
 type Tx = Prisma.TransactionClient
 
@@ -865,12 +866,11 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
           graceEndsAt,
         },
       })
-      await notifyOrgAdmins(subscription.organizationId, {
-        kind: 'SUBSCRIPTION',
-        title: 'Subscription invoice raised',
-        body: `${invoice.number} · ${formatMoney(invoice.total)} for ${subscription.property.name}. Pay before ${graceEndsAt.toLocaleDateString('en-IN')}.`,
-        link: '/app/subscription',
-      })
+      // In-app + WhatsApp + email, exactly once per invoice.
+      await ownerBillingEvents.invoiceRaised(
+        { id: subscription.id, organizationId: subscription.organizationId, propertyName: subscription.property.name },
+        invoice,
+      )
       results.push({
         property: subscription.property.name,
         amount: invoice.total,
@@ -1114,12 +1114,15 @@ export async function enforceGracePeriods(now = new Date()) {
       },
     })
     if (moved.count === 1 && graceEndsAt > now) {
-      await notifyOrgAdmins(subscription.organizationId, {
-        kind: 'SUBSCRIPTION',
-        title: 'Grace period started',
-        body: `${subscription.property.name}'s StayFlow invoice is overdue. Pay before ${graceEndsAt.toLocaleDateString('en-IN')} to avoid suspension.`,
-        link: '/app/subscription',
-      })
+      await ownerBillingEvents.graceStarted(
+        {
+          id: subscription.id,
+          organizationId: subscription.organizationId,
+          propertyName: subscription.property.name,
+          graceEndsAt,
+        },
+        now,
+      )
     }
   }
 
@@ -1163,11 +1166,11 @@ export async function enforceGracePeriods(now = new Date()) {
         tx,
       )
     })
-    await notifyOrgAdmins(subscription.organizationId, {
-      kind: 'SUBSCRIPTION',
-      title: 'Account restricted',
-      body: `${subscription.property.name} is restricted because the subscription is unpaid. Settle the invoice to restore access.`,
-      link: '/app/subscription',
+    await ownerBillingEvents.suspended({
+      id: subscription.id,
+      organizationId: subscription.organizationId,
+      propertyName: subscription.property.name,
+      graceEndsAt: subscription.graceEndsAt,
     })
   }
   return { suspended: expired.length, graced: toGrace.length }
@@ -1180,13 +1183,15 @@ export async function markSubscriptionInvoicePaid(params: {
   reference?: string
   actor: { id?: string; name: string }
 }) {
+  let due = 0
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.subscriptionInvoice.findUnique({
       where: { id: params.invoiceId },
-      select: { status: true },
+      select: { status: true, total: true, amountPaid: true },
     })
     if (!invoice) throw new NotFoundError('Invoice not found')
     if (invoice.status === 'PAID') throw new ConflictError('This invoice is already paid')
+    due = Math.max(0, invoice.total - invoice.amountPaid)
     // Same settle + reactivation path as Pay now and AutoPay charges.
     return settleSubscriptionInvoice(tx, {
       invoiceId: params.invoiceId,
@@ -1196,6 +1201,7 @@ export async function markSubscriptionInvoicePaid(params: {
       actor: params.actor,
     })
   })
+  if (!result.alreadyPaid) await notifyPaid(result.invoice, due, result.reactivated)
   return result.invoice
 }
 
@@ -1408,16 +1414,22 @@ async function settleInvoiceFromPlatformPayment(
 }
 
 async function notifyPaid(
-  invoice: { number: string; subscription: { organizationId: string; property: { name: string } } },
+  invoice: {
+    id: string
+    number: string
+    subscriptionId: string
+    subscription: { organizationId: string; property: { name: string } }
+  },
   amount: number,
   reactivated: boolean,
 ) {
-  await notifyOrgAdmins(invoice.subscription.organizationId, {
-    kind: 'SUBSCRIPTION',
-    title: reactivated ? 'Payment received — account restored' : 'Subscription payment received',
-    body: `${formatMoney(amount)} for ${invoice.subscription.property.name}. Invoice ${invoice.number}.`,
-    link: '/app/subscription',
-  })
+  // In-app + WhatsApp + email, once per invoice.
+  await ownerBillingEvents.paymentReceived(
+    invoice.subscription.organizationId,
+    { id: invoice.id, number: invoice.number, subscriptionId: invoice.subscriptionId, propertyName: invoice.subscription.property.name },
+    amount,
+    reactivated,
+  )
 }
 
 /** Checkout callback for Pay now: signature, then a fetch from Razorpay. */
@@ -1549,12 +1561,7 @@ async function handleSubscriptionCharged(
         ['number'],
       )
       if (!result) continue
-      await notifyOrgAdmins(subscription.organizationId, {
-        kind: 'SUBSCRIPTION',
-        title: result.reactivated ? 'AutoPay charged — account restored' : 'Subscription charged',
-        body: `${formatMoney(amount)} for ${subscription.property.name}. Invoice ${result.invoice.number}.`,
-        link: '/app/subscription',
-      })
+      await notifyPaid(result.invoice, amount, result.reactivated)
       return { handled: true, note: `settled ${result.invoice.number}` }
     } catch (error) {
       if (isUniqueViolation(error, ['gatewayPaymentId'])) return { handled: true, note: 'duplicate' }

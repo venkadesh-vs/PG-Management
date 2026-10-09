@@ -5,6 +5,7 @@ import { assertResidentAccess, ForbiddenError, ValidationError } from '@/lib/ten
 import { newStorageKey, putObject } from '@/server/storage'
 import { assertStorageAvailable } from '@/server/services/plan-limits'
 import { logError } from '@/lib/logger'
+import { isOrgRestricted } from '@/lib/auth'
 
 /**
  * POST /api/uploads — multipart upload (field `file`, `purpose`, optional
@@ -49,6 +50,11 @@ function allowedPurposes(role: string): Purpose[] {
 
 export const POST = route(async ({ user, request }) => {
   if (!user.organizationId) throw new ForbiddenError('Uploads belong to a PG account')
+  // A paused account may upload only one thing: the owner's payment proof on
+  // the paywall. Everyone else stays read-only until the invoice is paid.
+  if (isOrgRestricted(user) && user.role !== 'OWNER' && user.role !== 'MANAGER') {
+    return fail('Your StayFlow subscription is suspended. Pay the pending invoice to continue.', 402)
+  }
 
   // Refuse obviously oversized bodies before buffering them.
   const declared = Number(request.headers.get('content-length') ?? 0)
@@ -134,4 +140,4 @@ export const POST = route(async ({ user, request }) => {
   })
 
   return ok({ id: row.id, url: `/api/uploads/${row.id}`, contentType, size: bytes.length }, { status: 201 })
-})
+}, { allowRestricted: true })

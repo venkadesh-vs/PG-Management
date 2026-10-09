@@ -1,4 +1,8 @@
+'use client'
+
+import * as React from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CreditCard, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -18,6 +22,19 @@ export function RestrictedGate({ pathname, children }: { pathname: string; child
       </>
     )
   }
+  return <PaywallRedirect />
+}
+
+/**
+ * Every other page goes to the full-screen paywall (amount, Pay now, UPI/bank, "I've paid").
+ * The server already refuses the data (requireOrgUser redirect, API 402); this makes the
+ * redirect happen even though the shell, not the page, is what renders here.
+ */
+function PaywallRedirect() {
+  const router = useRouter()
+  React.useEffect(() => {
+    router.replace('/paywall')
+  }, [router])
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-16 text-center">
       <div className="flex size-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">

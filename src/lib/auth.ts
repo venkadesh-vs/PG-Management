@@ -13,6 +13,7 @@ import { resolveAccess } from './access'
 import { ipFromHeaders } from './client-ip'
 import { planExcludedModules } from './plan-entitlements'
 import type { ModuleKey } from './modules'
+import { paywallDecision } from './owner-billing'
 
 export const SESSION_COOKIE = 'stayflow_session'
 
@@ -244,10 +245,19 @@ export function isOrgRestricted(user: Pick<SessionUser, 'organizationStatus'>) {
   return user.organizationStatus === 'SUSPENDED' || user.organizationStatus === 'CANCELLED'
 }
 
-/** OWNER or MANAGER of an organization. */
-export async function requireOrgUser(): Promise<SessionUser & { organizationId: string }> {
+/**
+ * OWNER or MANAGER of an organization. A paused (unpaid) account is sent to
+ * the full-screen paywall — server-side, so no page data is rendered — except
+ * where the caller allows it (the owner layout, the subscription page).
+ */
+export async function requireOrgUser(opts?: {
+  allowRestricted?: boolean
+}): Promise<SessionUser & { organizationId: string }> {
   const user = await requireRole('OWNER', 'MANAGER')
   if (!user.organizationId) redirect('/login')
+  if (!opts?.allowRestricted && paywallDecision({ role: user.role, organizationStatus: user.organizationStatus }) === 'paywall') {
+    redirect('/paywall')
+  }
   return user as SessionUser & { organizationId: string }
 }
 
@@ -256,8 +266,8 @@ export async function requireOrgUser(): Promise<SessionUser & { organizationId: 
  * must hold the permission. Sends them to a friendly explanation otherwise,
  * never a blank page or a 403.
  */
-export async function requireAccess(opts: { module?: ModuleKey; permission?: string }) {
-  const user = await requireOrgUser()
+export async function requireAccess(opts: { module?: ModuleKey; permission?: string; allowRestricted?: boolean }) {
+  const user = await requireOrgUser({ allowRestricted: opts.allowRestricted })
   if (opts.module && !user.modules.includes(opts.module)) redirect(`/app/feature-off?module=${opts.module}`)
   if (opts.permission && !user.permissions.includes(opts.permission)) redirect('/app/no-access')
   return user

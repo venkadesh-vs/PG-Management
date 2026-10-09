@@ -87,12 +87,16 @@ describe('prefsGrid', () => {
 
 describe('type mapping', () => {
   it('maps every WhatsApp template to a switch that covers WhatsApp', () => {
-    for (const name of Object.keys(WHATSAPP_TEMPLATES)) {
+    // Owner billing templates come from StayFlow itself: no per-PG switch.
+    const residentTemplates = Object.entries(WHATSAPP_TEMPLATES)
+      .filter(([, def]) => (def as { audience?: string }).audience !== 'owner')
+      .map(([name]) => name)
+    for (const name of residentTemplates) {
       const type = typeForTemplate(name)
       expect(type, name).not.toBeNull()
       expect((NOTIFICATION_TYPES[type!].channels as string[]).includes('WHATSAPP'), name).toBe(true)
     }
-    expect(Object.keys(TEMPLATE_TYPE).sort()).toEqual(Object.keys(WHATSAPP_TEMPLATES).sort())
+    expect(Object.keys(TEMPLATE_TYPE).sort()).toEqual(residentTemplates.sort())
     expect(typeForTemplate('unknown')).toBeNull()
     expect(typeForTemplate(null)).toBeNull()
   })

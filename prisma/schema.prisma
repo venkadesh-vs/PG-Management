@@ -496,6 +496,8 @@ model Organization {
   invoiceAdjustments InvoiceAdjustment[]
   importJobs         ImportJob[]
   supportTickets     SupportTicket[]
+  billingReminders   OwnerBillingReminder[]
+  paymentClaims      SubscriptionPaymentClaim[]
 
   electricityMeters ElectricityMeter[]
   electricityRates  ElectricityRate[]
@@ -560,6 +562,8 @@ model OrgSetting {
   expenseApprovalThreshold    Int       @default(5000)
   /// Resident rent AutoPay (Razorpay recurring payments on the PG's own account). Off until the owner offers it.
   residentAutopayEnabled      Boolean   @default(false)
+  /// Channels (besides in-app, which is always on) for StayFlow billing reminders to the owner.
+  ownerBillingChannels        String[]  @default(["WHATSAPP", "EMAIL"])
   /// AutoPay limit = the resident's usual monthly bill x this percent, rounded up to the next 500.
   autopayMaxPercent           Int       @default(150)
   /// Optional ceiling on any resident's AutoPay limit (null = no ceiling).
@@ -2620,4 +2624,49 @@ model SystemSetting {
   key       String   @unique
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/// One row per StayFlow billing notice sent to a PG owner. The unique key makes
+/// every reminder go out exactly once, however often the daily run repeats.
+model OwnerBillingReminder {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  invoiceId      String?
+  /// TRIAL_ENDING | INVOICE_RAISED | DUE_SOON | GRACE_STARTED | GRACE_REMINDER | SUSPENDED | PAYMENT_RECEIVED
+  kind           String
+  key            String       @unique
+  /// Channels actually attempted, e.g. ["IN_APP","WHATSAPP","EMAIL"].
+  channels       String[]
+  sentAt         DateTime     @default(now())
+
+  @@index([organizationId, sentAt])
+}
+
+/// "I've paid" by UPI / bank transfer: the owner reports a payment, a Super
+/// Admin verifies it and marks the invoice paid.
+model SubscriptionPaymentClaim {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  amount         Int
+  /// UPI | BANK_TRANSFER
+  method         String
+  utr            String
+  proofUrl       String?
+  note           String?
+  /// PENDING | APPROVED | REJECTED
+  status         String       @default("PENDING")
+  createdById    String?
+  createdByName  String
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?
+  rejectReason   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([status, createdAt])
+  @@index([organizationId, createdAt])
 }

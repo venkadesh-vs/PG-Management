@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { formatMoney } from '@/lib/utils'
 import { ConflictError } from '@/lib/tenancy'
 import { RazorpayError } from '@/server/integrations/razorpay'
+import { reviewPaymentClaim } from '@/server/services/owner-billing'
 
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('RUN') }),
@@ -40,6 +41,12 @@ const schema = z.discriminatedUnion('action', [
     reason: z.string().trim().max(500).optional(),
   }),
   z.object({ action: z.literal('REACTIVATE'), subscriptionId: z.string().min(1) }),
+  z.object({ action: z.literal('APPROVE_CLAIM'), claimId: z.string().min(1) }),
+  z.object({
+    action: z.literal('REJECT_CLAIM'),
+    claimId: z.string().min(1),
+    reason: z.string().trim().min(3, 'Say why, so the owner can fix it').max(300),
+  }),
 ])
 
 /** Platform billing controls — the same services the nightly job calls. */
@@ -64,6 +71,23 @@ export const POST = route(
           results.length === 0 && grace.suspended === 0
             ? 'Nothing was due — no subscription reached its billing date.'
             : `${billed} charged, ${invoiced} invoiced, ${failed} failed, ${grace.suspended} suspended.`,
+      })
+    }
+
+    if (body.action === 'APPROVE_CLAIM' || body.action === 'REJECT_CLAIM') {
+      const actor = { id: user.id, name: user.name }
+      const result = await reviewPaymentClaim({
+        claimId: body.claimId,
+        decision: body.action === 'APPROVE_CLAIM' ? 'APPROVE' : 'REJECT',
+        reason: body.action === 'REJECT_CLAIM' ? body.reason : undefined,
+        actor,
+        // Same mark-paid path as MARK_PAID: settles, reactivates, notifies.
+        markPaid: (invoiceId, method, reference) =>
+          adminMarkInvoicePaid({ invoiceId, method, reference, actor: { ...actor, role: user.role } }),
+      })
+      return ok({
+        ...result,
+        message: result.status === 'APPROVED' ? 'Payment verified — invoice marked paid' : 'Payment report rejected — the owner was told',
       })
     }
 

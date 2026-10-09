@@ -15,6 +15,8 @@ export default async function ServicePausedPage() {
   const user = await getSessionUser()
   if (!user) redirect('/login')
   if (!isOrgRestricted(user)) redirect(HOME_FOR_ROLE[user.role])
+  // Owners and managers get the paywall, where they can pay.
+  if (user.role === 'OWNER' || user.role === 'MANAGER') redirect('/paywall')
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-slate-50 px-6 text-center">
@@ -23,11 +25,11 @@ export default async function ServicePausedPage() {
         <PauseCircle className="size-6 text-amber-500" />
       </div>
       <div className="max-w-sm space-y-2">
-        <h1 className="font-display text-xl font-semibold text-slate-900">The app is paused for now</h1>
+        <h1 className="font-display text-xl font-semibold text-slate-900">Temporarily paused</h1>
         <p className="text-sm leading-relaxed text-slate-500">
-          {user.organizationName ?? 'Your PG'}&apos;s StayFlow account is on hold. Your records are
-          safe — please contact your PG owner or manager. Everything comes back as soon as the account
-          is active again.
+          {user.organizationName ?? 'Your PG'}&apos;s app is temporarily paused. Your records are
+          safe — please contact your PG owner. Everything comes back as soon as the account is active
+          again.
         </p>
       </div>
       <SignOutButton />

@@ -296,6 +296,41 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
   },
   {
+    slug: 'paying-for-stayflow',
+    title: 'Paying for StayFlow, the grace period and missed payments',
+    section: 'Money',
+    summary: 'How your StayFlow subscription is billed, the reminders you get, the grace period with full access, and what happens if a payment is missed.',
+    keywords: 'subscription pay stayflow invoice bill grace period overdue paused suspended expired paywall utr upi bank transfer reminder trial',
+    body: [
+      { type: 'p', text: 'Each PG has one StayFlow subscription: one bed’s rent a month. Your invoices are under Subscription.' },
+      { type: 'p', text: 'Reminders you get (default timings)' },
+      {
+        type: 'steps',
+        items: [
+          'Before your free trial ends (3 days and 1 day before).',
+          'When an invoice is raised, the day before it is due and on the due day.',
+          'During the grace period, with 3 days and 1 day left.',
+          'When a payment is received.',
+        ],
+      },
+      { type: 'p', text: 'They always appear in the app. On the Subscription page, under Billing reminders, choose whether you also get them on WhatsApp and email.' },
+      { type: 'p', text: 'Grace period' },
+      { type: 'p', text: 'If an invoice is not paid by its due date, your account stays fully active for the grace period shown on your Subscription page. Nothing is locked and there is no penalty. Owners and managers see a banner with the amount and the last active day.' },
+      { type: 'p', text: 'If the grace period ends unpaid' },
+      { type: 'p', text: 'The account is paused. Owners and managers see a “Subscription expired” screen with the amount due and ways to pay; residents and staff see that the app is temporarily paused. All your data is kept safe.' },
+      { type: 'p', text: 'How to pay' },
+      {
+        type: 'steps',
+        items: [
+          'Pay online with Pay now (UPI, card or netbanking). Access returns the moment it succeeds.',
+          'Or pay by UPI or bank transfer to the details shown, then tap “I’ve paid” and enter the UTR (and a screenshot if you have one). We verify it and switch your account back on.',
+        ],
+      },
+      { type: 'tip', text: 'Set up AutoPay on the Subscription page and the monthly payment happens by itself — you only hear from us if it fails.' },
+    ],
+    links: [{ label: 'Open Subscription', href: '/app/subscription' }],
+  },
+  {
     slug: 'autopay',
     title: 'Rent AutoPay for residents',
     section: 'Money',

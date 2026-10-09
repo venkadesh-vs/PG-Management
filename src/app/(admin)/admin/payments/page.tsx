@@ -21,6 +21,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { FilterBar, FilterSelect, SearchInput } from '@/components/app/filters'
 import { MarkPaidButton } from './mark-paid-button'
+import { PaymentClaims } from './payment-claims'
+import { listPaymentClaims } from '@/server/services/owner-billing'
 
 export const metadata: Metadata = { title: 'Payments' }
 
@@ -31,6 +33,7 @@ export default async function AdminPaymentsPage({
 }) {
   await requireSuperAdmin()
   const params = await searchParams
+  const pendingClaims = await listPaymentClaims('PENDING')
   const q = params.q?.trim() ?? ''
   const status = params.status
 
@@ -100,6 +103,23 @@ export default async function AdminPaymentsPage({
         icon="card"
         breadcrumbs={[{ label: 'Platform', href: '/admin' }, { label: 'Payments' }]}
       />
+
+      {pendingClaims.length > 0 && (
+        <PaymentClaims
+          claims={pendingClaims.map((c) => ({
+            id: c.id,
+            organizationName: c.organization.name,
+            invoiceNumber: c.invoice?.number ?? '—',
+            amount: c.amount,
+            method: c.method,
+            utr: c.utr,
+            proofUrl: c.proofUrl,
+            note: c.note,
+            createdByName: c.createdByName,
+            createdAt: c.createdAt.toISOString(),
+          }))}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard

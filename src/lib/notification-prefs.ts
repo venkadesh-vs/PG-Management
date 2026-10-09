@@ -241,5 +241,10 @@ export function sampleValue(variable: string): string {
   if (v.includes('organization')) return 'Sunrise Residency'
   if (v.includes('link')) return 'https://stayflow.app/l/abc123'
   if (v.includes('refund')) return '₹12,000'
+  if (v.includes('owner')) return 'Murugan S'
+  if (v.includes('invoice number')) return 'SF-202611-0004'
+  if (v.includes('when it is due')) return 'tomorrow, 12 Nov'
+  if (v.includes('days left')) return '3 days left'
+  if (v.includes('status line')) return 'Your account is active.'
   return variable
 }

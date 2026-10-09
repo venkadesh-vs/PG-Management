@@ -17,6 +17,7 @@ import {
   retryFailedCharges,
   runSubscriptionBilling,
 } from './subscriptions'
+import { runOwnerBillingReminders } from './owner-billing'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
 import { retryFailedWhatsApp } from '../integrations/whatsapp'
 import { orgsWithModuleOff } from './org-modules'
@@ -40,7 +41,7 @@ export type AutomationReport = {
   invoices: { created: number; skipped: number; failed: number }
   overdue: { flagged: number; feesApplied: number }
   reminders: { sent: number }
-  subscriptions: { billed: number; failed: number; suspended: number }
+  subscriptions: { billed: number; failed: number; suspended: number; reminders: number }
   occupancy: { snapshots: number }
   meals: { refreshed: number }
   whatsappRetries: { retried: number; sent: number; failed: number }
@@ -169,7 +170,7 @@ async function runAutomationPass(options?: AutomationOptions): Promise<Automatio
     invoices: { created: 0, skipped: 0, failed: 0 },
     overdue: { flagged: 0, feesApplied: 0 },
     reminders: { sent: 0 },
-    subscriptions: { billed: 0, failed: 0, suspended: 0 },
+    subscriptions: { billed: 0, failed: 0, suspended: 0, reminders: 0 },
     occupancy: { snapshots: 0 },
     meals: { refreshed: 0 },
     whatsappRetries: { retried: 0, sent: 0, failed: 0 },
@@ -278,6 +279,14 @@ async function runSteps(
     report.subscriptions.suspended = grace.suspended
   } catch (error) {
     errors.push(`subscriptions: ${(error as Error).message}`)
+  }
+  // StayFlow billing reminders to owners (trial ending, due soon, grace days
+  // left). Each is keyed, so reruns of this pass never send twice.
+  try {
+    const reminders = await runOwnerBillingReminders(now, options?.organizationId)
+    report.subscriptions.reminders = reminders.sent
+  } catch (error) {
+    errors.push(`owner reminders: ${(error as Error).message}`)
   }
   // Webhooks that failed to process get another go (platform-wide only).
   if (!options?.organizationId) {

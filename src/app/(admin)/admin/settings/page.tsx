@@ -9,13 +9,15 @@ import { cn, formatDateTime } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { BillingSettingsForm } from './billing-settings-form'
+import { getPlatformPaymentDetails, getReminderSchedule } from '@/server/services/owner-billing'
 
 export const metadata: Metadata = { title: 'System Settings' }
 
 export default async function SystemSettingsPage() {
   await requireSuperAdmin()
 
-  const [settings, counts, lastAutomation] = await Promise.all([
+  const [settings, counts, lastAutomation, paymentDetails, schedule] = await Promise.all([
     prisma.systemSetting.findMany({ orderBy: { key: 'asc' } }),
     Promise.all([
       prisma.organization.count(),
@@ -31,6 +33,8 @@ export default async function SystemSettingsPage() {
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true, summary: true },
     }),
+    getPlatformPaymentDetails(),
+    getReminderSchedule(),
   ])
 
   const [orgs, properties, residents, invoices, payments, messages, logs] = counts
@@ -132,6 +136,8 @@ export default async function SystemSettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <BillingSettingsForm paymentDetails={paymentDetails} schedule={schedule} />
 
       {settings.length > 0 && (
         <Card>

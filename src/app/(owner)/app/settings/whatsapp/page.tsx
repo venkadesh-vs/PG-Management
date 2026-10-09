@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { requireRole } from '@/lib/auth'
+import { isOrgRestricted, requireRole } from '@/lib/auth'
 import { serverEnv } from '@/lib/env'
 import { prisma } from '@/lib/prisma'
 import { formatDateTime, relativeTime } from '@/lib/utils'
@@ -20,6 +20,7 @@ export const metadata: Metadata = { title: 'WhatsApp Business' }
 export default async function WhatsAppSettingsPage() {
   const user = await requireRole('OWNER')
   if (!user.organizationId) redirect('/login')
+  if (isOrgRestricted(user)) redirect('/paywall')
   const organizationId = user.organizationId
   const moduleOn = user.modules.includes('whatsapp')
   // Server component: renders once per request, so reading the clock here is fine.
@@ -66,7 +67,10 @@ export default async function WhatsAppSettingsPage() {
     }),
   ])
 
-  const templates = Object.entries(WHATSAPP_TEMPLATES).map(([name, def]) => ({
+  // StayFlow's own billing messages to owners are not the PG's to send or test.
+  const templates = Object.entries(WHATSAPP_TEMPLATES)
+    .filter(([, def]) => (def as { audience?: string }).audience !== 'owner')
+    .map(([name, def]) => ({
     name,
     label: def.label,
     category: def.category,

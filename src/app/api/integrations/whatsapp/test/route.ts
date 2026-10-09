@@ -31,7 +31,7 @@ export const POST = route(
     const organizationId = user.organizationId!
     const def = getTemplate(body.template)
     // Login-link templates carry real links and skip STOP: never sent as a test.
-    if (!def || typeForTemplate(body.template) === 'ACCOUNT_ACCESS') {
+    if (!def || def.audience === 'owner' || typeForTemplate(body.template) === 'ACCOUNT_ACCESS') {
       throw new ValidationError('Choose one of the resident message templates')
     }
     const phone = normalisePhone(body.phone)

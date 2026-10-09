@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
 import { PayInvoiceButton } from './pay-invoice-button'
+import { BillingRemindersCard } from './billing-reminders-card'
+import { ownerBillingChannels } from '@/server/services/owner-billing'
 import {
   CancelSubscriptionButton,
   ChangePlanButton,
@@ -46,7 +48,8 @@ const PAYABLE = ['PENDING', 'PARTIALLY_PAID', 'OVERDUE']
 export const metadata: Metadata = { title: 'Subscription' }
 
 export default async function SubscriptionPage() {
-  const user = await requireAccess({ module: 'settings', permission: 'billing.manage' })
+  const user = await requireAccess({ module: 'settings', permission: 'billing.manage', allowRestricted: true })
+  const reminderChannels = await ownerBillingChannels(user.organizationId)
 
   const [subscriptions, organization, invoices, plans, usage] = await Promise.all([
     prisma.subscription.findMany({
@@ -702,6 +705,7 @@ export default async function SubscriptionPage() {
         </CardContent>
       </Card>
 
+      <BillingRemindersCard initial={reminderChannels} />
     </div>
   )
 }

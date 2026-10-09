@@ -9,6 +9,8 @@ import { Badge, StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { PayRentButton } from './pay-rent-button'
+import { AutopayCard } from './autopay-card'
+import { residentAutopayStatus } from '@/server/services/resident-autopay'
 
 export const metadata: Metadata = { title: 'Rent & Payments' }
 
@@ -34,6 +36,8 @@ export default async function TenantRentPage() {
   if (!resident) return null
 
   const theme = themeFor(resident.property.type)
+  // AutoPay is optional and must never break the rent page.
+  const autopay = await residentAutopayStatus(resident.id).catch(() => null)
   const open = resident.invoices.filter((i) =>
     ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(i.status),
   )
@@ -91,6 +95,8 @@ export default async function TenantRentPage() {
           )}
         </CardContent>
       </Card>
+
+      {autopay && <AutopayCard status={autopay} />}
 
       {/* ------------------------------------- Coming on next invoice */}
       {resident.charges.length > 0 && (

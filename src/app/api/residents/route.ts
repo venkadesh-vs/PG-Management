@@ -52,6 +52,16 @@ export const POST = route(
       notes: body.notes || undefined,
       signatureUrl: body.signatureUrl || undefined,
       depositCollected: body.depositCollected,
+      depositMethod: body.depositMethod,
+      depositReference: body.depositReference || undefined,
+      firstMonth:
+        body.firstMonthAmount !== undefined
+          ? {
+              amount: body.firstMonthAmount,
+              method: body.firstMonthMethod ?? 'CASH',
+              reference: body.firstMonthReference || undefined,
+            }
+          : undefined,
       createTenantAccount: body.createTenantAccount,
       whatsappConsent: body.whatsappConsent,
       documents: body.documents,
@@ -68,8 +78,10 @@ export const POST = route(
         },
         bed: { label: result.bed.label, room: result.bed.room.number },
         invoice: result.firstInvoice
-          ? { number: result.firstInvoice.number, total: result.firstInvoice.total }
+          ? { number: result.firstInvoice.number, total: result.firstInvoice.total, status: result.firstInvoice.status }
           : null,
+        // First month collected by hand at check-in (when the owner entered it).
+        firstMonthPayment: result.firstMonthPayment ?? null,
         // Check-in succeeded but the first rent invoice did not; the owner
         // can raise it from the Rent page.
         firstInvoiceError: result.firstInvoiceError ?? null,

@@ -710,7 +710,19 @@ export async function recordGatewayPayment(
 }
 
 async function recordPaymentOnce(input: RecordPaymentInput) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction((tx) => recordPaymentTx(tx, input))
+}
+
+/**
+ * recordPayment inside a transaction the caller already holds (check-in records
+ * the first month's payment atomically with the resident). No WhatsApp receipt:
+ * outbound messages belong after commit.
+ */
+export async function recordPaymentTx(tx: Tx, input: RecordPaymentInput) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new ValidationError('Payment amount must be greater than zero')
+  }
+  {
     const resident = await tx.resident.findUnique({
       where: { id: input.residentId },
       include: { organization: { include: { settings: true } }, property: true },
@@ -885,7 +897,7 @@ async function recordPaymentOnce(input: RecordPaymentInput) {
     )
 
     return { payment, resident, allocations: touched, advance: Math.max(0, remaining) }
-  })
+  }
 }
 
 // --------------------------------------------------------------------------

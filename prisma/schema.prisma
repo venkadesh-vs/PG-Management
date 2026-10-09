@@ -426,6 +426,8 @@ enum EventType {
   METER_READING_RECORDED
   ELECTRICITY_BILL_FINALIZED
   ELECTRICITY_BILL_VOIDED
+  AUTOPAY_MANDATE_UPDATED
+  AUTOPAY_CHARGE
 }
 
 // ============================ PLATFORM =====================================
@@ -500,6 +502,8 @@ model Organization {
   meterReadings     MeterReading[]
   electricityBills  RoomElectricityBill[]
 
+  residentMandates ResidentMandate[]
+
   @@index([status])
 }
 
@@ -554,6 +558,19 @@ model OrgSetting {
   electricityExcludeLeaveDays Boolean   @default(false)
   /// Expenses of this amount or more, recorded by someone who cannot approve, wait for approval.
   expenseApprovalThreshold    Int       @default(5000)
+  /// Resident rent AutoPay (Razorpay recurring payments on the PG's own account). Off until the owner offers it.
+  residentAutopayEnabled      Boolean   @default(false)
+  /// AutoPay limit = the resident's usual monthly bill x this percent, rounded up to the next 500.
+  autopayMaxPercent           Int       @default(150)
+  /// Optional ceiling on any resident's AutoPay limit (null = no ceiling).
+  autopayMaxAmountCap         Int?
+  /// Days after the invoice due date to debit (0 = on the due date).
+  autopayChargeDayOffset      Int       @default(0)
+  /// How many more days a failed debit is retried before the owner is alerted.
+  autopayRetryDays            Int       @default(2)
+  /// Days of the month a resident's regular rent may fall due (their AutoPay debit day too). 1 <= min <= max <= 28.
+  rentDueDayMin               Int       @default(1)
+  rentDueDayMax               Int       @default(10)
 }
 
 model User {
@@ -889,6 +906,8 @@ model Resident {
 
   electricityShares RoomElectricityShare[]
 
+  mandates ResidentMandate[]
+
   @@unique([organizationId, code])
   @@index([propertyId, status])
   @@index([organizationId, status])
@@ -980,6 +999,8 @@ model RentInvoice {
   allocations PaymentAllocation[]
 
   adjustments InvoiceAdjustment[]
+
+  autopayAttempts AutopayAttempt[]
 
   @@unique([residentId, periodStart])
   @@unique([organizationId, number])
@@ -2320,6 +2341,88 @@ model RoomElectricityShare {
 
   @@unique([billId, residentId])
   @@index([residentId])
+}
+
+/// A resident's standing instruction to debit rent from UPI, a bank account or a card
+/// (Razorpay recurring payments on the PG owner's own account). The amount charged each
+/// month is that month's invoice balance, never more than maxAmount.
+model ResidentMandate {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  residentId     String
+  resident       Resident              @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  provider       String                @default("razorpay")
+  customerId     String
+  /// Razorpay token id, known once the resident authorises the mandate.
+  tokenId        String?
+  /// The authorisation order and payment.
+  authOrderId    String?               @unique
+  authPaymentId  String?
+  /// UPI | EMANDATE | CARD
+  method         String
+  maxAmount      Int
+  status         ResidentMandateStatus @default(PENDING)
+  authorizedAt   DateTime?
+  cancelledAt    DateTime?
+  cancelledBy    String?
+  cancelReason   String?
+  lastChargeAt   DateTime?
+  failureCount   Int                   @default(0)
+  lastError      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  attempts       AutopayAttempt[]
+
+  @@index([organizationId, status])
+  @@index([residentId, status])
+}
+
+/// One debit of one invoice: the pre-debit notice (created the day before) and the charge.
+/// Unique per invoice and attempt number, so a rerun can never charge twice.
+model AutopayAttempt {
+  id             String               @id @default(cuid())
+  organizationId String
+  mandateId      String
+  mandate        ResidentMandate      @relation(fields: [mandateId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        RentInvoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  attemptNumber  Int
+  /// Amount stated in the pre-debit notice; the charge never exceeds it.
+  amount         Int
+  chargeDate     DateTime
+  status         AutopayAttemptStatus @default(NOTIFIED)
+  orderId        String?
+  paymentId      String?              @unique
+  notifiedAt     DateTime?
+  attemptedAt    DateTime?
+  completedAt    DateTime?
+  error          String?
+  /// Set when the owner and resident were told that retries are exhausted.
+  alertedAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([invoiceId, attemptNumber])
+  @@index([organizationId, status, chargeDate])
+  @@index([mandateId])
+}
+
+enum ResidentMandateStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  CANCELLED
+  FAILED
+}
+
+enum AutopayAttemptStatus {
+  NOTIFIED
+  INITIATED
+  SUCCEEDED
+  FAILED
+  SKIPPED
 }
 
 enum RoleApp {

@@ -54,6 +54,9 @@ import { LedgerTable } from './ledger-table'
 import { DepositCard } from './deposit-card'
 import { ChargesCard } from './charges-card'
 import { RentRevisionCard } from './rent-revision-card'
+import { ResidentAutopayCard } from './autopay-card'
+import { residentAutopayStatus } from '@/server/services/resident-autopay'
+import { firstMonthSummary } from '@/lib/first-month'
 import { SettlementCard } from './settlement-card'
 import { readChecklist } from '@/lib/checkout-checklist'
 import { InvoiceActions } from '../../rent/invoice-actions'
@@ -75,6 +78,8 @@ export default async function ResidentDetailPage({
     throw error
   })
   const has = (p: string) => user.permissions.includes(p)
+  // AutoPay status is optional; never let it break the resident page.
+  const autopay = await residentAutopayStatus(id).catch(() => null)
 
   const resident = await prisma.resident.findUnique({
     where: { id },
@@ -88,7 +93,7 @@ export default async function ResidentDetailPage({
       checkout: true,
       user: { select: { email: true, status: true, lastLoginAt: true } },
       invoices: { orderBy: { periodStart: 'desc' }, include: { lines: true } },
-      payments: { orderBy: { paidAt: 'desc' }, include: { allocations: { select: { amount: true } } } },
+      payments: { orderBy: { paidAt: 'desc' }, include: { allocations: { select: { amount: true, invoiceId: true } } } },
       charges: { orderBy: [{ voidedAt: 'asc' }, { createdAt: 'desc' }] },
       rentRevisions: { orderBy: { effectiveFrom: 'desc' } },
       ledger: { orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }] },
@@ -124,6 +129,21 @@ export default async function ResidentDetailPage({
   const invoiceCan = { credit: has('invoices.waive'), debit: has('rent.manage') }
   const paymentCan = { edit: has('payments.record'), reverse: has('payments.record') && has('invoices.waive') }
   const checkedOut = resident.status === 'CHECKED_OUT'
+  // Check-in summary: the joining-month "First month" invoice (if the first-month flow
+  // was used), how it was paid, the advance and when regular rent starts.
+  const firstMonthInvoice = resident.invoices.find((i) => i.lines.some((l) => l.label.startsWith('First month')))
+  const firstMonthPaid = firstMonthInvoice
+    ? resident.payments.find((p) => p.allocations.some((a) => a.invoiceId === firstMonthInvoice.id))
+    : undefined
+  const checkInSummary = firstMonthSummary({
+    joiningDate: resident.joiningDate,
+    amount: firstMonthInvoice ? firstMonthInvoice.total : null,
+    method: firstMonthPaid?.method,
+    paidAt: firstMonthPaid?.paidAt,
+    advance: resident.deposit?.collected ?? 0,
+    rentDueDay: resident.rentDueDay,
+    money: formatMoney,
+  })
   const startOfDayNow = new Date(new Date().setHours(0, 0, 0, 0))
   const outstanding = resident.invoices
     .filter((i) => ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(i.status))
@@ -367,6 +387,7 @@ export default async function ResidentDetailPage({
                     />
                   )}
                   <Row label="Rent due day" value={`${resident.rentDueDay} of every month`} />
+                  <p className="border-t border-slate-100 pt-2.5 text-xs text-slate-500">{checkInSummary}</p>
                 </CardContent>
               </Card>
 
@@ -495,6 +516,23 @@ export default async function ResidentDetailPage({
         {/* --------------------------------------------------------- Rent */}
         <TabsContent value="rent">
           <div className="mb-4 grid gap-4 lg:grid-cols-2">
+            {autopay && (
+              <ResidentAutopayCard
+                residentId={resident.id}
+                canManage={has('rent.manage')}
+                checkedOut={checkedOut}
+                offered={autopay.offered}
+                day={autopay.day}
+                window={autopay.window}
+                dayOutsideWindow={autopay.dayOutsideWindow}
+                mandate={autopay.mandate}
+                upcoming={
+                  autopay.upcoming
+                    ? { amount: autopay.upcoming.amount, chargeDate: new Date(autopay.upcoming.chargeDate).toISOString(), invoice: autopay.upcoming.invoice }
+                    : null
+                }
+              />
+            )}
             <ChargesCard
               residentId={resident.id}
               canManage={has('rent.manage')}

@@ -76,6 +76,18 @@ export const checkInSchema = z.object({
   discountAmount: rupees.optional(),
   discountNote: optionalString,
   depositCollected: z.boolean().default(false),
+  /** How the deposit was collected (defaults to cash, as before). */
+  depositMethod: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  depositReference: optionalString,
+  /**
+   * First month, collected by hand at check-in. When present, the joining month is
+   * billed as one "First month" line for exactly this amount (paid now; 0 = not
+   * charged) and the regular cycle starts on the 1st of next month, due on rentDueDay.
+   * When absent, check-in behaves as before (a prorated, unpaid first invoice).
+   */
+  firstMonthAmount: rupees.optional(),
+  firstMonthMethod: z.enum(['CASH', 'UPI', 'BANK_TRANSFER']).optional(),
+  firstMonthReference: optionalString,
 
   // Step 6 — finish
   createTenantAccount: z.boolean().default(true),
@@ -91,7 +103,18 @@ export type CheckInValues = z.infer<typeof checkInSchema>
 
 export const residentUpdateSchema = checkInSchema
   .partial()
-  .omit({ bedId: true, propertyId: true, joiningDate: true, whatsappConsent: true, bookingId: true })
+  .omit({
+    bedId: true,
+    propertyId: true,
+    joiningDate: true,
+    whatsappConsent: true,
+    bookingId: true,
+    depositMethod: true,
+    depositReference: true,
+    firstMonthAmount: true,
+    firstMonthMethod: true,
+    firstMonthReference: true,
+  })
   .extend({ kycStatus: z.enum(['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED']).optional() })
 
 export const transferSchema = z.object({

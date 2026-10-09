@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "OrgSetting" ADD COLUMN     "autopayDayMax" INTEGER NOT NULL DEFAULT 10,
+ADD COLUMN     "autopayDayMin" INTEGER NOT NULL DEFAULT 1;

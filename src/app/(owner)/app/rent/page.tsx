@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import type { InvoiceStatus, Prisma } from '@prisma/client'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
+import { AutopayPanel } from './autopay-panel'
 import { prisma } from '@/lib/prisma'
 import { INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, startOfMonth } from '@/lib/utils'
@@ -190,6 +191,11 @@ export default async function RentPage({
           hint="This month"
         />
       </StatGrid>
+
+      <AutopayPanel
+        organizationId={scope.organizationId}
+        propertyIds={scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds}
+      />
 
       <Suspense fallback={<TableSkeleton />}>
         <FilterBar activeCount={activeFilters}>

@@ -28,6 +28,10 @@ export const FAQS: { q: string; a: string }[] = [
     a: 'Each room has its own meter. Every month the units used (this reading minus the last) are multiplied by that month’s rate per unit to get the room’s bill. The bill is shared only by the residents who actually stayed in the room during that period, in proportion to their days there. Empty beds never count, and someone who moved in halfway pays about half a share. Each share is added to the resident’s rent invoice, and changing the rate later never changes an old bill.',
   },
   {
+    q: 'Can residents pay rent automatically?',
+    a: 'Yes, with AutoPay. A resident approves UPI AutoPay, a bank eMandate or a card once and picks their own debit date, such as the day after salary, within the days you allow (for example 1 to 10). Every month StayFlow debits the exact invoice amount, rent plus electricity and charges and never more than the limit they approved, into your own Razorpay account. They get a reminder the day before, their date is also their due date so no late fee lands first, and they can change the date or cancel at any time.',
+  },
+  {
     q: 'Are reminders automatic?',
     a: 'Yes. Reminders go out before the due date, on it, and after it. WhatsApp reminders need your WhatsApp Business account connected; until then the app shows exactly what each resident would receive and marks it as not sent.',
   },

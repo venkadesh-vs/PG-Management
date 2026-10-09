@@ -13,6 +13,7 @@ import {
   UtensilsCrossed,
   Zap,
   type LucideIcon,
+  Repeat,
 } from 'lucide-react'
 import { LogoMark } from './logo'
 import { SectionHeading } from './kit'
@@ -27,6 +28,7 @@ const NODES: Node[] = [
   { label: 'Staff', icon: HardHat, color: 'text-blue-700 bg-blue-50', note: 'Tasks for every worker' },
   { label: 'Food', icon: UtensilsCrossed, color: 'text-blue-700 bg-blue-50', note: 'Menus, meal counts, grocery' },
   { label: 'Electricity', icon: Zap, color: 'text-blue-700 bg-blue-50', note: 'Room meters, split by days stayed' },
+  { label: 'AutoPay', icon: Repeat, color: 'text-blue-700 bg-blue-50', note: 'Rent debited on each resident’s date' },
   { label: 'Enquiries', icon: Inbox, color: 'text-blue-700 bg-blue-50', note: 'Leads to bookings to beds' },
   { label: 'Reports', icon: BarChart3, color: 'text-blue-700 bg-blue-50', note: 'Collections, expenses, profit' },
 ]

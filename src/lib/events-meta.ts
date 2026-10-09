@@ -66,6 +66,8 @@ export const EVENT_LABEL: Record<EventType, string> = {
   METER_READING_RECORDED: 'Meter reading recorded',
   ELECTRICITY_BILL_FINALIZED: 'Electricity bill finalized',
   ELECTRICITY_BILL_VOIDED: 'Electricity bill voided',
+  AUTOPAY_MANDATE_UPDATED: 'AutoPay updated',
+  AUTOPAY_CHARGE: 'AutoPay debit',
   SETTINGS_UPDATED: 'Settings updated',
 }
 
@@ -112,6 +114,8 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
       'ELECTRICITY_RATE_SET',
       'ELECTRICITY_BILL_FINALIZED',
       'ELECTRICITY_BILL_VOIDED',
+      'AUTOPAY_MANDATE_UPDATED',
+      'AUTOPAY_CHARGE',
     ],
   },
   {

@@ -296,6 +296,44 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
   },
   {
+    slug: 'autopay',
+    title: 'Rent AutoPay for residents',
+    section: 'Money',
+    summary: 'Residents approve UPI AutoPay, a bank eMandate or a card once; each month the exact rent is debited on the day they choose, into your Razorpay account.',
+    keywords: 'autopay auto pay upi autopay emandate e-mandate nach recurring standing instruction debit salary day due date mandate card',
+    body: [
+      { type: 'p', text: 'AutoPay runs on your own Razorpay account, so connect Razorpay under Settings → Online payments first.' },
+      { type: 'p', text: 'Turn it on (once)' },
+      {
+        type: 'steps',
+        items: [
+          'Open Settings → Rent & billing and find AutoPay for residents.',
+          'Switch on Offer AutoPay to residents.',
+          'Set the days residents may choose, for example 1 to 10. Days after the 28th are not allowed, so every month has the day.',
+          'Set the limit (by default 150% of each resident’s usual monthly bill, so electricity and small extras fit) and how many days a failed debit is retried. Save.',
+        ],
+      },
+      { type: 'p', text: 'What residents do' },
+      {
+        type: 'steps',
+        items: [
+          'On their Rent page they tap Set up AutoPay, pick UPI AutoPay, bank account or card, and choose their debit day, for example the 7th, right after salary day.',
+          'They approve it in their UPI app, bank or card (UPI and cards: a one-time ₹1; bank eMandates take a few days to confirm).',
+          'The chosen day also becomes their rent due day from the next invoice, so no late fee or overdue mark can land before the debit.',
+        ],
+      },
+      { type: 'p', text: 'Every month, StayFlow sends a reminder the day before (“₹8,624 will be debited on 7 Nov”), then debits the exact invoice amount: rent, electricity share and any charges, never more than the limit. The receipt appears by itself.' },
+      { type: 'p', text: 'If a debit fails it is tried again on the next days you allowed; after that you and the resident are told, and they can pay from the Rent page as usual.' },
+      { type: 'p', text: 'Residents can change their day (within your window) or cancel AutoPay at any time. You can change a resident’s day or cancel their AutoPay from their profile → Rent tab. Changes apply from the next invoice; invoices already raised keep their due date.' },
+      { type: 'tip', text: 'Narrowing the allowed days later never moves anyone’s date by itself. Rent & Payments shows how many residents have a day outside the window, so you can pick new ones.' },
+    ],
+    links: [
+      { label: 'AutoPay settings', href: '/app/settings?tab=billing' },
+      { label: 'Rent & Payments', href: '/app/rent' },
+      { label: 'Online payments', href: '/app/settings/payments' },
+    ],
+  },
+  {
     slug: 'troubleshooting',
     title: 'Something is not working',
     section: 'Troubleshooting',

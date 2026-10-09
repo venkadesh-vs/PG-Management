@@ -74,6 +74,8 @@ export function EnquiriesSection() {
   return (
     <FeatureSection
       id="enquiries"
+      reverse
+      className="bg-slate-50/70"
       eyebrow="Enquiries & bookings"
       icon={Inbox}
       title="Turn every enquiry into a booked bed."
@@ -91,8 +93,6 @@ export function FoodSection() {
       id="food"
       eyebrow="Food"
       icon={UtensilsCrossed}
-      reverse
-      className="bg-slate-50/70"
       title="Cook for the people who will actually eat."
       problem="The kitchen cooks for everyone, half skip dinner, and groceries run out mid-week without warning."
       solution="Plan the weekly menu, see live meal counts as residents opt in or out, and keep grocery stock with low-stock alerts and purchase lists."
@@ -106,6 +106,8 @@ export function ComplaintsSection() {
   return (
     <FeatureSection
       id="complaints"
+      reverse
+      className="bg-slate-50/70"
       eyebrow="Complaints"
       icon={MessageSquareWarning}
       title="Every complaint has an owner — and an ending."
@@ -123,8 +125,6 @@ export function RevenueSection() {
       id="reports"
       eyebrow="Revenue intelligence"
       icon={LineChart}
-      reverse
-      className="bg-slate-50/70"
       title="See the money you’re losing to empty beds."
       problem="An empty bed doesn’t feel like a loss until the month ends. Profit is a guess made from three different books."
       solution="StayFlow turns vacancy into a rupee figure, floor by floor, and puts collections, expenses and profit for each PG on one screen."
@@ -147,6 +147,8 @@ export function ResidentAppSection() {
   return (
     <FeatureSection
       id="resident-app"
+      reverse
+      className="bg-slate-50/70"
       eyebrow="Resident app"
       icon={Smartphone}
       title="Give every resident their own PG app."

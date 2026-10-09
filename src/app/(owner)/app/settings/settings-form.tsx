@@ -27,6 +27,7 @@ import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/u
 import { Badge } from '@/components/ui/badge'
 import { TeamPanel, type TeamMember } from './team-panel'
 import { ElectricitySettingsCard } from './electricity-settings'
+import { AutopaySettingsCard, type AutopaySettingsValues } from './autopay-settings'
 import type { ModuleKey } from '@/lib/modules'
 import { FeaturesPanel } from '@/components/settings/features-panel'
 import { RolesPanel } from '@/components/settings/roles-panel'
@@ -44,6 +45,7 @@ const FORM_TABS = ['billing', 'reminders']
 export function SettingsForm({
   organization,
   expenseApprovalThreshold,
+  autopay,
   settings,
   team,
   properties,
@@ -57,6 +59,8 @@ export function SettingsForm({
 }: {
   /** Current expense approval threshold (org setting or the product default). */
   expenseApprovalThreshold: number
+  /** Resident rent AutoPay settings (null hides the card). */
+  autopay?: AutopaySettingsValues | null
   organization: {
     name: string
     ownerName: string
@@ -283,6 +287,8 @@ export function SettingsForm({
             </Card>
 
             <ElectricitySettingsCard canEdit={canEdit} />
+
+            {autopay && <AutopaySettingsCard initial={autopay} canEdit={canEdit} />}
           </div>
         </TabsContent>
 

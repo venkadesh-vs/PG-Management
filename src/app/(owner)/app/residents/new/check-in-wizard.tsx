@@ -26,6 +26,8 @@ import {
 import { checkInSchema, type CheckInValues } from '@/lib/validation'
 import { api, ApiError } from '@/lib/client'
 import { cn, formatMoney, toISODate } from '@/lib/utils'
+import { defaultDueDay, firstMonthSuggestion } from '@/lib/first-month'
+import { ordinal } from '@/lib/autopay'
 import { BED_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -90,7 +92,8 @@ type FloorOption = { id: string; name: string; level: number; rooms: RoomOption[
 type CheckInResult = {
   resident: { id: string; code: string; fullName: string }
   bed: { label: string; room: string }
-  invoice: { number: string; total: number } | null
+  invoice: { number: string; total: number; status?: string } | null
+  firstMonthPayment?: { receiptNumber: string; amount: number; method: string } | null
   tenantLogin: AccessLink | null
   booking?: { code: string } | null
   tokenPayment?: { receiptNumber: string; amount: number } | null
@@ -121,11 +124,14 @@ export function CheckInWizard({
   defaultPropertyId,
   defaultBedId,
   rentDueDay,
+  dueDayWindow = { min: 1, max: 28 },
   idTypes,
   relations,
   foodEnabled = true,
   prefill,
 }: {
+  /** The owner's window for residents' regular rent due day (Settings → Rent & billing). */
+  dueDayWindow?: { min: number; max: number }
   /** Checking in from a booking: identity, bed and money come pre-filled. */
   prefill?: CheckInPrefill | null
   /** The org's ID_TYPE lookup list. */
@@ -184,10 +190,14 @@ export function CheckInWizard({
       foodOptIn: foodEnabled,
       foodCharge: defaultProperty.foodCharge,
       foodPlanId: defaultProperty.foodPlans.find((p) => p.isDefault)?.id ?? '',
-      rentDueDay,
+      rentDueDay: defaultDueDay(rentDueDay, dueDayWindow),
       discountAmount: 0,
       discountNote: '',
       depositCollected: true,
+      depositMethod: 'CASH',
+      depositReference: '',
+      firstMonthMethod: 'CASH',
+      firstMonthReference: '',
       createTenantAccount: true,
       whatsappConsent: true,
       notes: '',
@@ -197,6 +207,19 @@ export function CheckInWizard({
 
   const values = form.watch()
   const property = properties.find((p) => p.id === values.propertyId) ?? defaultProperty
+  // First month: the prorated suggestion until the owner types their own amount.
+  const [firstMonthEdited, setFirstMonthEdited] = React.useState(false)
+  const joinDate = values.joiningDate ? new Date(`${values.joiningDate}T00:00:00`) : new Date()
+  const firstMonth = firstMonthSuggestion({
+    joiningDate: Number.isNaN(joinDate.getTime()) ? new Date() : joinDate,
+    rentAmount: Number(values.rentAmount) || 0,
+    maintenanceFee: Number(values.maintenanceFee) || 0,
+    foodOptIn: values.foodOptIn,
+    foodCharge: Number(values.foodCharge) || 0,
+    discountAmount: Number(values.discountAmount) || 0,
+  })
+  const firstMonthAmount = firstMonthEdited ? Number(values.firstMonthAmount ?? 0) : firstMonth.amount
+  const nextMonthName = firstMonth.nextMonthStart.toLocaleDateString('en-IN', { month: 'long' })
   const theme = themeFor(property.type)
 
   // Load the bed map whenever the chosen PG changes.
@@ -259,7 +282,12 @@ export function CheckInWizard({
 
   async function onSubmit(data: CheckInValues) {
     try {
-      const result = await api.post<CheckInResult>('/api/residents', data)
+      const result = await api.post<CheckInResult>('/api/residents', {
+        ...data,
+        // The wizard always uses the first-month flow: exactly this amount for the
+        // joining month, collected now; the regular cycle starts next month.
+        firstMonthAmount,
+      })
       setDone(result)
       toast.success(
         'Resident checked in successfully',
@@ -683,11 +711,15 @@ export function CheckInWizard({
                     <Field label="Maintenance (per month)">
                       <Input type="number" inputMode="numeric" {...form.register('maintenanceFee')} />
                     </Field>
-                    <Field label="Rent due day" hint="Day of the month the invoice falls due">
-                      <Select {...form.register('rentDueDay')}>
-                        {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <Field
+                      label="Regular rent due day"
+                      htmlFor="checkin-due-day"
+                      hint={`From ${nextMonthName}. Your PG allows the ${ordinal(dueDayWindow.min)}–${ordinal(dueDayWindow.max)}.`}
+                    >
+                      <Select id="checkin-due-day" {...form.register('rentDueDay')}>
+                        {Array.from({ length: dueDayWindow.max - dueDayWindow.min + 1 }, (_, i) => dueDayWindow.min + i).map((d) => (
                           <option key={d} value={d}>
-                            {d}
+                            {ordinal(d)} of every month
                           </option>
                         ))}
                       </Select>
@@ -740,6 +772,51 @@ export function CheckInWizard({
                     </Field>
                   </div>
 
+                  {/* First month: collected by hand now; the regular cycle starts next month. */}
+                  <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">First month</p>
+                      <p className="text-xs text-slate-500">
+                        Suggested {formatMoney(firstMonth.amount)} for {firstMonth.range} ({firstMonth.days} day{firstMonth.days === 1 ? '' : 's'}).
+                        Change it to whatever you are collecting today, or 0 if you are not charging this month. Regular rent starts on 1 {nextMonthName}.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Field label="Collected now (₹)" htmlFor="checkin-first-amount">
+                        <Input
+                          id="checkin-first-amount"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={firstMonthEdited ? String(values.firstMonthAmount ?? '') : String(firstMonth.amount)}
+                          onChange={(e) => {
+                            setFirstMonthEdited(true)
+                            form.setValue('firstMonthAmount', e.target.value === '' ? 0 : Math.max(0, Math.round(Number(e.target.value))))
+                          }}
+                        />
+                      </Field>
+                      <Field label="Paid by" htmlFor="checkin-first-method">
+                        <Select id="checkin-first-method" {...form.register('firstMonthMethod')} disabled={firstMonthAmount <= 0}>
+                          <option value="CASH">Cash</option>
+                          <option value="UPI">UPI / GPay</option>
+                          <option value="BANK_TRANSFER">Bank transfer</option>
+                        </Select>
+                      </Field>
+                      <Field label="Reference / UTR (optional)" htmlFor="checkin-first-ref">
+                        <Input id="checkin-first-ref" placeholder="e.g. UPI ref no." {...form.register('firstMonthReference')} disabled={firstMonthAmount <= 0} />
+                      </Field>
+                    </div>
+                    {firstMonthEdited && firstMonthAmount !== firstMonth.amount && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-blue-700 hover:underline"
+                        onClick={() => setFirstMonthEdited(false)}
+                      >
+                        Use the suggested {formatMoney(firstMonth.amount)}
+                      </button>
+                    )}
+                  </div>
+
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
                     <Checkbox
                       checked={values.depositCollected}
@@ -756,6 +833,20 @@ export function CheckInWizard({
                       </span>
                     </span>
                   </label>
+                  {values.depositCollected && (values.depositAmount || 0) > 0 && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Advance paid by" htmlFor="checkin-deposit-method">
+                        <Select id="checkin-deposit-method" {...form.register('depositMethod')}>
+                          <option value="CASH">Cash</option>
+                          <option value="UPI">UPI / GPay</option>
+                          <option value="BANK_TRANSFER">Bank transfer</option>
+                        </Select>
+                      </Field>
+                      <Field label="Reference / UTR (optional)" htmlFor="checkin-deposit-ref">
+                        <Input id="checkin-deposit-ref" placeholder="e.g. UPI ref no." {...form.register('depositReference')} />
+                      </Field>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -785,7 +876,7 @@ export function CheckInWizard({
                             : 'Not selected',
                         ],
                         ['Joining date', values.joiningDate],
-                        ['Rent due day', `${values.rentDueDay} of every month`],
+                        ['Regular rent due', `${ordinal(Number(values.rentDueDay))} of every month, from ${nextMonthName}`],
                       ]}
                     />
                   </div>
@@ -810,6 +901,12 @@ export function CheckInWizard({
                         <span className={cn('font-display text-lg font-semibold tabular', theme.text)}>
                           {formatMoney(monthlyTotal)}
                         </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">
+                          First month, {firstMonth.range} {firstMonthAmount > 0 ? '(collecting now)' : '(not charged)'}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-700 tabular">{formatMoney(firstMonthAmount)}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500">
@@ -1023,9 +1120,13 @@ function SuccessPanel({
             {[
               'Bed marked occupied',
               'PG occupancy recalculated',
-              result.invoice
-                ? `Invoice ${result.invoice.number} for ${formatMoney(result.invoice.total)}`
-                : 'Rent schedule started',
+              result.firstMonthPayment
+                ? `First month ${formatMoney(result.firstMonthPayment.amount)} paid · receipt ${result.firstMonthPayment.receiptNumber}`
+                : result.invoice?.status === 'WAIVED'
+                  ? 'First month not charged'
+                  : result.invoice
+                    ? `Invoice ${result.invoice.number} for ${formatMoney(result.invoice.total)}`
+                    : 'Rent schedule started',
               'Deposit ledger opened',
               'Food plan activated',
               result.tenantLogin?.sentVia.length

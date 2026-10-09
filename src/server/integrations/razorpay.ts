@@ -51,6 +51,10 @@ export type RazorpayPayment = {
   captured?: boolean
   /** Paise refunded so far (Razorpay's running total). */
   amount_refunded?: number
+  /** Recurring payments: the customer and the token (mandate) the payment used or created. */
+  customer_id?: string | null
+  token_id?: string | null
+  recurring?: boolean | null
   created_at: number
 }
 
@@ -119,7 +123,7 @@ function authHeader(creds: RazorpayCredentials) {
 
 async function call<T>(
   creds: RazorpayCredentials,
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -192,6 +196,137 @@ export function createOrder(
     // authorised-but-never-captured payment can never settle an invoice.
     payment_capture: 1,
   })
+}
+
+// --------------------------------------------------------------------------
+// Recurring payments (resident rent AutoPay)
+// --------------------------------------------------------------------------
+
+export type RazorpayCustomer = { id: string; entity: 'customer'; name: string; email: string; contact: string }
+
+export type RazorpayToken = {
+  id: string
+  entity: 'token'
+  method?: string
+  customer_id?: string
+  recurring?: boolean
+  recurring_details?: { status?: string; failure_reason?: string | null }
+  max_amount?: number
+  expired_at?: number | null
+}
+
+/** Creates (or, with fail_existing 0, returns) the customer a mandate belongs to. */
+export function createCustomer(
+  creds: RazorpayCredentials,
+  params: { name: string; email: string; contact: string; notes?: RazorpayNotes },
+) {
+  return call<RazorpayCustomer>(creds, 'POST', '/customers', {
+    name: params.name.slice(0, 50),
+    email: params.email,
+    contact: params.contact,
+    fail_existing: 0,
+    notes: params.notes,
+  })
+}
+
+/**
+ * The authorisation order for a recurring mandate. `amountPaise` is the
+ * authorisation amount (0 for eMandate, at least ₹1 for UPI and cards);
+ * `token` carries the limit and expiry the resident approves.
+ */
+export function createMandateOrder(
+  creds: RazorpayCredentials,
+  params: {
+    amountPaise: number
+    customerId: string
+    method: 'upi' | 'emandate' | 'card'
+    maxAmountPaise: number
+    expireAt: number
+    receipt: string
+    notes?: RazorpayNotes
+  },
+) {
+  const token: Record<string, unknown> = {
+    max_amount: params.maxAmountPaise,
+    expire_at: params.expireAt,
+  }
+  // UPI and cards are debited "as presented" each month (the amount varies);
+  // an eMandate is authorised through the resident's netbanking.
+  if (params.method === 'emandate') token.auth_type = 'netbanking'
+  else token.frequency = 'as_presented'
+  return call<RazorpayOrder>(creds, 'POST', '/orders', {
+    amount: params.amountPaise,
+    currency: 'INR',
+    customer_id: params.customerId,
+    method: params.method,
+    payment_capture: 1,
+    receipt: params.receipt.slice(0, 40),
+    token,
+    notes: params.notes,
+  })
+}
+
+/** An order for one subsequent (merchant-initiated) debit on a mandate. */
+export function createRecurringOrder(
+  creds: RazorpayCredentials,
+  params: { amountPaise: number; receipt: string; notes?: RazorpayNotes },
+) {
+  return call<RazorpayOrder>(creds, 'POST', '/orders', {
+    amount: params.amountPaise,
+    currency: 'INR',
+    payment_capture: 1,
+    receipt: params.receipt.slice(0, 40),
+    notes: params.notes,
+  })
+}
+
+/**
+ * Debits a confirmed mandate. The result is only "initiated": the money moves
+ * (or fails) later and arrives as a payment.captured / payment.failed webhook.
+ */
+export function createRecurringPayment(
+  creds: RazorpayCredentials,
+  params: {
+    email: string
+    contact: string
+    amountPaise: number
+    orderId: string
+    customerId: string
+    tokenId: string
+    description?: string
+    notes?: RazorpayNotes
+  },
+) {
+  return call<{ razorpay_payment_id?: string; razorpay_order_id?: string; razorpay_signature?: string }>(
+    creds,
+    'POST',
+    '/payments/create/recurring',
+    {
+      email: params.email,
+      contact: params.contact,
+      currency: 'INR',
+      amount: params.amountPaise,
+      order_id: params.orderId,
+      customer_id: params.customerId,
+      token: params.tokenId,
+      recurring: '1',
+      description: params.description?.slice(0, 50),
+      notes: params.notes,
+    },
+  )
+}
+
+export function fetchCustomerTokens(creds: RazorpayCredentials, customerId: string) {
+  return call<{ items: RazorpayToken[] }>(creds, 'GET', `/customers/${encodeURIComponent(customerId)}/tokens`)
+}
+
+/** Cancels a mandate at Razorpay (initiated, confirmed or paused tokens). */
+export function cancelToken(creds: RazorpayCredentials, customerId: string, tokenId: string) {
+  return call<RazorpayToken>(
+    creds,
+    'PUT',
+    `/customers/${encodeURIComponent(customerId)}/tokens/${encodeURIComponent(tokenId)}/cancel`,
+  )
 }
 
 export function fetchOrder(creds: RazorpayCredentials, orderId: string) {

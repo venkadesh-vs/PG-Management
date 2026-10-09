@@ -6,6 +6,7 @@ import { Hero } from '@/components/marketing/hero'
 import { StorySection } from '@/components/marketing/story'
 import { ConnectedSection } from '@/components/marketing/connected'
 import { ElectricitySection } from '@/components/marketing/electricity'
+import { AutopaySection } from '@/components/marketing/autopay'
 import {
   BedsSection,
   ComplaintsSection,
@@ -118,6 +119,7 @@ export default async function LandingPage() {
           'Resident check-in and KYC',
           'Automatic rent invoices and reminders',
           'Room electricity meters split by days stayed',
+          'Rent AutoPay by UPI, eMandate or card on each resident’s chosen date',
           'UPI rent collection',
           'Enquiries and bookings',
           'Food planning and meal counts',
@@ -160,6 +162,7 @@ export default async function LandingPage() {
         <ResidentsSection />
         <RentSection />
         <ElectricitySection />
+        <AutopaySection />
         <EnquiriesSection />
         <FoodSection />
         <ComplaintsSection />

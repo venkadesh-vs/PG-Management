@@ -94,6 +94,14 @@ export default async function SettingsPage({
       <SettingsForm
         organization={organization}
         expenseApprovalThreshold={await approvalThreshold(user.organizationId)}
+        autopay={{
+          residentAutopayEnabled: settings?.residentAutopayEnabled ?? false,
+          autopayMaxPercent: settings?.autopayMaxPercent ?? 150,
+          autopayMaxAmountCap: settings?.autopayMaxAmountCap ?? null,
+          autopayRetryDays: settings?.autopayRetryDays ?? 2,
+          rentDueDayMin: settings?.rentDueDayMin ?? 1,
+          rentDueDayMax: settings?.rentDueDayMax ?? 10,
+        }}
         settings={
           settings
             ? {

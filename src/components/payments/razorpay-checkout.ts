@@ -78,6 +78,9 @@ export type CheckoutOptions = {
   notes?: Record<string, string>
   /** Brand colour for the modal. */
   color?: string
+  /** Recurring mandate (AutoPay) authorisation: the Razorpay customer and `recurring: '1'`. */
+  customerId?: string
+  recurring?: boolean
 }
 
 export type CheckoutResult = { orderId: string; paymentId: string; signature: string }
@@ -89,7 +92,10 @@ export async function openRazorpayCheckout(options: CheckoutOptions): Promise<Ch
     const instance = new Razorpay({
       key: options.keyId,
       order_id: options.orderId,
-      amount: options.amountPaise,
+      // An eMandate authorises for ₹0; Checkout takes the amount from the order then.
+      ...(options.amountPaise > 0 ? { amount: options.amountPaise } : {}),
+      ...(options.customerId ? { customer_id: options.customerId } : {}),
+      ...(options.recurring ? { recurring: '1' } : {}),
       currency: options.currency ?? 'INR',
       name: options.name,
       description: options.description,

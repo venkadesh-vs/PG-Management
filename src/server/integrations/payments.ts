@@ -344,9 +344,26 @@ export async function handleOrgWebhook(
   creds: OrgRazorpay,
   event: {
     event?: string
-    payload?: { payment?: { entity?: RazorpayPayment }; refund?: { entity?: RazorpayRefund } }
+    payload?: {
+      payment?: { entity?: RazorpayPayment }
+      refund?: { entity?: RazorpayRefund }
+      token?: { entity?: { id?: string; customer_id?: string; recurring_details?: { status?: string; failure_reason?: string | null } } }
+    }
   },
 ): Promise<{ handled: boolean; note: string }> {
+  // Resident AutoPay (recurring payments). Loaded lazily: the service imports this module.
+  if (event.event?.startsWith('token.')) {
+    const autopay = await import('@/server/services/resident-autopay')
+    return autopay.handleTokenEvent(organizationId, event.event, event.payload?.token?.entity)
+  }
+  const maybeAuth = event.payload?.payment?.entity
+  if (maybeAuth && notesOf(maybeAuth).kind === 'autopay_auth') {
+    if (event.event === 'payment.captured' || event.event === 'payment.authorized' || event.event === 'payment.failed') {
+      const autopay = await import('@/server/services/resident-autopay')
+      return autopay.handleAuthPayment(organizationId, creds, event.event, maybeAuth)
+    }
+    return { handled: false, note: `ignored ${event.event ?? 'unknown event'} for an AutoPay authorisation` }
+  }
   if (event.event === 'refund.processed' || event.event === 'payment.refunded') {
     const paymentId = event.payload?.refund?.entity?.payment_id ?? event.payload?.payment?.entity?.id
     if (!paymentId) return { handled: false, note: 'refund event without a payment id' }
@@ -363,6 +380,9 @@ export async function handleOrgWebhook(
     const outcome = await recordRentGatewayPayment({ organizationId, creds, payment, source: 'webhook' })
     if (outcome.status === 'ignored') return { handled: false, note: outcome.reason }
     if (outcome.status === 'processing') return { handled: false, note: 'payment not captured yet' }
+    // An AutoPay debit: mark its attempt done (a no-op for ordinary rent payments).
+    const autopay = await import('@/server/services/resident-autopay')
+    await autopay.onRecurringCaptured(organizationId, payment)
     return {
       handled: true,
       note: outcome.duplicate ? 'duplicate' : `receipt ${outcome.receiptNumber}`,
@@ -370,6 +390,8 @@ export async function handleOrgWebhook(
   }
   if (event.event === 'payment.failed') {
     await logRentPaymentFailure(organizationId, payment)
+    const autopay = await import('@/server/services/resident-autopay')
+    await autopay.onRecurringFailed(organizationId, payment)
     return { handled: true, note: 'failure logged' }
   }
   return { handled: false, note: `ignored ${event.event ?? 'unknown event'}` }

@@ -25,6 +25,7 @@ import { sendLeadFollowUpReminders } from './leads'
 import { markSlaBreaches } from './complaints'
 import { applyApprovedLeaveToMeals } from './requests'
 import { createRecurringExpenses } from './expenses'
+import { runResidentAutopay, type AutopayReport } from './resident-autopay'
 
 /**
  * The daily automation pass. One entry point, safe to run repeatedly — every
@@ -49,6 +50,8 @@ export type AutomationReport = {
   leadFollowUps: { due: number; notified: number }
   /** Recurring expenses whose next copy fell due today. */
   recurringExpenses: { created: number }
+  /** Resident rent AutoPay: notices, debits, reconciliation, retries and alerts. */
+  autopay: AutopayReport
   errors: string[]
 }
 
@@ -174,6 +177,7 @@ async function runAutomationPass(options?: AutomationOptions): Promise<Automatio
     bookings: { expired: 0, bedsReleased: 0 },
     leadFollowUps: { due: 0, notified: 0 },
     recurringExpenses: { created: 0 },
+    autopay: { synced: 0, notified: 0, skipped: 0, charged: 0, failed: 0, reconciled: 0, retriesScheduled: 0, alerted: 0 },
     errors,
   }
 
@@ -248,6 +252,15 @@ async function runSteps(
     report.reminders.sent = result.sent
   } catch (error) {
     errors.push(`reminders: ${(error as Error).message}`)
+  }
+
+  // 3b. Resident rent AutoPay — pre-debit notices for tomorrow, today's debits,
+  //     reconciliation of debits whose webhook never came, retries and alerts.
+  //     Runs after invoice generation and overdue flags so balances are current.
+  try {
+    report.autopay = await runResidentAutopay({ now, organizationId: options?.organizationId, errors })
+  } catch (error) {
+    errors.push(`autopay: ${(error as Error).message}`)
   }
 
   // 4. SaaS subscription billing + grace enforcement.

@@ -78,7 +78,7 @@ export default async function NewResidentPage({
   const [settings, idTypes, relations] = await Promise.all([
     prisma.orgSetting.findUnique({
       where: { organizationId: scope.organizationId },
-      select: { rentDueDay: true },
+      select: { rentDueDay: true, rentDueDayMin: true, rentDueDayMax: true },
     }),
     getLookup(scope.organizationId, 'ID_TYPE'),
     getLookup(scope.organizationId, 'GUARDIAN_RELATION'),
@@ -102,6 +102,7 @@ export default async function NewResidentPage({
         prefill={prefill}
         defaultBedId={params.bed}
         rentDueDay={settings?.rentDueDay ?? 5}
+        dueDayWindow={{ min: settings?.rentDueDayMin ?? 1, max: settings?.rentDueDayMax ?? 10 }}
         idTypes={idTypes}
         relations={relations}
         foodEnabled={user.modules.includes('food')}

@@ -133,6 +133,7 @@ export const WORKER_NAV: NavItem[] = [
 
 export const WORKER_MORE: NavItem[] = [
   { label: 'Meter readings', href: '/worker/meters', icon: 'zap', module: 'electricity', permission: 'electricity.readings' },
+  { label: 'Expenses', href: '/worker/expenses', icon: 'receipt', module: 'expenses', permission: 'expenses.add' },
 ]
 
 type Access = { role: string; modules: string[]; permissions: string[] }

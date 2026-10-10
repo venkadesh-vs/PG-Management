@@ -95,8 +95,8 @@ export function FoodSection() {
       icon={UtensilsCrossed}
       title="Cook for the people who will actually eat."
       problem="The kitchen cooks for everyone, half skip dinner, and groceries run out mid-week without warning."
-      solution="Plan the weekly menu, see live meal counts as residents opt in or out, and keep grocery stock with low-stock alerts and purchase lists."
-      benefits={['Weekly menu residents can see', 'Live meal counts per meal', 'Grocery stock and purchases', 'Less food wasted every day']}
+      solution="Residents switch the food plan on or off from their own app, and skip single meals. The cook sees live counts of who will actually eat, the food charge follows on the rent bill, and grocery stock keeps itself with low-stock alerts."
+      benefits={['Residents choose food on or off', 'Live meal counts for the cook', 'Food charge follows on the bill', 'Grocery stock and purchases']}
       visual={<FoodVisual />}
     />
   )
@@ -127,8 +127,8 @@ export function RevenueSection() {
       icon={LineChart}
       title="See the money you’re losing to empty beds."
       problem="An empty bed doesn’t feel like a loss until the month ends. Profit is a guess made from three different books."
-      solution="StayFlow turns vacancy into a rupee figure, floor by floor, and puts collections, expenses and profit for each PG on one screen."
-      benefits={['Vacancy loss in rupees', 'Collections vs expenses', 'Profit per PG', 'Compare PGs side by side']}
+      solution="StayFlow turns vacancy into a rupee figure, floor by floor, and puts collections, expenses and profit for each PG on one screen. Your cook and maintenance staff log what they buy (floor cleaner, bulbs, gas) with a bill photo, and nothing counts until you approve it."
+      benefits={['Vacancy loss in rupees', 'Staff expenses with bill photos', 'You approve every staff spend', 'Profit per PG, side by side']}
       visual={<RevenueVisual />}
       note={
         <p className="inline-flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -153,8 +153,8 @@ export function ResidentAppSection() {
       icon={Smartphone}
       title="Give every resident their own PG app."
       problem="Residents message you at 11 PM for the menu, the Wi-Fi password, their rent amount and a receipt."
-      solution="Residents get an app in their phone browser — no install needed. They pay rent, raise complaints, see the menu and read notices themselves."
-      benefits={['Pay rent by UPI', 'Raise and track complaints', 'Menu and notices', 'Receipts on demand']}
+      solution="Residents get an app in their phone browser — no install needed. They pay rent, raise complaints, choose food, keep their own contact and emergency details up to date, and read notices themselves."
+      benefits={['Pay rent by UPI', 'Raise and track complaints', 'Choose food on or off', 'Edit their own details']}
       visual={<ResidentAppVisual />}
     />
   )

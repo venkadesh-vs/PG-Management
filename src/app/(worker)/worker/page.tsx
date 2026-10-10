@@ -29,6 +29,7 @@ export default async function WorkerHome() {
     grocery: user.permissions.includes('grocery.view'),
     attendance: user.permissions.includes('attendance.self'),
     meters: user.modules.includes('electricity') && user.permissions.includes('electricity.readings'),
+    expenses: user.permissions.includes('expenses.add'),
   }
 
   const staff = await prisma.staff.findUnique({
@@ -123,6 +124,19 @@ export default async function WorkerHome() {
           <span>
             <span className="block text-sm font-semibold text-slate-900">Meter readings</span>
             <span className="block text-xs text-slate-500">Enter each room&apos;s electricity reading with a photo</span>
+          </span>
+          <span className="text-sm font-medium text-blue-700">Open</span>
+        </Link>
+      )}
+
+      {can.expenses && (
+        <Link
+          href="/worker/expenses"
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Add an expense</span>
+            <span className="block text-xs text-slate-500">Bought floor cleaner, bulbs or gas? Note it here with the bill</span>
           </span>
           <span className="text-sm font-medium text-blue-700">Open</span>
         </Link>

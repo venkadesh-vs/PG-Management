@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import {
   Bed,
+  Briefcase,
   Building2,
   CalendarDays,
+  Home,
   Mail,
   Phone,
   ShieldCheck,
@@ -16,6 +18,8 @@ import { cn, formatDate, formatMoney, formatPhone, initials } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/primitives'
+import { getLookup } from '@/server/services/org-defaults'
+import { EditProfile } from './edit-profile'
 
 export const metadata: Metadata = { title: 'Profile' }
 
@@ -33,6 +37,10 @@ export default async function TenantProfilePage() {
     },
   })
   if (!resident) return null
+  const relations = await getLookup(resident.organizationId, 'GUARDIAN_RELATION')
+  const relationLabel = relations.find((r) => r.value === resident.guardianRelation)?.label ?? resident.guardianRelation
+  const address = [resident.permanentAddress, resident.city, resident.state, resident.pincode].filter(Boolean).join(', ')
+  const work = [resident.designation, resident.companyName].filter(Boolean).join(' · ')
 
   return (
     <div className="space-y-5">
@@ -105,20 +113,45 @@ export default async function TenantProfilePage() {
       {/* -------------------------------------------------------- Contact */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <p className="text-sm font-semibold text-slate-900">
-            Your details
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-900">Your details</p>
+            <EditProfile
+              relations={
+                resident.guardianRelation && !relations.some((r) => r.value === resident.guardianRelation)
+                  ? [...relations, { value: resident.guardianRelation, label: resident.guardianRelation }]
+                  : relations
+              }
+              initial={{
+                phone: resident.phone,
+                whatsappPhone: resident.whatsappPhone && resident.whatsappPhone !== resident.phone ? resident.whatsappPhone : '',
+                email: resident.email ?? '',
+                bloodGroup: resident.bloodGroup ?? '',
+                guardianName: resident.guardianName ?? '',
+                guardianRelation: resident.guardianRelation ?? '',
+                guardianPhone: resident.guardianPhone ?? '',
+                permanentAddress: resident.permanentAddress ?? '',
+                city: resident.city ?? '',
+                state: resident.state ?? '',
+                pincode: resident.pincode ?? '',
+                occupationType: resident.occupationType ?? '',
+                companyName: resident.companyName ?? '',
+                designation: resident.designation ?? '',
+              }}
+            />
+          </div>
           <Row icon={Phone} label="Mobile" value={formatPhone(resident.phone)} />
           {resident.email && <Row icon={Mail} label="Email" value={resident.email} />}
           {resident.guardianName && (
             <Row
               icon={UserRound}
-              label="Guardian"
+              label={relationLabel ? `Emergency contact (${relationLabel})` : 'Emergency contact'}
               value={`${resident.guardianName}${
                 resident.guardianPhone ? ` · ${formatPhone(resident.guardianPhone)}` : ''
               }`}
             />
           )}
+          {address && <Row icon={Home} label="Home address" value={address} />}
+          {work && <Row icon={Briefcase} label={resident.occupationType === 'STUDENT' ? 'College' : 'Work'} value={work} />}
           {resident.bloodGroup && (
             <Row icon={ShieldCheck} label="Blood group" value={resident.bloodGroup} />
           )}

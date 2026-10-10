@@ -58,7 +58,10 @@ const schema = z.discriminatedUnion('entity', [
   z.object({ entity: z.literal('PURCHASE') }).merge(purchaseSchema),
 ])
 
-const WORKER_ENTITIES = new Set(['ATTENDANCE', 'MEAL_SERVED', 'PURCHASE', 'GROCERY_ITEM'])
+const WORKER_ENTITIES = new Set(['ATTENDANCE', 'MEAL_SERVED', 'PURCHASE', 'GROCERY_ITEM', 'EXPENSE'])
+
+/** Staff record what they bought with the narrower expenses.add (owner approves each). */
+const WORKER_PERMISSION: Partial<Record<Entity, string>> = { EXPENSE: 'expenses.add' }
 
 type Entity = z.infer<typeof schema>['entity']
 
@@ -88,6 +91,8 @@ export const POST = route(async ({ user, request }) => {
   if (early) {
     requireModule(user, early.module)
     if (early.permission && user.role !== 'WORKER') requirePermission(user, early.permission)
+    const workerPermission = WORKER_PERMISSION[peek!.entity as Entity]
+    if (user.role === 'WORKER' && workerPermission) requirePermission(user, workerPermission)
   }
   const body = await parseBody(request, schema)
   const organizationId = user.organizationId!
@@ -105,7 +110,8 @@ export const POST = route(async ({ user, request }) => {
   }
   const access = ENTITY_ACCESS[body.entity]
   requireModule(user, access.module)
-  if (access.permission) requirePermission(user, access.permission)
+  const permission = user.role === 'WORKER' ? (WORKER_PERMISSION[body.entity] ?? access.permission) : access.permission
+  if (permission) requirePermission(user, permission)
 
   switch (body.entity) {
     // ------------------------------------------------------------ money --

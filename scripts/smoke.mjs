@@ -360,18 +360,12 @@ async function main() {
     'worker cannot open the platform portal',
     `HTTP ${workerBlocked.status}`,
   )
-  const workerApi = await worker.fetch('/api/operations', {
-    method: 'POST',
-    body: JSON.stringify({
-      entity: 'EXPENSE',
-      propertyId: property?.id ?? 'x',
-      categoryId: 'x',
-      title: 'Nope',
-      amount: 100,
-      spentOn: new Date().toISOString().slice(0, 10),
-    }),
+  // Staff may record what they bought (owner approves), but never edit or void expenses.
+  const workerApi = await worker.fetch('/api/expenses/x', {
+    method: 'PATCH',
+    body: JSON.stringify({ amount: 1 }),
   })
-  log(workerApi.status === 403, 'worker cannot record expenses', `HTTP ${workerApi.status}`)
+  log(workerApi.status === 403, 'worker cannot edit expenses', `HTTP ${workerApi.status}`)
 
   // The worker finishing the task must resolve the complaint for the resident.
   section('Workflow: worker completes the task')

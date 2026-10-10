@@ -144,7 +144,13 @@ export async function createExpense(
   const receiptUrl = await assertReceipt(organizationId, body.receiptUrl)
   const approver = canApproveExpenses(user)
   const threshold = await approvalThreshold(organizationId, db)
-  const approvalStatus = opts.preApprovedBy ? 'APPROVED' : initialApprovalStatus(body.amount, approver, threshold)
+  // Staff-app entries always wait for the owner, whatever the amount.
+  const fromStaff = user.role === 'WORKER'
+  const approvalStatus = opts.preApprovedBy
+    ? 'APPROVED'
+    : fromStaff
+      ? 'PENDING'
+      : initialApprovalStatus(body.amount, approver, threshold)
 
   const expense = await db.expense.create({
     data: {
@@ -161,7 +167,7 @@ export async function createExpense(
       notes: body.notes || null,
       receiptUrl,
       recordedBy: user.name,
-      ...recurrenceOf(body.isRecurring, body.recurrence),
+      ...(fromStaff ? { isRecurring: false, recurrence: null } : recurrenceOf(body.isRecurring, body.recurrence)),
       approvalStatus,
       maintenanceTaskId: opts.maintenanceTaskId ?? null,
       ...(opts.preApprovedBy

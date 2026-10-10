@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
 import { MealOptOut } from './meal-opt-out'
+import { FoodChoice, type FoodPlanOption } from './food-choice'
 
 export const metadata: Metadata = { title: 'Food' }
 
@@ -37,14 +38,37 @@ export default async function TenantFoodPage() {
   })
   if (!resident) return null
 
-  if (!resident.foodOptIn || !resident.foodSubscription?.active) {
+  const planRows = await prisma.foodPlan.findMany({
+    where: { propertyId: resident.propertyId, active: true },
+    orderBy: [{ isDefault: 'desc' }, { monthlyCharge: 'asc' }],
+  })
+  const plans: FoodPlanOption[] = planRows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    monthlyCharge: p.monthlyCharge,
+    meals: [p.includesBreakfast && 'Breakfast', p.includesLunch && 'Lunch', p.includesDinner && 'Dinner'].filter(Boolean).join(' · '),
+  }))
+  const eating = resident.foodOptIn && Boolean(resident.foodSubscription?.active)
+  const choice = (
+    <FoodChoice eating={eating} plans={plans} currentPlanId={resident.foodSubscription?.foodPlanId ?? null} />
+  )
+
+  if (!eating || !resident.foodSubscription) {
     return (
       <div className="space-y-5">
-        <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">Food</h1>
+        <div>
+          <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">Food</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Choose whether you eat at {resident.property.name}.</p>
+        </div>
+        {choice}
         <EmptyState
           icon="utensils"
           title="You are not on a food plan"
-          description="Ask your PG owner to add you to a meal plan and the daily menu will show up here."
+          description={
+            plans.length
+              ? 'Turn on “I need food” above and the daily menu will show up here.'
+              : 'Your PG has not set up meals yet. Ask your PG owner.'
+          }
         />
       </div>
     )
@@ -70,6 +94,8 @@ export default async function TenantFoodPage() {
         <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">Food</h1>
         <p className="mt-0.5 text-sm text-slate-500">This week&apos;s menu at {resident.property.name}.</p>
       </div>
+
+      {choice}
 
       <Card className="overflow-hidden">
         <CardContent className="flex items-center justify-between gap-3 p-4">

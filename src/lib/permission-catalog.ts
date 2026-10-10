@@ -68,6 +68,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'expenses.view', label: 'See expenses' },
       { key: 'expenses.manage', label: 'Add, edit and delete expenses' },
+      { key: 'expenses.add', label: 'Record what they bought for the PG', hint: 'For the staff app — each one waits for owner approval' },
     ],
   },
   {
@@ -188,7 +189,7 @@ export const ROLE_TEMPLATES: {
     app: 'DASHBOARD',
     color: 'blue',
     permissions: ALL_PERMISSIONS.filter(
-      (k) => !['properties.create', 'invoices.waive', 'settings.manage', 'team.manage', 'billing.manage', 'tasks.work', 'attendance.self'].includes(k),
+      (k) => !['properties.create', 'invoices.waive', 'settings.manage', 'team.manage', 'billing.manage', 'tasks.work', 'attendance.self', 'expenses.add'].includes(k),
     ),
   },
   {
@@ -207,24 +208,24 @@ export const ROLE_TEMPLATES: {
   },
   {
     name: 'Cook',
-    description: 'Kitchen staff: menu, meals served and grocery stock, on the staff app.',
+    description: 'Kitchen staff: menu, meals served, grocery stock and kitchen expenses, on the staff app.',
     app: 'STAFF_APP',
     color: 'amber',
-    permissions: ['food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self'],
+    permissions: ['food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self', 'expenses.add'],
   },
   {
     name: 'General staff',
     description: 'All-round staff: tasks, kitchen, grocery and attendance, on the staff app.',
     app: 'STAFF_APP',
     color: 'slate',
-    permissions: ['tasks.work', 'food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self'],
+    permissions: ['tasks.work', 'food.view', 'food.manage', 'grocery.view', 'grocery.manage', 'attendance.self', 'expenses.add'],
   },
   {
     name: 'Housekeeping',
-    description: 'Cleaning and maintenance tasks, on the staff app.',
+    description: 'Cleaning and maintenance: tasks, meter readings and supplies bought (cleaner, bulbs), on the staff app.',
     app: 'STAFF_APP',
     color: 'sky',
-    permissions: ['tasks.work', 'attendance.self'],
+    permissions: ['tasks.work', 'attendance.self', 'electricity.readings', 'expenses.add'],
   },
 ]
 

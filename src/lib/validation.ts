@@ -101,6 +101,30 @@ export const checkInSchema = z.object({
 
 export type CheckInValues = z.infer<typeof checkInSchema>
 
+/**
+ * What a resident may change about themselves from the resident app. Name,
+ * ID proof, room and money stay with the owner (KYC and billing depend on them).
+ */
+export const residentSelfProfileSchema = checkInSchema
+  .pick({
+    phone: true,
+    whatsappPhone: true,
+    email: true,
+    bloodGroup: true,
+    guardianName: true,
+    guardianRelation: true,
+    guardianPhone: true,
+    permanentAddress: true,
+    city: true,
+    state: true,
+    pincode: true,
+    occupationType: true,
+    companyName: true,
+    designation: true,
+  })
+  .partial()
+  .extend({ occupationType: z.enum(['STUDENT', 'WORKING', 'OTHER']).optional().or(z.literal('')) })
+
 export const residentUpdateSchema = checkInSchema
   .partial()
   .omit({

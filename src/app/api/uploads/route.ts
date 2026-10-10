@@ -42,9 +42,10 @@ function sniff(bytes: Buffer): AllowedType | null {
 }
 
 /** Which purposes each role may upload for. */
-function allowedPurposes(role: string): Purpose[] {
+function allowedPurposes(role: string, permissions: string[]): Purpose[] {
   if (role === 'TENANT') return ['COMPLAINT', 'KYC']
-  if (role === 'WORKER') return ['COMPLAINT', 'TASK_PROOF']
+  // OTHER is the bill photo on an expense; only staff who record expenses need it.
+  if (role === 'WORKER') return permissions.includes('expenses.add') ? ['COMPLAINT', 'TASK_PROOF', 'OTHER'] : ['COMPLAINT', 'TASK_PROOF']
   return [...PURPOSES]
 }
 
@@ -81,7 +82,7 @@ export const POST = route(async ({ user, request }) => {
   const purposeRaw = String(form.get('purpose') ?? 'OTHER').toUpperCase()
   if (!PURPOSES.includes(purposeRaw as Purpose)) throw new ValidationError('Unknown upload purpose')
   const purpose = purposeRaw as Purpose
-  if (!allowedPurposes(user.role).includes(purpose)) {
+  if (!allowedPurposes(user.role, user.permissions).includes(purpose)) {
     throw new ForbiddenError('You cannot upload this kind of file')
   }
 

@@ -12,11 +12,11 @@ Legend: `[ ] Not started` · `[~] In progress` · `[x] Completed` · `[!] Blocke
 | 3 | Domain / DNS | `[!] Blocked` | Needs a domain the owner has bought. Until then the pilot runs on stayflow-pg.netlify.app (HTTPS by Netlify). |
 | 4 | Environment variables | `[~] In progress` | Set: AUTH_SECRET, CRON_SECRET, DATA_ENCRYPTION_KEY (secret, all deploy contexts), NEXT_PUBLIC_SITE_URL, DEMO_MODE=false, TZ. Missing: database and integration keys. See `PRODUCTION_ENV.md`. |
 | 5 | Database migrations | `[x] Completed` | Applied by the production build; `prisma migrate status` up to date; 72 tables, 214 indexes. Plans and Super Admin created with `npm run bootstrap:prod`. |
-| 6 | Backups / PITR | `[!] Blocked` | Depends on item 2. See `DATABASE_RECOVERY.md`. |
-| 7 | Razorpay | `[!] Blocked` | Needs the owner's Razorpay account (test keys first; live needs KYC). Code verified: signatures, capture-only, refunds, idempotency. |
+| 6 | Backups / PITR | `[x] Daily backup` / `[ ] PITR` | Daily pg_dump to private Backblaze B2 (GitHub Actions, 02:00 IST, 30 days + monthly), first run verified 10 Oct. Neon free plan restore window is short; longer PITR needs a paid plan. |
+| 7 | Razorpay | `[~] Test mode` | Test keys live. Verified: resident rent payment → webhook → paid + receipt; failed payments; owner AutoPay mandate + cancel. Pending: refund (Razorpay test balance), resident AutoPay (needs Recurring Payments enabled), live KYC. |
 | 8 | WhatsApp | `[!] Blocked` | Needs Meta Business verification, a number and approved templates. See `WHATSAPP_PRODUCTION.md`. |
 | 9 | Resend (email) | `[!] Blocked` | Needs a Resend account and DNS records on the owner's domain (depends on item 3). |
-| 10 | R2 / S3 storage | `[!] Blocked` | Needs a Cloudflare R2 (or S3) private bucket and keys. |
+| 10 | File storage | `[x] Completed` | Backblaze B2 (S3-compatible, private bucket `stayflow-uploads-vs2026`, us-east-005). Live upload verified: stored, served via signed URL to the owner, refused without login. |
 | 11 | Authentication | `[x] Completed` | Super Admin login works on production; signup → owner session verified live; anonymous API access returns 401. |
 | 12 | Security | `[x] Completed` | Live tenant-isolation test 23/23 (two test organisations: lists, by-id reads, edits, checkout, rooms, search, exports, PDFs, pages). |
 | 13 | Monitoring / logging | `[~] In progress` | Structured logs, error codes, health page, `/api/health` exist. `ERROR_WEBHOOK_URL` not set yet. |

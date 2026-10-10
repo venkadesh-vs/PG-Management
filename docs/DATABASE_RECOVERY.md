@@ -8,7 +8,7 @@ Status: **not configured** — no production database exists yet. Full procedure
 | Provider | Neon, project `stayflow-us` (free plan) |
 | Region | AWS US East 2 (Ohio), next to Netlify's free function region. Planned move to Singapore with Netlify Pro. |
 | Point-in-time recovery | Neon restores to any moment inside its history window. The free plan's window is short; paid plans allow days (check Neon's current pricing page). **Pilot target: at least 7 days on a paid plan.** Not yet enabled. |
-| Daily logical backup | `pg_dump` job (GitHub Actions or a small VM) to a separate private bucket. Not yet set up. |
+| Daily logical backup | **Running.** GitHub Actions `db-backup.yml` at 02:00 IST: `pg_dump` (custom format) → verified readable → private Backblaze B2 bucket `stayflow-backups-vs2026` (`db/stayflow-YYYY-MM-DD-HHMM.dump`). Keeps 30 days of dailies plus every 1st-of-month copy. First run 10 Oct 2026: 81 tables, 280 KB. |
 | Retention | Daily 30 days, monthly 12 months, yearly 8 years |
 | Last restore test | Never |
 
@@ -21,6 +21,13 @@ Status: **not configured** — no production database exists yet. Full procedure
    password manager. Give them to the deploy step as `DATABASE_URL` (pooled) and
    `DATABASE_URL_UNPOOLED` (direct) — set them yourself with
    `netlify env:set DATABASE_URL "<value>" --context production --secret` so they never appear in chat.
+
+## Restore from a daily backup
+
+1. Backblaze → B2 → Browse Files → `stayflow-backups-vs2026/db/` → download the wanted `.dump`.
+2. Create an empty database (a new Neon branch or project), then:
+   `pg_restore --no-owner --no-privileges --dbname "<new direct URL>" stayflow-YYYY-MM-DD-HHMM.dump`
+3. Check a few invoices and payments, then point `DATABASE_URL` / `DATABASE_URL_UNPOOLED` at it and redeploy.
 
 ## Restore (Neon)
 
@@ -36,5 +43,5 @@ Status: **not configured** — no production database exists yet. Full procedure
 | --- | --- | --- |
 | 7 Oct 2026 | Project created in Ohio; data moved from Singapore with pg_dump/pg_restore, row counts verified | Claude |
 | | Restore window set | |
-| | Daily dump running | |
+| 10 Oct 2026 | Daily dump running (GitHub Actions → Backblaze B2), first backup verified | Claude |
 | | First restore test passed | |

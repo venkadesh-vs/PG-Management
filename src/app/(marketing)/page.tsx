@@ -7,6 +7,7 @@ import { StorySection } from '@/components/marketing/story'
 import { ConnectedSection } from '@/components/marketing/connected'
 import { ElectricitySection } from '@/components/marketing/electricity'
 import { AutopaySection } from '@/components/marketing/autopay'
+import { ReferralSection } from '@/components/marketing/referral'
 import {
   BedsSection,
   ComplaintsSection,
@@ -168,6 +169,7 @@ export default async function LandingPage() {
         <ComplaintsSection />
         <RevenueSection />
         <ResidentAppSection />
+        <ReferralSection />
         <PricingSection rule={rule} />
         <FaqSection />
         <DemoSection />

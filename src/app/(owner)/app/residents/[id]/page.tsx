@@ -32,6 +32,7 @@ import {
   formatPhone,
   initials,
   maskId,
+  toISODate,
 } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,8 +48,9 @@ import {
   TableRow,
   TableWrap,
 } from '@/components/ui/table'
-import { getLookupLabels } from '@/server/services/org-defaults'
+import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { ResidentActions } from './resident-actions'
+import { EditResident } from './edit-resident'
 import { ResendInviteButton } from '@/components/app/invite-link'
 import { LedgerTable } from './ledger-table'
 import { DepositCard } from './deposit-card'
@@ -156,7 +158,7 @@ export default async function ResidentDetailPage({
   )
 
   // Vacant beds in the same PG, for the transfer dialog.
-  const [availableBeds, idTypeLabels, relationLabels, categoryLabels] = await Promise.all([
+  const [availableBeds, idTypeLabels, relationLabels, categoryLabels, idTypeOptions, relationOptions] = await Promise.all([
     prisma.bed.findMany({
       where: { propertyId: resident.propertyId, status: 'AVAILABLE' },
       include: { room: { select: { number: true, baseRent: true } } },
@@ -165,6 +167,8 @@ export default async function ResidentDetailPage({
     getLookupLabels(resident.organizationId, 'ID_TYPE'),
     getLookupLabels(resident.organizationId, 'GUARDIAN_RELATION'),
     getLookupLabels(resident.organizationId, 'COMPLAINT_CATEGORY'),
+    getLookup(resident.organizationId, 'ID_TYPE'),
+    getLookup(resident.organizationId, 'GUARDIAN_RELATION'),
   ])
 
   return (
@@ -295,7 +299,48 @@ export default async function ResidentDetailPage({
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Personal details</CardTitle>
+                <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                  Personal details
+                  {has('residents.manage') && resident.status !== 'CHECKED_OUT' && (
+                    <EditResident
+                      residentId={resident.id}
+                      relations={relationOptions}
+                      idTypes={idTypeOptions}
+                      can={{ rent: has('rent.manage'), kyc: has('residents.kyc') }}
+                      initial={{
+                        fullName: resident.fullName,
+                        phone: resident.phone,
+                        whatsappPhone: resident.whatsappPhone && resident.whatsappPhone !== resident.phone ? resident.whatsappPhone : '',
+                        email: resident.email ?? '',
+                        dateOfBirth: resident.dateOfBirth ? toISODate(resident.dateOfBirth) : '',
+                        gender: resident.gender ?? '',
+                        bloodGroup: resident.bloodGroup ?? '',
+                        qualification: resident.qualification ?? '',
+                        guardianName: resident.guardianName ?? '',
+                        guardianRelation: resident.guardianRelation ?? '',
+                        guardianPhone: resident.guardianPhone ?? '',
+                        guardianAddress: resident.guardianAddress ?? '',
+                        permanentAddress: resident.permanentAddress ?? '',
+                        city: resident.city ?? '',
+                        state: resident.state ?? '',
+                        pincode: resident.pincode ?? '',
+                        occupationType: resident.occupationType ?? '',
+                        companyName: resident.companyName ?? '',
+                        designation: resident.designation ?? '',
+                        idType: resident.idType ?? '',
+                        idNumber: resident.idNumber ? (has('residents.kyc') ? resident.idNumber : maskId(resident.idNumber)) : '',
+                        kycStatus: resident.kycStatus,
+                        rentDueDay: resident.rentDueDay,
+                        maintenanceFee: resident.maintenanceFee,
+                        foodOptIn: resident.foodOptIn,
+                        foodCharge: resident.foodCharge,
+                        discountAmount: resident.discountAmount,
+                        discountNote: resident.discountNote ?? '',
+                        notes: resident.notes ?? '',
+                      }}
+                    />
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                 <Detail label="Full name" value={resident.fullName} />

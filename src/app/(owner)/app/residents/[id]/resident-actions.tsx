@@ -11,6 +11,7 @@ import {
   DoorOpen,
   FileText,
   MoreHorizontal,
+  Pencil,
   Plus,
   Receipt,
   Trash2,
@@ -21,6 +22,7 @@ import { InvoicePicker, ProofUpload } from '../../payments/payment-fields'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
 import { blankChecklist, type Checklist } from '@/lib/checkout-checklist'
 import { useToast } from '@/components/ui/toast'
+import { EDIT_RESIDENT_EVENT } from './edit-resident'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -149,6 +151,10 @@ export function ResidentActions({
             <>
               {can.manage && (
                 <>
+                  <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event(EDIT_RESIDENT_EVENT))}>
+                    <Pencil />
+                    Edit details
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setDialog('transfer')}>
                     <ArrowRightLeft />
                     Move to another bed

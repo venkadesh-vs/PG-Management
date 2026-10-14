@@ -17,6 +17,7 @@ import { ResendInviteButton } from '@/components/app/invite-link'
 import { ExportButton } from '@/components/app/export-button'
 import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
 import { AddStaffButton } from './add-staff-button'
+import { QuickForm } from '@/components/app/quick-form'
 import { AttendanceGrid } from './attendance-grid'
 
 export const metadata: Metadata = { title: 'Staff' }
@@ -277,6 +278,50 @@ export default async function StaffPage({
                       </Badge>
                     )}
                   </div>
+
+                  {has('staff.manage') && (
+                    <QuickForm
+                      trigger="Edit details"
+                      triggerVariant="ghost"
+                      title={`Edit ${member.name}`}
+                      description={
+                        member.user
+                          ? 'They have a staff app login, so they stay on one PG: the app shows that PG’s kitchen, meters, tasks and expenses.'
+                          : 'Fix any mistake or move them to another PG.'
+                      }
+                      endpoint={`/api/staff/${member.id}`}
+                      method="PATCH"
+                      submitLabel="Save changes"
+                      successTitle="Staff details saved"
+                      fields={[
+                        { kind: 'text', name: 'name', label: 'Full name', required: true, half: true, defaultValue: member.name },
+                        {
+                          kind: 'select',
+                          name: 'role',
+                          label: 'Job title',
+                          required: true,
+                          half: true,
+                          defaultValue: member.role,
+                          options: roleOptions.some((o) => o.value === member.role)
+                            ? roleOptions
+                            : [...roleOptions, { value: member.role, label: roleLabel(member.role) }],
+                        },
+                        { kind: 'tel', name: 'phone', label: 'Mobile number', required: true, half: true, defaultValue: member.phone },
+                        { kind: 'email', name: 'email', label: 'Email', half: true, defaultValue: member.email ?? '' },
+                        {
+                          kind: 'select',
+                          name: 'propertyId',
+                          label: 'Assigned PG',
+                          required: Boolean(member.user),
+                          half: true,
+                          defaultValue: member.propertyId ?? '',
+                          options: properties.map((p) => ({ value: p.id, label: p.name })),
+                        },
+                        { kind: 'number', name: 'salary', label: 'Monthly salary', half: true, defaultValue: member.salary },
+                        { kind: 'text', name: 'address', label: 'Address', defaultValue: member.address ?? '' },
+                      ]}
+                    />
+                  )}
 
                   {canCreateLogin && (
                     <ResendInviteButton

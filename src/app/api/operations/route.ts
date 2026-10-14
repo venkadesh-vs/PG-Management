@@ -130,6 +130,10 @@ export const POST = route(async ({ user, request }) => {
       await assertLookupValue(organizationId, 'STAFF_ROLE', body.role)
       await assertWithinPlan(organizationId, 'staff')
       const wantsLogin = Boolean(body.createLogin)
+      // The staff app works on one PG (its kitchen, meters, tasks and expenses).
+      if (wantsLogin && !body.propertyId) {
+        throw new ValidationError('propertyId: Choose the PG this person works at to give them a staff app login')
+      }
       // A login is a credential into the org: it needs team.manage.
       if (wantsLogin) requirePermission(user, 'team.manage')
       // The login's staff-app role: the one chosen, else the org's

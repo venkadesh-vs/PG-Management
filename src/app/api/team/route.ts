@@ -8,6 +8,7 @@ import {
   ForbiddenError,
   NotFoundError,
   requirePermission,
+  ValidationError,
 } from '@/lib/tenancy'
 import { recordActivity } from '@/server/events'
 import {
@@ -157,7 +158,10 @@ export const POST = route(
           select: { name: true, propertyId: true },
         })
         if (!staff) throw new NotFoundError('Staff member not found')
-        if (staff.propertyId) await assertPropertyAccess(user, staff.propertyId)
+        if (!staff.propertyId) {
+          throw new ValidationError(`Assign ${staff.name} to a PG first (Edit details), then create the login`)
+        }
+        await assertPropertyAccess(user, staff.propertyId)
         const result = await sendStaffAccess({ organizationId, staffId: body.staffId })
         await recordActivity({
           organizationId,

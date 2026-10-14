@@ -3,28 +3,16 @@ import { prisma } from '@/lib/prisma'
 import { publicEnv } from '@/lib/public-env'
 import { SiteFooter, SiteHeader } from '@/components/marketing/site-chrome'
 import { Hero } from '@/components/marketing/hero'
-import { StorySection } from '@/components/marketing/story'
-import { ConnectedSection } from '@/components/marketing/connected'
+import { ModulesSection } from '@/components/marketing/modules'
 import { ElectricitySection } from '@/components/marketing/electricity'
 import { AutopaySection } from '@/components/marketing/autopay'
-import { ReferralSection } from '@/components/marketing/referral'
-import {
-  BedsSection,
-  ComplaintsSection,
-  EnquiriesSection,
-  FoodSection,
-  RentSection,
-  ResidentAppSection,
-  ResidentsSection,
-  RevenueSection,
-} from '@/components/marketing/sections'
 import { FaqSection, PricingSection } from '@/components/marketing/pricing'
 import { DemoSection, FinalCta } from '@/components/marketing/demo-form'
 import { FAQS } from '@/components/marketing/faq-data'
 
 const TITLE = 'StayFlow — The Operating System for PGs'
 const DESCRIPTION =
-  'Your PG. Finally under control. StayFlow helps PG owners manage beds, residents, rent, staff, food, complaints and profit — from one place. Start free.'
+  'Your PG. Finally under control. StayFlow helps PG owners run beds, residents, rent with UPI AutoPay, electricity, food, staff and profit from one place. Start free.'
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
@@ -153,23 +141,13 @@ export default async function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
 
-      <SiteHeader />
+      <SiteHeader overDark />
 
       <main id="main">
         <Hero />
-        <StorySection />
-        <ConnectedSection />
-        <BedsSection />
-        <ResidentsSection />
-        <RentSection />
-        <ElectricitySection />
+        <ModulesSection />
         <AutopaySection />
-        <EnquiriesSection />
-        <FoodSection />
-        <ComplaintsSection />
-        <RevenueSection />
-        <ResidentAppSection />
-        <ReferralSection />
+        <ElectricitySection />
         <PricingSection rule={rule} />
         <FaqSection />
         <DemoSection />

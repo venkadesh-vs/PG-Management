@@ -42,33 +42,35 @@ export function Hero() {
         }
 
   return (
-    <section ref={ref} aria-labelledby="hero-title" className="grain relative isolate overflow-hidden pb-14 pt-24 sm:pb-20 sm:pt-32">
+    <section ref={ref} aria-labelledby="hero-title" className="grain relative isolate overflow-hidden bg-ink-950 pb-14 pt-24 text-white sm:pb-16 sm:pt-32">
       <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-        <div className="aurora" />
-        <div className="dot-grid absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-white" />
+        {/* Deep ink with an indigo glow and a warm gold one: quiet, not loud. */}
+        <div className="absolute -left-40 -top-40 size-[38rem] rounded-full bg-blue-600/25 blur-[120px]" />
+        <div className="absolute -right-32 top-24 size-[30rem] rounded-full bg-marigold-400/10 blur-[110px]" />
+        <div className="dot-grid absolute inset-0 opacity-[0.07] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-marigold-300/40 to-transparent" />
       </div>
 
       <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_1.08fr] lg:gap-10">
         <div className="min-w-0 text-center lg:text-left">
-          <motion.p {...rise(0)} className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white/80 py-1 pl-1.5 pr-3 text-xs font-medium text-slate-600 shadow-xs backdrop-blur">
-            <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">StayFlow</span>
+          <motion.p {...rise(0)} className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] py-1 pl-1.5 pr-3 text-xs font-medium text-white/80 backdrop-blur">
+            <span className="rounded-full bg-gradient-to-r from-marigold-300 to-marigold-400 px-2 py-0.5 text-[10px] font-semibold text-ink-950">StayFlow</span>
             <span className="truncate">The operating system for PGs</span>
           </motion.p>
 
           <motion.h1
             id="hero-title"
             {...rise(0.06)}
-            className="mt-6 font-display text-[2.5rem] font-bold leading-[1.04] tracking-[-0.03em] text-slate-900 text-balance sm:text-6xl lg:text-[4rem]"
+            className="mt-6 font-display text-[2.5rem] font-bold leading-[1.04] tracking-[-0.03em] text-white text-balance sm:text-6xl lg:text-[4rem]"
           >
             Your PG.
             <br />
-            <span className="text-gradient">Finally under control.</span>
+            <span className="bg-gradient-to-r from-marigold-200 via-marigold-300 to-amber-100 bg-clip-text text-transparent">Finally under control.</span>
           </motion.h1>
 
-          <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-slate-600 text-pretty sm:text-lg lg:mx-0">
-            StayFlow is the operating system that helps PG owners manage beds, residents, rent, staff,
-            food, complaints and profit — from one place.
+          <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 text-pretty sm:text-lg lg:mx-0">
+            Beds, residents, rent, electricity, food, staff and profit. One calm place to run every PG you
+            own, with an app for your staff and your residents.
           </motion.p>
 
           <motion.div {...rise(0.22)} className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
@@ -78,7 +80,7 @@ export function Hero() {
                 <ArrowRight className="group-hover/btn:translate-x-0.5" aria-hidden />
               </a>
             </Button>
-            <Button variant="outline" size="xl" asChild className="bg-white">
+            <Button variant="outline" size="xl" asChild className="border-white/20 bg-white/[0.06] text-white hover:border-white/30 hover:bg-white/10 hover:text-white">
               <a href="#demo">
                 <PlayCircle aria-hidden />
                 Book a demo
@@ -86,10 +88,10 @@ export function Hero() {
             </Button>
           </motion.div>
 
-          <motion.ul {...rise(0.3)} className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
+          <motion.ul {...rise(0.3)} className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-white/60 lg:justify-start">
             {['Free trial, no card', 'Works on any phone', 'Set up in an afternoon'].map((item) => (
               <li key={item} className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-blue-600" strokeWidth={1.75} aria-hidden />
+                <CheckCircle2 className="size-4 text-marigold-300" strokeWidth={1.75} aria-hidden />
                 {item}
               </li>
             ))}
@@ -103,7 +105,7 @@ export function Hero() {
           transition={{ duration: 1, ease: EASE_OUT, delay: 0.2 }}
           className="relative"
         >
-          <div className="absolute inset-6 -z-10 rounded-full bg-blue-500/15 blur-3xl" />
+          <div className="absolute inset-6 -z-10 rounded-full bg-blue-500/30 blur-3xl" />
           <Tilt max={5}>
             <HeroDashboard />
           </Tilt>
@@ -141,6 +143,23 @@ export function Hero() {
           </motion.div>
         </motion.div>
         </motion.div>
+      </div>
+
+      {/* What every PG gets, in one quiet line. */}
+      <div className="mx-auto mt-16 w-full max-w-6xl px-4 sm:mt-20 sm:px-6">
+        <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/10 sm:grid-cols-4">
+          {[
+            ['UPI & AutoPay', 'Rent straight to your bank'],
+            ['WhatsApp reminders', 'Before, on and after the due date'],
+            ['Three apps', 'Owner, staff and resident'],
+            ['GST-ready', 'Receipts and tax invoices'],
+          ].map(([title, text]) => (
+            <li key={title} className="bg-ink-950/80 px-4 py-4 backdrop-blur sm:px-5">
+              <p className="text-sm font-semibold text-white">{title}</p>
+              <p className="mt-0.5 text-xs text-white/55">{text}</p>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   )

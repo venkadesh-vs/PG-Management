@@ -13,9 +13,9 @@ import { Logo } from './logo'
 // Absolute hash links so the header works on the legal pages too; on the
 // homepage they are plain in-page jumps.
 const NAV = [
-  { label: 'How it works', href: '/#how' },
-  { label: 'Features', href: '/#features' },
-  { label: 'Resident app', href: '/#resident-app' },
+  { label: 'Features', href: '/#modules' },
+  { label: 'Rent & AutoPay', href: '/#autopay' },
+  { label: 'Electricity', href: '/#electricity' },
   { label: 'Pricing', href: '/#pricing' },
   { label: 'FAQ', href: '/#faq' },
 ]
@@ -26,7 +26,7 @@ const WHATSAPP_MESSAGE = "Hi, I manage a PG and I'm interested in seeing a demo 
  * Marketing header: transparent over the hero, frosted glass once the page
  * scrolls. On phones the menu opens full-screen with links cascading in.
  */
-export function SiteHeader() {
+export function SiteHeader({ overDark = false }: { overDark?: boolean } = {}) {
   const [scrolled, setScrolled] = React.useState(false)
   // The sticky phone CTA appears once the hero's own buttons have scrolled away.
   const [pastHero, setPastHero] = React.useState(false)
@@ -58,6 +58,8 @@ export function SiteHeader() {
   }, [open])
 
   const solid = scrolled || open
+  // Light text while the header floats over the dark homepage hero.
+  const light = overDark && !solid
 
   return (
     <>
@@ -77,14 +79,17 @@ export function SiteHeader() {
         )}
       >
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-4 sm:px-6">
-          <Logo />
+          <Logo variant={light ? 'light' : 'dark'} />
 
           <nav aria-label="Main" className="hidden flex-1 items-center justify-center gap-1 lg:flex">
             {NAV.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-900/[0.04] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                className={cn(
+                  'rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
+                  light ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900',
+                )}
               >
                 {item.label}
               </a>
@@ -94,7 +99,10 @@ export function SiteHeader() {
           <div className="ml-auto flex items-center gap-2 lg:ml-0">
             <Link
               href="/login"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:block"
+              className={cn(
+                'hidden rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:block',
+                light ? 'text-white/75 hover:text-white' : 'text-slate-600 hover:text-slate-900',
+              )}
             >
               Sign in
             </Link>
@@ -110,7 +118,10 @@ export function SiteHeader() {
               aria-label={open ? 'Close menu' : 'Open menu'}
               aria-expanded={open}
               aria-controls="mobile-menu"
-              className="relative z-[60] rounded-xl p-2 text-slate-700 hover:bg-slate-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 lg:hidden"
+              className={cn(
+                'relative z-[60] rounded-xl p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 lg:hidden',
+                light ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-900/5',
+              )}
             >
               {open ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>

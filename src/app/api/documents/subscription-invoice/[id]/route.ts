@@ -59,7 +59,16 @@ export const GET = route(
     const registered = Boolean(platformEnv.gstin)
     const isDemo = invoice.payments.some((p) => p.isDemo)
 
-    const totals: [string, string, boolean?][] = [['Taxable value', rs(invoice.amount)]]
+    // A referral reward is a discount on the price, shown before GST.
+    const totals: [string, string, boolean?][] = [
+      ...(invoice.discount > 0
+        ? ([
+            ['Subscription price', rs(invoice.amount + invoice.discount)],
+            ['Less: referral discount', `- ${rs(invoice.discount)}`],
+          ] as [string, string][])
+        : []),
+      ['Taxable value', rs(invoice.amount)],
+    ]
     if (invoice.tax > 0) {
       if (intraState) {
         totals.push(['CGST @ 9%', rs(cgst)], ['SGST @ 9%', rs(sgst)])
@@ -105,7 +114,7 @@ export const GET = route(
         {
           label: `StayFlow subscription - ${invoice.subscription.property.name} (${formatDate(invoice.periodStart)} to ${formatDate(invoice.periodEnd)}) - SAC ${SAAS_SAC}`,
           qty: 1,
-          amount: invoice.amount,
+          amount: invoice.amount + invoice.discount,
         },
       ],
       totals,
@@ -119,6 +128,7 @@ export const GET = route(
       notes: [
         ...(invoice.tax > 0 ? ['Tax is not payable on reverse charge basis.'] : []),
         ...(isDemo ? ['Demo record - no money was charged.'] : []),
+        ...(invoice.discountLabel ? [invoice.discountLabel.replace(/[‘’]/g, "'")] : []),
       ],
       footer: `Computer-generated invoice from StayFlow on ${formatDate(new Date())}. No signature required.`,
     })

@@ -14,6 +14,7 @@ const schema = z.object({
   phone: phoneSchema,
   city: z.string().trim().min(2, 'Enter your city').max(80),
   password: z.string().min(1, 'Choose a password'),
+  referralCode: z.string().trim().max(40).optional().or(z.literal('')),
   acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Please accept the terms to continue' }) }),
 })
 
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
       source: 'SELF_SIGNUP',
       password: body.password,
       ip,
+      referralCode: body.referralCode || null,
     })
 
     await sendVerificationEmail(owner.id).catch((error: unknown) => {

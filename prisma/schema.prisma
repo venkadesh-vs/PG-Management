@@ -434,9 +434,9 @@ enum EventType {
 // ============================ PLATFORM =====================================
 
 model Organization {
-  id               String    @id @default(cuid())
+  id               String     @id @default(cuid())
   name             String
-  slug             String    @unique
+  slug             String     @unique
   ownerName        String
   contactEmail     String
   contactPhone     String
@@ -445,18 +445,24 @@ model Organization {
   state            String?
   addressLine      String?
   logoUrl          String?
-  status           OrgStatus @default(TRIAL)
+  status           OrgStatus  @default(TRIAL)
   trialEndsAt      DateTime?
   notes            String?
   // Feature flags resolved against the plan; org-level overrides live here.
   featureOverrides Json?
   /// Where the account came from: SELF_SIGNUP | ADMIN | LEAD
   signupSource     String?
+  /// This owner's code for referring other PG owners (made on first use).
+  referralCode     String?    @unique
+  /// The organization whose code this one signed up with.
+  referredByOrgId  String?
+  referralsMade    Referral[] @relation("ReferralReferrer")
+  referredBy       Referral?  @relation("ReferralReferred")
   /// GST registration of the client (printed on their subscription invoices).
   gstin            String?
   legalName        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
   archivedAt       DateTime?
 
   users             User[]
@@ -1742,25 +1748,31 @@ model SubscriptionInvoice {
   subscriptionId String
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  number         String        @unique
-  periodStart    DateTime
-  periodEnd      DateTime
-  issueDate      DateTime
-  dueDate        DateTime
-  amount         Int
-  tax            Int           @default(0)
-  total          Int
-  amountPaid     Int           @default(0)
-  status         InvoiceStatus @default(PENDING)
-  paidAt         DateTime?
+  number           String        @unique
+  periodStart      DateTime
+  periodEnd        DateTime
+  issueDate        DateTime
+  dueDate          DateTime
+  amount           Int
+  tax              Int           @default(0)
+  total            Int
+  amountPaid       Int           @default(0)
+  status           InvoiceStatus @default(PENDING)
+  paidAt           DateTime?
   /// One-off "Pay now" order for this invoice.
-  gatewayOrderId String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  gatewayOrderId   String?
+  /// Taxable value taken off before GST (amount is already net of it).
+  discount         Int           @default(0)
+  discountLabel    String?
+  referralRewardId String?
+  referralReward   Referral?     @relation(fields: [referralRewardId], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   payments SubscriptionPayment[]
 
   @@index([subscriptionId, status])
+  @@index([referralRewardId])
 }
 
 model SubscriptionPayment {
@@ -2548,6 +2560,8 @@ model Lead {
   preferredDemoAt DateTime?
   message         String?
   source          String     @default("website")
+  /// Referral code the enquirer came with (from a ?ref= link or typed in).
+  referralCode    String?
   status          LeadStatus @default(NEW)
   lastContactedAt DateTime?
   demoAt          DateTime?
@@ -2670,4 +2684,33 @@ model SubscriptionPaymentClaim {
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
+}
+
+/// One PG owner referring another. PENDING at sign-up, EARNED when the new
+/// owner pays their first subscription invoice, APPLIED once the referrer's
+/// bills for one month carried the discount. Rules: src/lib/referrals.ts.
+model Referral {
+  id                  String       @id @default(cuid())
+  referrerOrgId       String
+  referrer            Organization @relation("ReferralReferrer", fields: [referrerOrgId], references: [id], onDelete: Cascade)
+  referredOrgId       String       @unique
+  referred            Organization @relation("ReferralReferred", fields: [referredOrgId], references: [id], onDelete: Cascade)
+  code                String
+  /// PENDING | EARNED | APPLYING | APPLIED | CANCELLED
+  status              String       @default("PENDING")
+  discountPercent     Int          @default(50)
+  earnedAt            DateTime?
+  /// The referred owner's first paid invoice that unlocked the reward.
+  qualifyingInvoiceId String?
+  /// First bill that used it; the reward covers bills starting before windowEndsAt.
+  firstAppliedAt      DateTime?
+  windowEndsAt        DateTime?
+  appliedAt           DateTime?
+  cancelReason        String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  invoices SubscriptionInvoice[]
+
+  @@index([referrerOrgId, status])
 }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { fail, handleError, ok, parseBody } from '@/lib/api-helpers'
 import { leadSchema } from '@/lib/validation'
+import { normaliseReferralCode } from '@/lib/referrals'
 import { notifySuperAdmins, recordActivity } from '@/server/events'
 import { clientIp, isRateLimited, recordHit } from '@/lib/rate-limit'
 
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
       preferredDemoAt: body.preferredDemoAt ? new Date(body.preferredDemoAt) : null,
       message: body.message || null,
       source: body.source || 'website',
+      // Kept from an earlier enquiry when this one has none.
+      ...(normaliseReferralCode(body.referralCode) ? { referralCode: normaliseReferralCode(body.referralCode) } : {}),
     }
 
     const lead = existing

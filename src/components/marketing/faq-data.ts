@@ -40,6 +40,10 @@ export const FAQS: { q: string; a: string }[] = [
     a: 'Yes. Each PG has its own rooms, rent configuration and subscription. You switch between them from one selector and can compare them side by side.',
   },
   {
+    q: 'Is there a referral offer?',
+    a: 'Yes. Every PG owner gets a referral code. When an owner you refer pays their first month, your next month is 50% off: a ₹8,000 bill becomes ₹4,000. Each new owner you bring earns you another half-price month.',
+  },
+  {
     q: 'Does StayFlow use AI?',
     a: 'Not yet. An AI assistant and a daily brief are on our roadmap and marked “coming soon”. Everything described on this page works today without them.',
   },

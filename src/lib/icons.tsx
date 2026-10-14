@@ -1,5 +1,6 @@
 import {
   Smartphone,
+  Gift,
   KeyRound,
   ListChecks,
   ToggleRight,
@@ -94,6 +95,7 @@ export const ICONS = {
   toggle: ToggleRight,
   cart: ShoppingCart,
   sparkles: Sparkles,
+  gift: Gift,
   tags: Tags,
   trendingDown: TrendingDown,
   trendingUp: TrendingUp,

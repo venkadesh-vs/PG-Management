@@ -11,6 +11,7 @@ import { issueAuthToken, consumeAuthToken, peekAuthToken } from '../auth-tokens'
 import { recordActivity } from '../events'
 import { sendEmail } from '../integrations/email'
 import { sendWhatsApp, type WhatsAppTemplate } from '../integrations/whatsapp'
+import { linkReferral } from './referrals'
 
 /**
  * Accounts and onboarding: creating an organization with its owner, invite
@@ -107,6 +108,8 @@ export type BootstrapInput = {
   password?: string
   actor?: { id: string; name: string; role: UserRole } | null
   ip?: string
+  /** Another owner's referral code. Self sign-up rejects a bad one; other paths skip it. */
+  referralCode?: string | null
 }
 
 /**
@@ -159,6 +162,15 @@ export async function bootstrapOrganization(input: BootstrapInput) {
           passwordChangedAt: input.password ? new Date() : null,
         },
       })
+      if (input.referralCode) {
+        await linkReferral(tx, {
+          newOrgId: organization.id,
+          code: input.referralCode,
+          email,
+          phone,
+          strict: input.source === 'SELF_SIGNUP',
+        })
+      }
       await recordActivity(
         {
           organizationId: organization.id,

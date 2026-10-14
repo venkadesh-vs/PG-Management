@@ -201,6 +201,7 @@ export const POST = route(
         city: input.city || null,
         source: 'LEAD',
         actor: { id: user.id, name: user.name, role: user.role },
+        referralCode: lead.referralCode,
       })
       const updated = await prisma.lead.update({
         where: { id: lead.id },

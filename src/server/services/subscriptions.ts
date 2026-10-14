@@ -53,6 +53,7 @@ import { downgradeBlockers, type PlanLimits } from '@/lib/plan-entitlements'
 import { assertWithinPlan, countUsage } from './plan-limits'
 import { failedWebhooks, finishWebhook, reclaimFailedWebhook } from './webhook-log'
 import { ownerBillingEvents } from './owner-billing'
+import { closeRewardIfComplete, markReferralEarned, referralDiscountForBill } from './referrals'
 
 type Tx = Prisma.TransactionClient
 
@@ -650,6 +651,10 @@ export async function settleSubscriptionInvoice(
   })
 
   const { reactivated } = await reactivateOrganizationIfClear(tx, invoice.subscription.organizationId, now)
+  // A referred owner's first paid bill unlocks their referrer's reward.
+  if (cleared) {
+    await markReferralEarned(tx, { id: invoice.id, total: invoice.total, organizationId: invoice.subscription.organizationId })
+  }
 
   await recordActivity(
     {
@@ -745,9 +750,22 @@ async function claimCycleAndInvoice(
     select: { gstin: true, state: true },
   })
   // amount = taxable value for the whole cycle; tax = 18% GST when registered.
-  const gst = subscriptionGst(organization ?? {}, cyclePrice(amount, cycle, plan.yearlyDiscountPercent))
-  return tx.subscriptionInvoice.create({
+  // A referral reward comes off the taxable value, before GST.
+  const gross = cyclePrice(amount, cycle, plan.yearlyDiscountPercent)
+  const reward = await referralDiscountForBill(tx, {
+    organizationId: subscription.organizationId,
+    subscriptionId: subscription.id,
+    monthlyAmount: amount,
+    taxable: gross,
+    periodStart,
+    liveAutopay: current.autopayEnabled && current.mandateStatus === 'ACTIVE' && Boolean(current.gatewaySubscriptionId),
+  })
+  const gst = subscriptionGst(organization ?? {}, gross - (reward?.discount ?? 0))
+  const invoice = await tx.subscriptionInvoice.create({
     data: {
+      discount: reward?.discount ?? 0,
+      discountLabel: reward?.label ?? null,
+      referralRewardId: reward?.rewardId ?? null,
       subscriptionId: subscription.id,
       number,
       periodStart,
@@ -760,6 +778,8 @@ async function claimCycleAndInvoice(
       status: 'PENDING',
     },
   })
+  if (reward) await closeRewardIfComplete(tx, reward.rewardId, subscription.organizationId)
+  return invoice
 }
 
 /**

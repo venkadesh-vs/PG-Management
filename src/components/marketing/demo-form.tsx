@@ -53,8 +53,14 @@ export function DemoForm() {
       preferredDemoAt: '',
       message: '',
       source: 'website',
+      referralCode: '',
     },
   })
+  // Came from another owner's "refer a PG owner" link: keep their code.
+  React.useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref')
+    if (ref) form.setValue('referralCode', ref.slice(0, 40))
+  }, [form])
   const errors = form.formState.errors
 
   async function onSubmit(values: Values) {
@@ -177,6 +183,10 @@ export function DemoForm() {
         </Field>
         <Field label="Preferred demo time" htmlFor="lead-time" hint="We will confirm by phone">
           <Input id="lead-time" type="datetime-local" {...form.register('preferredDemoAt')} />
+        </Field>
+
+        <Field label="Referral code" htmlFor="lead-ref" hint="Optional — from a PG owner who uses StayFlow" error={errors.referralCode?.message}>
+          <Input id="lead-ref" autoCapitalize="characters" placeholder="e.g. RAJESH7K2Q" {...form.register('referralCode')} />
         </Field>
 
         <Field label="Anything else?" htmlFor="lead-msg" className="sm:col-span-2">

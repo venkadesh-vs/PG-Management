@@ -448,6 +448,8 @@ export const leadSchema = z.object({
   preferredDemoAt: optionalString,
   message: optionalString,
   source: z.string().default('website'),
+  /** Another owner's referral code (a ?ref= link or typed in). */
+  referralCode: z.string().trim().max(40).optional().or(z.literal('')),
 })
 
 // ------------------------------------------------------------- accounts ----

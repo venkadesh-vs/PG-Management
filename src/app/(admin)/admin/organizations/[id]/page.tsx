@@ -48,6 +48,8 @@ export default async function AdminOrganizationPage({
   const org = await prisma.organization.findUnique({
     where: { id },
     include: {
+      referredBy: { select: { status: true, referrer: { select: { id: true, name: true } } } },
+      referralsMade: { select: { status: true } },
       properties: {
         where: { archivedAt: null },
         include: {
@@ -303,6 +305,18 @@ export default async function AdminOrganizationPage({
             <SummaryRow
               label="Signed up via"
               value={(org.signupSource ?? '—').replace('_', ' ').toLowerCase()}
+            />
+            <SummaryRow
+              label="Referred by"
+              value={org.referredBy ? `${org.referredBy.referrer.name} (${org.referredBy.status.toLowerCase()})` : '—'}
+            />
+            <SummaryRow
+              label="Referrals made"
+              value={
+                org.referralsMade.length
+                  ? `${org.referralsMade.length} · ${org.referralsMade.filter((r) => r.status !== 'PENDING' && r.status !== 'CANCELLED').length} paid`
+                  : '—'
+              }
             />
             <Link href="/admin/subscriptions" className="inline-block pt-1 text-xs font-semibold text-blue-600">
               Manage in Subscriptions →

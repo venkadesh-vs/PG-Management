@@ -130,6 +130,7 @@ export default async function LeadsPage({
     rentRange: lead.rentRange,
     currentMethod: lead.currentMethod,
     currentSoftware: lead.currentSoftware,
+    referralCode: lead.referralCode,
     city: lead.city,
     message: lead.message,
     status: lead.status,

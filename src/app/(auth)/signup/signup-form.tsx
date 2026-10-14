@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Rocket } from 'lucide-react'
+import { Eye, EyeOff, Gift, Rocket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/primitives'
@@ -25,13 +25,14 @@ const schema = z.object({
     .min(8, 'Use at least 8 characters')
     .regex(/[a-zA-Z]/, 'Include a letter')
     .regex(/\d/, 'Include a number'),
+  referralCode: z.string().trim().max(40).optional(),
   acceptTerms: z.boolean().refine((v) => v, 'Please accept the terms to continue'),
 })
 
 type FormValues = z.infer<typeof schema>
-const FIELDS = ['ownerName', 'orgName', 'email', 'phone', 'city', 'password'] as const
+const FIELDS = ['ownerName', 'orgName', 'email', 'phone', 'city', 'password', 'referralCode'] as const
 
-export function SignupForm() {
+export function SignupForm({ referral }: { referral?: { code: string; by: string } | null }) {
   const router = useRouter()
   const toast = useToast()
   const [showPassword, setShowPassword] = React.useState(false)
@@ -44,6 +45,7 @@ export function SignupForm() {
       phone: '',
       city: '',
       password: '',
+      referralCode: referral?.code ?? '',
       acceptTerms: false,
     },
   })
@@ -68,6 +70,14 @@ export function SignupForm() {
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      {referral && (
+        <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+          <Gift className="mt-0.5 size-4 shrink-0" />
+          <span>
+            <strong className="font-semibold">{referral.by}</strong> invited you to StayFlow.
+          </span>
+        </p>
+      )}
       <Field label="Your name" required error={errors.ownerName?.message} htmlFor="ownerName">
         <Input id="ownerName" autoComplete="name" placeholder="Murugan S" {...form.register('ownerName')} />
       </Field>
@@ -115,6 +125,15 @@ export function SignupForm() {
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
+      </Field>
+
+      <Field
+        label="Referral code"
+        error={errors.referralCode?.message}
+        hint="Optional — from a PG owner who already uses StayFlow"
+        htmlFor="referralCode"
+      >
+        <Input id="referralCode" autoCapitalize="characters" placeholder="e.g. RAJESH7K2Q" {...form.register('referralCode')} />
       </Field>
 
       <div className="space-y-1.5">

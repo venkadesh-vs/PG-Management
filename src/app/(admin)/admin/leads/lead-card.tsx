@@ -43,6 +43,7 @@ export type CrmLead = {
   rentRange: string | null
   currentMethod: string | null
   currentSoftware: string | null
+  referralCode?: string | null
   city: string | null
   message: string | null
   status: string
@@ -284,6 +285,7 @@ export function LeadCard({
                 <Detail label="Rent range" value={lead.rentRange} />
                 <Detail label="Managing with" value={lead.currentSoftware || lead.currentMethod} />
                 <Detail label="Source" value={lead.source} />
+                {lead.referralCode && <Detail label="Referral code" value={lead.referralCode} />}
                 <Detail
                   label="Last contacted"
                   value={lead.lastContactedAt ? formatDate(lead.lastContactedAt) : 'Not yet'}

@@ -66,6 +66,7 @@ export const OWNER_NAV: NavSection[] = [
     title: 'Account',
     items: [
       { label: 'Subscription', href: '/app/subscription', icon: 'sparkles', module: 'settings', permission: 'billing.manage' },
+      { label: 'Refer & earn', href: '/app/referrals', icon: 'gift', module: 'settings', permission: 'billing.manage' },
       { label: 'Notifications', href: '/app/notifications', icon: 'bell', badge: 'notifications' },
       { label: 'Settings', href: '/app/settings', icon: 'settings', module: 'settings' },
       { label: 'Help centre', href: '/app/help', icon: 'help' },

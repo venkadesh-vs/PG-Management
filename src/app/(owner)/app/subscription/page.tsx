@@ -573,6 +573,11 @@ export default async function SubscriptionPage() {
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular">
                         {formatMoney(invoice.total)}
+                        {invoice.discount > 0 && (
+                          <span className="block text-[11px] font-medium text-emerald-700" title={invoice.discountLabel ?? undefined}>
+                            Referral −{formatMoney(invoice.discount)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -662,6 +667,11 @@ export default async function SubscriptionPage() {
                     </span>
                     <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
                   </div>
+                  {invoice.discount > 0 && (
+                    <p className="mt-1 text-right text-[11px] font-medium text-emerald-700">
+                      Referral reward −{formatMoney(invoice.discount)}
+                    </p>
+                  )}
                   {!payUnavailable && PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
                     <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
                       <PayInvoiceButton

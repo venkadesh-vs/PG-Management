@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, Calculator, Check, HelpCircle, Info, Minus, Plus, Tag, X } from 'lucide-react'
+import { ArrowRight, Calculator, Check, Gift, HelpCircle, Info, Minus, Plus, Tag, X } from 'lucide-react'
 import { cn, formatMoney } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -233,6 +233,13 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
               )}
             </div>
             <p className="mt-2 text-sm text-slate-600">No feature gates. Every PG gets the whole product.</p>
+            <p className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+              <Gift className="mt-0.5 size-4 shrink-0 text-emerald-700" aria-hidden />
+              <span>
+                <strong className="font-semibold">Refer a PG owner, pay half.</strong> When an owner you refer pays their first month,
+                your next month is 50% off.
+              </span>
+            </p>
 
             <ul className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {INCLUDED.map((item) => (

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getSessionUser, HOME_FOR_ROLE } from '@/lib/auth'
 import { AuthLink, AuthShell } from '../auth-shell'
 import { SignupForm } from './signup-form'
+import { referrerForCode } from '@/server/services/referrals'
 
 export const metadata: Metadata = {
   title: 'Start your free trial',
@@ -10,9 +11,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
   const user = await getSessionUser()
   if (user) redirect(user.mustChangePassword ? '/change-password' : HOME_FOR_ROLE[user.role])
+  // A shared "refer a PG owner" link: fill the code and say who invited them.
+  const { ref } = await searchParams
+  const referrer = await referrerForCode(Array.isArray(ref) ? ref[0] : ref).catch(() => null)
 
   return (
     <AuthShell
@@ -25,7 +29,7 @@ export default async function SignupPage() {
         </>
       }
     >
-      <SignupForm />
+      <SignupForm referral={referrer ? { code: referrer.referralCode!, by: referrer.name } : null} />
     </AuthShell>
   )
 }

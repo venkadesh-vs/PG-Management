@@ -3,13 +3,13 @@
 import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Loader2 } from 'lucide-react'
+import { Spinner } from './spinner'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
   [
-    'group/btn relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium',
-    'transition-[box-shadow,background-color,border-color,color] duration-150 ease-out',
+    'group/btn relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium',
+    'transition-[box-shadow,background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98]',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1',
     'disabled:pointer-events-none disabled:opacity-55',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-transform',
@@ -17,9 +17,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-slate-900 text-white shadow-xs hover:bg-slate-800',
+        default: 'bg-ink-950 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.08)_inset,0_1px_2px_0_rgb(11_16_26/0.2)] hover:bg-ink-900',
         primary:
-          'bg-blue-600 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.12)_inset,0_1px_2px_0_rgb(27_25_24/0.12)] hover:bg-blue-700',
+          'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.18)_inset,0_1px_2px_0_rgb(27_25_24/0.12),0_6px_14px_-8px_rgb(82_72_224/0.6)] hover:from-blue-600 hover:to-blue-700',
         pink: 'bg-pink-600 text-white shadow-xs hover:bg-pink-700',
         destructive: 'bg-rose-600 text-white shadow-xs hover:bg-rose-700',
         outline:
@@ -27,8 +27,8 @@ const buttonVariants = cva(
         secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200/80',
         ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         link: 'text-blue-600 underline-offset-4 hover:underline',
-        success: 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700',
-        accent: 'bg-marigold-400 text-slate-950 shadow-xs hover:bg-marigold-500',
+        success: 'bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-[0_1px_0_0_rgb(255_255_255/0.16)_inset,0_1px_2px_0_rgb(27_25_24/0.12)] hover:from-emerald-600 hover:to-emerald-700',
+        accent: 'bg-gradient-to-b from-marigold-300 to-marigold-400 text-ink-950 shadow-[0_1px_0_0_rgb(255_255_255/0.35)_inset,0_1px_2px_0_rgb(27_25_24/0.12)] hover:from-marigold-400 hover:to-marigold-500',
       },
       size: {
         default: 'h-10 px-4',
@@ -62,7 +62,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading && !asChild ? (
           <>
-            <Loader2 className="animate-spin" />
+            <Spinner />
             {children}
           </>
         ) : (

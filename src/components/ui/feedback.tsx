@@ -126,26 +126,27 @@ export function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
       className={cn(
-        'flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white text-center',
+        'relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed border-slate-200 bg-white text-center',
         compact ? 'gap-2 p-6' : 'gap-3 p-10',
         className,
       )}
     >
+      <div aria-hidden className="dot-grid pointer-events-none absolute inset-0 opacity-60 [mask-image:radial-gradient(ellipse_at_center,black,transparent_65%)]" />
       {Icon && (
         <div className="relative">
-          
-          <div className="relative flex size-11 items-center justify-center rounded-xl bg-slate-50 ring-1 ring-inset ring-slate-200">
-            <Icon className="size-5 text-slate-400" />
+          <div aria-hidden className="absolute inset-0 -m-3 rounded-full bg-blue-400/15 blur-xl" />
+          <div className="relative flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-blue-50 shadow-card ring-1 ring-inset ring-blue-100">
+            <Icon className="size-5 text-blue-600" />
           </div>
         </div>
       )}
-      <div className="space-y-1">
+      <div className="relative space-y-1">
         <p className="font-display text-sm font-semibold text-slate-800">{title}</p>
         {description && (
           <p className="mx-auto max-w-sm text-sm leading-relaxed text-slate-500">{description}</p>
         )}
       </div>
-      {action && <div className="mt-1">{action}</div>}
+      {action && <div className="relative mt-1">{action}</div>}
     </motion.div>
   )
 }

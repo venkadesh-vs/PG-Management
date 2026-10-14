@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Figtree, JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import Script from 'next/script'
+import { Suspense } from 'react'
+import { RouteProgress } from '@/components/motion/route-progress'
 import { ToastProvider } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/primitives'
 import { publicEnv } from '@/lib/env'
@@ -87,6 +89,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-dvh bg-background font-sans">
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
         <ToastProvider>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         </ToastProvider>

@@ -24,7 +24,7 @@
     --border: 30 8% 89%;
     --input: 30 8% 85%;
     --ring: 245 72% 58%;
-    --radius: 0.625rem;
+    --radius: 0.75rem;
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -57,7 +57,13 @@
   }
 
   ::selection {
-    @apply bg-blue-600/20 text-blue-950;
+    @apply bg-marigold-200/70 text-ink-950;
+  }
+
+  /* Lucide icons default to a 2px stroke; 1.75 reads finer and more premium.
+     Icons that set their own stroke width keep it. */
+  svg.lucide[stroke-width='2'] {
+    stroke-width: 1.75;
   }
 
   :focus-visible {
@@ -184,12 +190,20 @@
   }
 
   .skeleton {
-    @apply relative overflow-hidden rounded-lg bg-slate-100;
+    @apply relative overflow-hidden rounded-lg bg-gradient-to-r from-slate-100 via-slate-100/80 to-slate-100;
   }
 
   .skeleton::after {
-    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/70 to-transparent;
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/80 to-transparent;
     content: '';
+  }
+
+  /* Dark surfaces (sidebar, hero) get a matching slim scrollbar. */
+  .bg-ink-950 .scrollbar-slim {
+    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+  }
+  .bg-ink-950 .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.15);
   }
 
   .scrollbar-slim {

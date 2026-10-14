@@ -130,13 +130,13 @@ const config: Config = {
       },
       boxShadow: {
         xs: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
-        card: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
+        card: '0 1px 2px 0 rgb(27 25 24 / 0.04), 0 6px 16px -10px rgb(27 25 24 / 0.10)',
         elevated:
           '0 2px 4px -2px rgb(16 24 40 / 0.06), 0 12px 24px -6px rgb(16 24 40 / 0.10)',
         float: '0 8px 16px -6px rgb(16 24 40 / 0.10), 0 24px 48px -12px rgb(16 24 40 / 0.18)',
         glow: '0 0 0 1px rgb(255 255 255 / 0.06) inset, 0 10px 40px -12px rgb(82 72 224 / 0.40)',
         // Cards no longer stack a large shadow on top of the border.
-        soft: '0 1px 2px 0 rgb(27 25 24 / 0.04)',
+        soft: '0 1px 2px 0 rgb(27 25 24 / 0.04), 0 6px 16px -10px rgb(27 25 24 / 0.10)',
         lift: '0 2px 4px -1px rgb(27 25 24 / 0.06), 0 16px 32px -12px rgb(27 25 24 / 0.18)',
         brand: '0 1px 0 0 rgb(255 255 255 / 0.25) inset, 0 6px 16px -6px rgb(82 72 224 / 0.55), 0 2px 4px -1px rgb(82 72 224 / 0.25)',
         'inner-highlight': 'inset 0 1px 0 0 rgb(255 255 255 / 0.08)',

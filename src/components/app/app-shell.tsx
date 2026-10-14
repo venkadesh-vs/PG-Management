@@ -122,9 +122,10 @@ export function AppShell({
   return (
     <div className="min-h-dvh bg-slate-50">
       {/* ------------------------------------------------ Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white lg:flex">
-        <div className="flex h-16 shrink-0 items-center px-5">
-          <Logo href={null} />
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-hidden bg-ink-950 text-white lg:flex">
+        <SidebarGlow />
+        <div className="relative flex h-16 shrink-0 items-center px-5">
+          <Logo href={null} variant="light" />
         </div>
         <SidebarNav nav={nav} pathname={pathname} badges={badges} />
         <UserPanel user={user} />
@@ -146,15 +147,16 @@ export function AppShell({
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-[85%] max-w-xs flex-col bg-white lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-[85%] max-w-xs flex-col overflow-hidden bg-ink-950 text-white lg:hidden"
             >
-              <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
-                <Logo href={null} />
+              <SidebarGlow />
+              <div className="relative flex h-16 items-center justify-between border-b border-white/10 px-5">
+                <Logo href={null} variant="light" />
                 <button
                   type="button"
                   onClick={() => setMobileOpen(false)}
                   aria-label="Close menu"
-                  className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                  className="rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white"
                 >
                   <X className="size-5" />
                 </button>
@@ -247,11 +249,11 @@ function SidebarNav({
   // Keep the PG picked in the switcher when moving between pages.
   const property = useSearchParams().get('property')
   return (
-    <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-5 pt-2 scrollbar-slim">
+    <nav className="relative flex-1 space-y-5 overflow-y-auto px-3 pb-5 pt-2 scrollbar-slim">
       {nav.map((section, i) => (
         <div key={section.title ?? i} className="space-y-0.5">
           {section.title && (
-            <p className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            <p className="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/35">
               {section.title}
             </p>
           )}
@@ -263,25 +265,32 @@ function SidebarNav({
                 key={item.href}
                 href={withPgScope(item.href, property)}
                 className={cn(
-                  'group relative flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors',
-                  active
-                    ? 'bg-blue-50 font-medium text-blue-700'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                  'group relative flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors duration-200',
+                  active ? 'font-medium text-white' : 'text-white/60 hover:bg-white/[0.06] hover:text-white',
                 )}
               >
+                {active && (
+                  <motion.span
+                    layoutId="sidebar-active"
+                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-white/[0.12] to-white/[0.04] ring-1 ring-inset ring-white/10"
+                  >
+                    <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-marigold-200 to-marigold-400" />
+                  </motion.span>
+                )}
                 <Icon
                   name={item.icon}
                   className={cn(
-                    'size-[18px] shrink-0 transition-colors',
-                    active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600',
+                    'relative size-[18px] shrink-0 transition-colors',
+                    active ? 'text-marigold-300' : 'text-white/40 group-hover:text-white/75',
                   )}
                 />
-                <span className="flex-1 truncate">{item.label}</span>
+                <span className="relative flex-1 truncate">{item.label}</span>
                 {count > 0 && (
                   <span
                     className={cn(
-                      'flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular',
-                      active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600',
+                      'relative flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular',
+                      active ? 'bg-marigold-300 text-ink-950' : 'bg-white/10 text-white/75',
                     )}
                   >
                     {count > 99 ? '99+' : count}
@@ -315,24 +324,24 @@ function UserPanel({ user }: { user: ShellUser }) {
   }
 
   return (
-    <div className="border-t border-slate-200/70 p-3">
+    <div className="relative border-t border-white/10 p-3">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-slate-100"
+            className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-white/[0.06]"
           >
-            <Avatar className="size-8">
+            <Avatar className="size-8 ring-1 ring-white/15">
               {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
               <AvatarFallback>{initials(user.name)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
-              <p className="truncate text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-white">{user.name}</p>
+              <p className="truncate text-xs text-white/45">
                 {user.organizationName ?? user.role.replace('_', ' ').toLowerCase()}
               </p>
             </div>
-            <ChevronsUpDown className="size-4 shrink-0 text-slate-400" />
+            <ChevronsUpDown className="size-4 shrink-0 text-white/40" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-56">
@@ -449,3 +458,13 @@ function NotificationBell({ count }: { count: number }) {
   )
 }
 
+/** Two soft glows (indigo and gold) so the dark sidebar has depth, not flatness. */
+function SidebarGlow() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      <div className="absolute -left-24 -top-24 size-72 rounded-full bg-blue-600/25 blur-3xl" />
+      <div className="absolute -bottom-28 -right-20 size-64 rounded-full bg-marigold-400/10 blur-3xl" />
+      <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-white/10 via-white/5 to-transparent" />
+    </div>
+  )
+}

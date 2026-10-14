@@ -70,7 +70,7 @@ export function MobileShell({
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-lg">
+      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/80 shadow-[0_8px_24px_-18px_rgb(27_25_24/0.25)] backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-4">
           <LogoMark className="size-8" />
           <div className="min-w-0 flex-1">
@@ -142,7 +142,7 @@ export function MobileShell({
       </main>
 
       {/* Bottom tab bar — the primary navigation on a phone. */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-safe backdrop-blur-lg sm:static sm:border-t-0 sm:bg-transparent sm:pb-0">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/85 pb-safe shadow-[0_-8px_24px_-16px_rgb(27_25_24/0.18)] backdrop-blur-xl backdrop-saturate-150 sm:static sm:border-t-0 sm:bg-transparent sm:pb-0 sm:shadow-none">
         <div className="mx-auto flex w-full max-w-3xl items-stretch justify-around px-2 pt-1.5 sm:hidden">
           {nav.map((item) => {
             const active = isActive(pathname, item)
@@ -152,21 +152,23 @@ export function MobileShell({
                 href={item.href}
                 className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5"
               >
-                {active && (
-                  <motion.span
-                    layoutId="tab-pill"
-                    className={cn('absolute inset-x-2 -top-1.5 h-0.5 rounded-full', accents.bg)}
-                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                <span className="relative flex h-7 w-12 items-center justify-center">
+                  {active && (
+                    <motion.span
+                      layoutId="tab-pill"
+                      className={cn('absolute inset-0 rounded-full ring-1 ring-inset ring-black/[0.04]', accents.soft)}
+                      transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                    />
+                  )}
+                  <Icon
+                    name={item.icon}
+                    className={cn('relative size-5 transition-colors', active ? accents.text : 'text-slate-500')}
+                    strokeWidth={1.75}
                   />
-                )}
-                <Icon
-                  name={item.icon}
-                  className={cn('size-5', active ? accents.text : 'text-slate-500')}
-                  strokeWidth={1.75}
-                />
+                </span>
                 <span
                   className={cn(
-                    'text-[10px] font-medium',
+                    'text-[10.5px] font-medium transition-colors',
                     active ? accents.text : 'text-slate-500',
                   )}
                 >

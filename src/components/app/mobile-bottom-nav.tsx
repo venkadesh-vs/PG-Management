@@ -69,7 +69,7 @@ export function MobileBottomNav({
   return (
     <nav
       aria-label="Primary"
-      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-lg lg:hidden"
+      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/85 shadow-[0_-8px_24px_-16px_rgb(27_25_24/0.18)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-around px-1 pt-1">
         {tabs.map((tab, index) => {
@@ -138,7 +138,7 @@ function TabIcon({ active, count, children }: { active: boolean; count: number; 
         <motion.span
           layoutId="owner-bottom-nav-pill"
           transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-          className="absolute inset-0 rounded-full bg-blue-50"
+          className="absolute inset-0 rounded-full bg-gradient-to-b from-blue-50 to-blue-100/80 ring-1 ring-inset ring-blue-200/60"
         />
       )}
       <span className="relative">{children}</span>

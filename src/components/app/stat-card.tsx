@@ -59,8 +59,8 @@ export function StatCard({
       whileHover={href ? { y: -1 } : undefined}
       transition={{ duration: 0.15 }}
       className={cn(
-        'group relative flex h-full min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-3.5 transition-colors sm:p-5',
-        href && 'cursor-pointer hover:border-slate-300 hover:shadow-xs',
+        'group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-card transition-[border-color,box-shadow] duration-300 sm:p-5',
+        href && 'cursor-pointer hover:border-blue-200 hover:shadow-lift',
         className,
       )}
     >
@@ -70,8 +70,8 @@ export function StatCard({
           <span className="line-clamp-2">{label}</span>
         </p>
         {Icon && (
-          <span className="hidden size-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200/70 sm:flex">
-            <Icon className="size-4" strokeWidth={1.75} />
+          <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-700 ring-1 ring-inset ring-blue-100 sm:flex">
+            <Icon className="size-[18px]" strokeWidth={1.75} />
           </span>
         )}
       </div>
@@ -110,7 +110,7 @@ export function StatCard({
   return href ? (
     <Link
       href={href}
-      className="block h-full min-w-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+      className="block h-full min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
     >
       {body}
     </Link>
@@ -133,5 +133,17 @@ export function StatGrid({
   className?: string
 }) {
   const lg = { 2: 'lg:grid-cols-2', 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' }[cols]
-  return <div className={cn('grid grid-cols-2 gap-3 sm:gap-4', lg, className)}>{children}</div>
+  // Tiles rise in one after another.
+  return (
+    <div
+      className={cn(
+        'grid grid-cols-2 gap-3 sm:gap-4',
+        '[&>*]:animate-fade-up [&>*:nth-child(2)]:[animation-delay:50ms] [&>*:nth-child(3)]:[animation-delay:100ms] [&>*:nth-child(4)]:[animation-delay:150ms] [&>*:nth-child(5)]:[animation-delay:200ms] [&>*:nth-child(n+6)]:[animation-delay:250ms]',
+        lg,
+        className,
+      )}
+    >
+      {children}
+    </div>
+  )
 }

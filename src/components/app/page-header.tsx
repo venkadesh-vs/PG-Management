@@ -46,12 +46,12 @@ export function PageHeader({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="flex min-w-0 items-start gap-3">
           {Icon && (
-            <div className="mt-0.5 hidden size-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 ring-1 ring-inset ring-slate-200 sm:flex">
-              <Icon className="size-[18px]" strokeWidth={1.75} />
+            <div className="mt-0.5 hidden size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-blue-50 text-blue-700 shadow-card ring-1 ring-inset ring-blue-100 sm:flex">
+              <Icon className="size-5" strokeWidth={1.75} />
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="font-display text-[22px] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] text-slate-900 sm:text-[26px]">
               {title}
             </h1>
             {subtitle && (

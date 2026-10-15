@@ -11,11 +11,9 @@ import {
   previewSubscriptionChange,
   resumeSubscription,
   payInvoiceDemo,
-  setupAutopay,
   startInvoiceCheckout,
 } from '@/server/services/subscriptions'
 import { RazorpayError } from '@/server/integrations/razorpay'
-import { formatMoney } from '@/lib/utils'
 
 const schema = z.discriminatedUnion('action', [
   z.object({
@@ -181,25 +179,10 @@ export const POST = route(
         return ok({ message: 'AutoPay switched off' })
       }
 
-      const result = await setupAutopay({
-        subscriptionId: subscription.id,
-        kind: body.kind,
-        label: body.label ?? 'UPI AutoPay',
-        maskedRef: body.maskedRef,
-        actor: { id: user.id, name: user.name },
-      })
-      if (result.mode === 'live') {
-        return ok({
-          mode: 'live',
-          redirectUrl: result.redirectUrl,
-          message: 'Continue on Razorpay to authorise AutoPay',
-        })
-      }
-      return ok({
-        mode: 'demo',
-        redirectUrl: null,
-        message: `${subscription.property.name} will be charged ${formatMoney(subscription.amount)} automatically each month (demo).`,
-      })
+      // Every PG is now billed together on one monthly bill whose amount
+      // changes (PGs added, referral credit, late fee), so a fixed per-PG
+      // mandate no longer fits. Existing mandates can still be switched off.
+      throw new ConflictError('AutoPay per PG is no longer used. Your PGs are on one monthly bill: pay it with Pay now or UPI.')
     } catch (error) {
       // Gateway errors carry a readable reason; surface it instead of a 500.
       if (error instanceof RazorpayError) throw new ConflictError(error.message)

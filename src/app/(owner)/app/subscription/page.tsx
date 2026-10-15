@@ -226,7 +226,7 @@ export default async function SubscriptionPage() {
             <div>
               <p className="text-sm font-semibold text-amber-900">Online payment is not set up yet</p>
               <p className="mt-1 text-sm leading-relaxed text-amber-800/80">
-                Pay now and AutoPay will appear here once StayFlow&apos;s payment gateway is live. Until
+                Pay now will appear here once StayFlow&apos;s payment gateway is live. Until
                 then, pay open invoices by bank transfer or UPI and contact support — we mark them paid.
               </p>
             </div>
@@ -244,7 +244,7 @@ export default async function SubscriptionPage() {
               </p>
               <p className="mt-1 text-sm leading-relaxed text-amber-800/80">
                 No payment gateway credentials are configured, so nothing is actually charged.
-                AutoPay and Pay now below run as clearly-labelled simulations so you can see how
+                Pay now below runs as a clearly-labelled simulation so you can see how
                 billing, failures and the grace period behave — every record they create is flagged
                 as demo.
               </p>
@@ -295,7 +295,7 @@ export default async function SubscriptionPage() {
 
       <SectionHeader
         title="Your PG subscriptions"
-        description="One subscription per property, priced from that PG's own standard rent."
+        description="Each PG is one line on your monthly StayFlow bill, priced from that PG's own standard rent."
         icon="building"
       />
 
@@ -416,7 +416,7 @@ export default async function SubscriptionPage() {
                     <Row label="Billing" value={CYCLE_LABEL[subscription.billingCycle]} />
                     {live && !subscription.cancelAtPeriodEnd && (
                       <Row
-                        label="Next billing"
+                        label="On your bill due"
                         value={`${formatDate(subscription.nextBillingDate)} · ${formatMoney(nextTotal)}`}
                       />
                     )}
@@ -428,6 +428,8 @@ export default async function SubscriptionPage() {
                     )}
                   </div>
 
+                  {/* Per-PG AutoPay is retired (one combined bill); only an existing mandate shows, so it can be switched off. */}
+                  {(subscription.autopayEnabled || subscription.mandateStatus === 'ACTIVE' || subscription.mandateStatus === 'PENDING') && (
                   <AutopayPanel
                     subscriptionId={subscription.id}
                     propertyName={subscription.property.name}
@@ -439,6 +441,7 @@ export default async function SubscriptionPage() {
                     unavailable={payUnavailable}
                     authUrl={subscription.gatewayAuthUrl}
                   />
+                  )}
 
                   {live && (
                     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
@@ -769,10 +772,10 @@ export default async function SubscriptionPage() {
         <CardContent>
           <ul className="grid gap-2 sm:grid-cols-2">
             {[
-              'One subscription per PG — add a second PG and it is billed separately.',
+              'One bill a month for all your PGs, due on the day you pick (1st to 10th). Each PG is one line on it.',
               "Each PG's price is derived from its own standard rent, not a flat tier.",
               'No per-resident or per-feature charges.',
-              'AutoPay (UPI AutoPay, card or eMandate via Razorpay) debits monthly; a failure moves you into a grace period rather than cutting access instantly.',
+              `Pay the whole bill at once with Pay now or UPI. A ${LATE_FEE_PERCENT}% late fee is added once, ${LATE_FEE_AFTER_DAYS} days after the due day.`,
               'Any open invoice can be paid instantly with Pay now — a suspended account unlocks as soon as it is paid.',
             ].map((line) => (
               <li key={line} className="flex items-start gap-2 text-sm text-slate-600">

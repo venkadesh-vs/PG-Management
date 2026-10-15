@@ -109,6 +109,16 @@ export default async function SubscriptionPage() {
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
 
   // What each PG would pay on each plan (prices derive from the PG itself).
+  // The next combined bill before it is raised: every live PG's price, plus GST.
+  const billed = subscriptions.filter((s) => s.status !== 'CANCELLED' && !s.cancelAtPeriodEnd)
+  const upcoming = {
+    total: billed.reduce(
+      (sum, s) => sum + subscriptionGst(orgTax ?? {}, cyclePrice(s.amount, s.billingCycle, s.plan.yearlyDiscountPercent)).total,
+      0,
+    ),
+    date: billed.length ? new Date(Math.min(...billed.map((s) => s.nextBillingDate.getTime()))) : null,
+    pgs: billed.length,
+  }
   const optionsBySub = new Map<string, PlanOption[]>()
   for (const s of subscriptions) {
     const list = plans.some((p) => p.id === s.planId) ? plans : [s.plan, ...plans]
@@ -175,8 +185,22 @@ export default async function SubscriptionPage() {
           <div className="space-y-3">
             {bills.length === 0 ? (
               <div className="flex h-full min-h-32 flex-col items-center justify-center rounded-2xl bg-slate-50 p-6 text-center">
-                <p className="text-sm font-semibold text-slate-800">Nothing to pay right now</p>
-                <p className="mt-1 text-xs text-slate-500">Your next bill appears here a few days before day {dueDay}.</p>
+                {upcoming.date && upcoming.pgs > 0 ? (
+                  <>
+                    <p className="text-xs font-medium text-slate-500">
+                      Next bill · {upcoming.pgs} {upcoming.pgs === 1 ? 'PG' : 'PGs'} · due {formatDate(upcoming.date)}
+                    </p>
+                    <p className="mt-1 font-display text-3xl font-semibold tabular-nums text-slate-900">{formatMoney(upcoming.total)}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Incl. GST{(billing?.referralCredit ?? 0) > 0 ? ', before referral credit' : ''}. Nothing to pay right now; the bill opens here 5 days before.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-slate-800">Nothing to pay right now</p>
+                    <p className="mt-1 text-xs text-slate-500">Your next bill appears here a few days before day {dueDay}.</p>
+                  </>
+                )}
               </div>
             ) : (
               bills.map((bill) => (

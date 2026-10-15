@@ -112,17 +112,27 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
 
   return (
     <>
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-display text-[15px] font-semibold tracking-tight text-slate-900">
+            {plans.length} plan{plans.length === 1 ? '' : 's'}
+          </h2>
+          <p className="mt-0.5 text-sm text-slate-500">Edit a rule and every PG on it is re-priced.</p>
+        </div>
         <Button variant="primary" size="sm" onClick={() => setEditing({ ...BLANK_PLAN })}>
           <Plus className="size-3.5" />
           New plan
         </Button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {plans.map((plan) => (
           <Card
             key={plan.id}
-            className={cn(plan.isDefault && 'border-blue-200', plan.highlighted && 'ring-2 ring-blue-200')}
+            className={cn(
+              'relative flex h-full flex-col rounded-2xl border-slate-200/80 transition hover:-translate-y-0.5 hover:shadow-lift',
+              plan.isDefault && 'border-blue-200',
+              plan.highlighted && 'ring-2 ring-blue-200',
+            )}
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
@@ -137,28 +147,32 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
                   </p>
                   {plan.tagline && <p className="mt-0.5 text-xs text-slate-600">{plan.tagline}</p>}
                 </div>
-                <Badge variant={plan.active ? 'success' : 'default'} size="sm">
+                <Badge variant={plan.active ? 'success' : 'default'} size="sm" className="shrink-0">
                   {plan.active ? 'Active' : 'Inactive'}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="flex flex-1 flex-col gap-3.5">
               {plan.description && (
                 <p className="text-sm leading-relaxed text-slate-600">{plan.description}</p>
               )}
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <p className="text-sm font-semibold text-slate-900">
+              <div className="relative isolate overflow-hidden rounded-xl bg-ink-950 p-4 text-white">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -right-10 -top-12 -z-10 size-32 rounded-full bg-blue-500/25 blur-2xl"
+                />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-marigold-200">
                   Pricing rule
                 </p>
-                <p className="mt-1 text-sm font-medium text-slate-800">
+                <p className="mt-1.5 font-display text-base font-semibold leading-snug">
                   {plan.pricingBasis === 'STANDARD_RENT'
                     ? `${plan.multiplier}% of the PG's standard rent`
                     : plan.pricingBasis === 'PER_BED'
                       ? `${formatMoney(plan.perBedPrice)} per bed`
                       : `${formatMoney(plan.flatPrice)} flat`}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-ink-300">
                   Between {formatMoney(plan.minAmount)} and {formatMoney(plan.maxAmount)}
                 </p>
               </div>
@@ -185,7 +199,7 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
                   {plan.features.slice(0, 6).map((feature) => (
                     <span
                       key={feature}
-                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium capitalize text-slate-600"
                     >
                       {feature.replace('_', ' ')}
                     </span>
@@ -198,7 +212,7 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
                 </div>
               )}
 
-              <Button variant="outline" size="sm" className="w-full" onClick={() => setEditing(plan)}>
+              <Button variant="outline" size="sm" className="mt-auto w-full" onClick={() => setEditing(plan)}>
                 <Pencil className="size-3.5" />
                 Edit plan
               </Button>
@@ -214,9 +228,9 @@ export function PlanEditor({ plans }: { plans: Plan[] }) {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-1.5 py-1.5">
+    <div className="rounded-xl bg-slate-50/80 px-1.5 py-2 ring-1 ring-inset ring-slate-100">
       <p className="font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
     </div>
   )
 }

@@ -133,30 +133,42 @@ export default async function HealthPage() {
         description="Mode, last success and failures in the last 7 days, from the webhook log, message log and uploads. Demo means nothing leaves StayFlow."
         icon="shield"
       />
-      <Card>
-        <CardContent className="flex items-center gap-3 p-4">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-slate-100">
-            <Server className="size-4 text-slate-500" />
+      <div className="relative isolate overflow-hidden rounded-2xl bg-ink-950 p-4 text-white shadow-elevated sm:p-5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-20 -z-10 size-56 rounded-full bg-blue-600/25 blur-3xl"
+        />
+        <div className="flex items-center gap-3.5">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] ring-1 ring-inset ring-white/10">
+            <Server className="size-[18px] text-marigold-200" />
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-800">App</p>
-            <p className="text-xs text-slate-500">
-              {process.env.NODE_ENV} · Node {process.version} · up {Math.round(process.uptime() / 60)} min · uptime check: GET /api/health
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              App
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/60 motion-reduce:hidden" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+              </span>
+              <span className="text-xs font-medium text-emerald-300">Running</span>
+            </p>
+            <p className="mt-0.5 break-words text-xs text-ink-300">
+              {process.env.NODE_ENV} · Node {process.version} · up {Math.round(process.uptime() / 60)} min · uptime check:{' '}
+              <span className="font-mono text-ink-200">GET /api/health</span>
             </p>
           </div>
-        </CardContent>
-      </Card>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 2xl:grid-cols-4">
         {providers.map((p) => {
           const Icon = ICONS[p.key]
           const tone = p.verdict === 'failing' ? 'red' : p.verdict === 'degraded' ? 'amber' : p.verdict === 'healthy' ? 'emerald' : 'slate'
           return (
-            <Card key={p.key} className="min-w-0">
-              <CardContent className="space-y-3 p-4">
+            <Card key={p.key} className="min-w-0 rounded-2xl border-slate-200/80">
+              <CardContent className="space-y-3.5 p-4 sm:p-5">
                 <div className="flex items-center gap-3">
                   <div
                     className={cn(
-                      'flex size-9 shrink-0 items-center justify-center rounded-xl',
+                      'flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ring-black/[0.03]',
                       tone === 'red' && 'bg-rose-50',
                       tone === 'amber' && 'bg-amber-50',
                       tone === 'emerald' && 'bg-emerald-50',
@@ -180,30 +192,30 @@ export default async function HealthPage() {
                       {p.ownConnections ? ` · ${p.ownConnections} own account${p.ownConnections === 1 ? '' : 's'}` : ''}
                     </p>
                   </div>
-                  <Badge variant={VERDICT_VARIANT[p.verdict]} size="sm">
+                  <Badge variant={VERDICT_VARIANT[p.verdict]} size="sm" className="shrink-0">
                     {VERDICT_LABEL[p.verdict]}
                   </Badge>
                 </div>
                 <dl className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-slate-50 p-2">
-                    <dt className="text-slate-500">Last success</dt>
-                    <dd className="font-medium text-slate-800">{when(p.lastSuccessAt)}</dd>
+                  <div className="min-w-0 rounded-xl bg-slate-50/80 px-2.5 py-2 ring-1 ring-inset ring-slate-100">
+                    <dt className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">Last success</dt>
+                    <dd className="mt-0.5 truncate font-medium text-slate-800">{when(p.lastSuccessAt)}</dd>
                   </div>
-                  <div className="rounded-lg bg-slate-50 p-2">
-                    <dt className="text-slate-500">Last failure</dt>
-                    <dd className={cn('font-medium', p.lastFailureAt ? 'text-rose-600' : 'text-slate-800')}>{when(p.lastFailureAt)}</dd>
+                  <div className="min-w-0 rounded-xl bg-slate-50/80 px-2.5 py-2 ring-1 ring-inset ring-slate-100">
+                    <dt className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">Last failure</dt>
+                    <dd className={cn('mt-0.5 truncate font-medium', p.lastFailureAt ? 'text-rose-600' : 'text-slate-800')}>{when(p.lastFailureAt)}</dd>
                   </div>
-                  <div className="rounded-lg bg-slate-50 p-2">
-                    <dt className="text-slate-500">OK (7 days)</dt>
-                    <dd className="font-medium tabular text-slate-800">{p.successes}</dd>
+                  <div className="min-w-0 rounded-xl bg-slate-50/80 px-2.5 py-2 ring-1 ring-inset ring-slate-100">
+                    <dt className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">OK (7 days)</dt>
+                    <dd className="mt-0.5 font-display text-sm font-semibold tabular text-slate-800">{p.successes}</dd>
                   </div>
-                  <div className="rounded-lg bg-slate-50 p-2">
-                    <dt className="text-slate-500">Failed (7 days)</dt>
-                    <dd className={cn('font-medium tabular', p.failures ? 'text-rose-600' : 'text-slate-800')}>{p.failures}</dd>
+                  <div className="min-w-0 rounded-xl bg-slate-50/80 px-2.5 py-2 ring-1 ring-inset ring-slate-100">
+                    <dt className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">Failed (7 days)</dt>
+                    <dd className={cn('mt-0.5 font-display text-sm font-semibold tabular', p.failures ? 'text-rose-600' : 'text-slate-800')}>{p.failures}</dd>
                   </div>
                 </dl>
                 {p.lastError && <p className="line-clamp-2 break-words text-xs text-rose-600">{p.lastError}</p>}
-                <p className="text-[11px] text-slate-400">{p.note}</p>
+                <p className="text-[11px] leading-relaxed text-slate-400">{p.note}</p>
               </CardContent>
             </Card>
           )
@@ -266,7 +278,7 @@ export default async function HealthPage() {
       {webhooks.length === 0 ? (
         <EmptyState compact icon="check" title="All webhooks went through" description="No failed or ignored events this week." />
       ) : (
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">{webhooks.length} recent events</CardTitle>
           </CardHeader>
@@ -296,7 +308,7 @@ export default async function HealthPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="rounded-2xl border-slate-200/80">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Database className="size-4 text-slate-400" />
@@ -306,7 +318,7 @@ export default async function HealthPage() {
         <CardContent>
           <dl className="grid grid-cols-3 gap-3 text-center">
             {(['WHATSAPP', 'EMAIL', 'SMS'] as const).map((c) => (
-              <div key={c} className="rounded-xl bg-slate-50 p-3">
+              <div key={c} className="rounded-xl bg-slate-50/80 p-3 ring-1 ring-inset ring-slate-100">
                 <dt className="text-xs font-medium text-slate-500">{c === 'WHATSAPP' ? 'WhatsApp' : c === 'SMS' ? 'SMS' : 'Email'}</dt>
                 <dd className={cn('font-display text-xl font-semibold tabular', failedBy(c) ? 'text-rose-600' : 'text-slate-900')}>
                   {failedBy(c)}

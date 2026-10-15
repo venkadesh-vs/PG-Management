@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   Mail,
+  Building2,
   MapPin,
   Phone,
   UserRound,
@@ -191,7 +192,7 @@ export default async function AdminOrganizationPage({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Contact</CardTitle>
           </CardHeader>
@@ -225,14 +226,21 @@ export default async function AdminOrganizationPage({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="rounded-2xl border-slate-200/80 lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Team</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="divide-y divide-slate-100">
               {org.users.map((member) => (
-                <li key={member.id} className="flex items-center justify-between gap-3 py-2.5">
+                <li key={member.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    aria-hidden
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-blue-100/60 font-display text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-100"
+                  >
+                    {member.name.trim().charAt(0).toUpperCase() || '?'}
+                  </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{member.name}</p>
                     <p className="truncate text-xs text-slate-500">{member.email}</p>
@@ -242,7 +250,8 @@ export default async function AdminOrganizationPage({
                       </p>
                     )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     {member.lastLoginAt && (
                       <span className="hidden text-xs text-slate-400 sm:inline">
                         {formatDateTime(member.lastLoginAt)}
@@ -270,7 +279,7 @@ export default async function AdminOrganizationPage({
         icon="gauge"
       />
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Subscription summary</CardTitle>
           </CardHeader>
@@ -318,13 +327,13 @@ export default async function AdminOrganizationPage({
                   : '—'
               }
             />
-            <Link href="/admin/subscriptions" className="inline-block pt-1 text-xs font-semibold text-blue-600">
+            <Link href="/admin/subscriptions" className="inline-flex items-center gap-1 border-t border-slate-100 pt-3 text-xs font-semibold text-blue-600 hover:text-blue-700">
               Manage in Subscriptions →
             </Link>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Usage vs plan limits</CardTitle>
             <p className="text-xs text-slate-500">{usage.planNames.join(', ') || 'Default plan'}</p>
@@ -357,7 +366,7 @@ export default async function AdminOrganizationPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Support tickets</CardTitle>
           </CardHeader>
@@ -408,9 +417,13 @@ export default async function AdminOrganizationPage({
           {org.properties.map((property) => {
             const theme = themeFor(property.type)
             return (
-              <Card key={property.id} className="overflow-hidden">
-                <CardContent className="space-y-3 p-5">
+              <Card key={property.id} className="overflow-hidden rounded-2xl border-slate-200/80">
+                <CardContent className="space-y-4 p-5 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-700 ring-1 ring-inset ring-blue-100">
+                      <Building2 className="size-5" />
+                    </span>
                     <div className="min-w-0">
                       <p className="truncate font-display text-sm font-semibold text-slate-900">
                         {property.name}
@@ -418,6 +431,7 @@ export default async function AdminOrganizationPage({
                       <p className="text-xs text-slate-500">
                         {theme.label} · {property.city}
                       </p>
+                    </div>
                     </div>
                     {property.subscription && (
                       <StatusChip
@@ -438,12 +452,12 @@ export default async function AdminOrganizationPage({
                   </div>
 
                   {property.subscription && (
-                    <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                      <span className="text-slate-500">
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-ink-950 px-3.5 py-2.5 text-sm text-white">
+                      <span className="min-w-0 truncate text-ink-300">
                         {property.subscription.plan.name} plan
                         {property.subscription.autopayEnabled ? ' · AutoPay' : ''}
                       </span>
-                      <span className="font-semibold text-slate-800 tabular">
+                      <span className="shrink-0 font-semibold text-marigold-200 tabular">
                         {formatMoney(property.subscription.amount)}/mo
                       </span>
                     </div>
@@ -522,7 +536,7 @@ export default async function AdminOrganizationPage({
               return (
                 <li
                   key={invoice.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="truncate font-mono text-sm font-medium text-slate-900">
@@ -555,7 +569,7 @@ export default async function AdminOrganizationPage({
         </>
       )}
 
-      <Card>
+      <Card className="rounded-2xl border-slate-200/80">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Features for this client</CardTitle>
           <p className="text-xs text-slate-500">
@@ -573,7 +587,7 @@ export default async function AdminOrganizationPage({
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Occupancy across their PGs</CardTitle>
           </CardHeader>
@@ -592,7 +606,7 @@ export default async function AdminOrganizationPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Recent admin actions</CardTitle>
           </CardHeader>
@@ -607,27 +621,27 @@ export default async function AdminOrganizationPage({
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-800 first-letter:uppercase">{value}</span>
+    <div className="flex items-start justify-between gap-4">
+      <span className="shrink-0 text-slate-500">{label}</span>
+      <span className="min-w-0 break-words text-right font-medium text-slate-800 first-letter:uppercase">{value}</span>
     </div>
   )
 }
 
 function Row({ icon: Icon, value }: { icon: React.ElementType; value: string }) {
   return (
-    <p className="flex items-start gap-2 text-sm text-slate-700">
+    <p className="flex min-w-0 items-start gap-2.5 text-sm text-slate-700">
       <Icon className="mt-0.5 size-4 shrink-0 text-slate-400" />
-      {value}
+      <span className="min-w-0 break-words">{value}</span>
     </p>
   )
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-1.5 py-1.5">
-      <p className="font-display text-sm font-semibold text-slate-900 tabular">{value}</p>
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+    <div className="rounded-xl bg-slate-50/80 px-1.5 py-2 ring-1 ring-inset ring-slate-100">
+      <p className="font-display text-base font-semibold text-slate-900 tabular">{value}</p>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
     </div>
   )
 }

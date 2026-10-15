@@ -29,7 +29,7 @@ export default async function FeaturesPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Features" value={features.length} icon="shield" />
         <StatCard label="Enabled" value={enabled} icon="check" />
-        <StatCard label="Disabled" value={features.length - enabled} icon="warning" tone={features.length - enabled ? 'amber' : 'default'} />
+        <StatCard className="col-span-2 sm:col-span-1" label="Disabled" value={features.length - enabled} icon="warning" tone={features.length - enabled ? 'amber' : 'default'} />
       </div>
 
       <FeatureToggles

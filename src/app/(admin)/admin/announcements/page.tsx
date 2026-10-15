@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,13 @@ import { AUDIENCES, SEVERITIES } from './announcement-meta'
 
 export const metadata: Metadata = { title: 'Announcements' }
 export const dynamic = 'force-dynamic'
+
+const SEVERITY_BAR: Record<string, string> = {
+  INFO: 'bg-sky-400',
+  SUCCESS: 'bg-emerald-400',
+  WARNING: 'bg-amber-400',
+  CRITICAL: 'bg-rose-500',
+}
 
 const SEVERITY_VARIANT: Record<string, 'info' | 'success' | 'warning' | 'danger'> = {
   INFO: 'info',
@@ -37,22 +44,29 @@ export default async function AnnouncementsPage() {
   const renderList = (list: typeof rows, ended = false) => (
     <div className="grid gap-3 lg:grid-cols-2">
       {list.map((a) => (
-        <Card key={a.id} className={ended ? 'opacity-70' : undefined}>
-          <CardContent className="space-y-2 p-4">
+        <Card
+          key={a.id}
+          className={cn(
+            'relative overflow-hidden rounded-2xl border-slate-200/80',
+            ended ? 'bg-slate-50/60 opacity-75' : 'transition hover:-translate-y-0.5 hover:shadow-lift',
+          )}
+        >
+          <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', SEVERITY_BAR[a.severity] ?? 'bg-sky-400')} />
+          <CardContent className="space-y-2 p-4 pl-5 sm:p-5 sm:pl-6">
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 font-display text-sm font-semibold text-slate-900">{a.title}</p>
-              <Badge variant={SEVERITY_VARIANT[a.severity] ?? 'info'} size="sm">
+              <Badge variant={SEVERITY_VARIANT[a.severity] ?? 'info'} size="sm" className="shrink-0">
                 {label(SEVERITIES, a.severity)}
               </Badge>
             </div>
-            <p className="whitespace-pre-line text-sm text-slate-600">{a.body}</p>
-            <p className="text-xs text-slate-500">
+            <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-600">{a.body}</p>
+            <p className="text-xs leading-relaxed text-slate-500">
               {label(AUDIENCES, a.audience)} · from {formatDateTime(a.startsAt)}
               {a.endsAt ? ` to ${formatDateTime(a.endsAt)}` : ' · no end date'}
               {a.createdBy ? ` · by ${a.createdBy}` : ''}
             </p>
             {!ended && (
-              <div className="flex flex-wrap gap-1 pt-1">
+              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                 <AnnouncementDialog
                   announcement={{
                     id: a.id,
@@ -92,7 +106,16 @@ export default async function AnnouncementsPage() {
       ) : (
         <>
           <SectionHeader title={`Live now (${groups.live.length})`} icon="megaphone" />
-          {groups.live.length ? renderList(groups.live) : <p className="text-sm text-slate-500">Nothing is showing right now.</p>}
+          {groups.live.length ? (
+            renderList(groups.live)
+          ) : (
+            <EmptyState
+              compact
+              icon="megaphone"
+              title="Nothing is showing right now"
+              description="Live announcements appear as a banner on owners' dashboards."
+            />
+          )}
           {groups.scheduled.length > 0 && (
             <>
               <SectionHeader title={`Scheduled (${groups.scheduled.length})`} icon="calendar" />

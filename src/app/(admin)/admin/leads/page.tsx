@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { SquareKanban, Rows3 } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { cn, endOfDay, startOfDay } from '@/lib/utils'
 import { PageHeader } from '@/components/app/page-header'
 import { StatCard } from '@/components/app/stat-card'
-import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
+import { EmptyState, MotionGrid, MotionItem, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import type { CrmLead } from './lead-card'
 import { LeadEditDialog } from './lead-edit-dialog'
@@ -170,8 +171,11 @@ export default async function LeadsPage({
         actions={<LeadEditDialog admins={admins} currentAdminId={me.id} />}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <MotionItem>
         <StatCard label="New" value={countFor('NEW')} icon="clipboard" tone={countFor('NEW') ? 'amber' : 'default'} hint="Not contacted yet" href="/admin/leads?status=NEW" />
+        </MotionItem>
+        <MotionItem>
         <StatCard
           label="Follow-ups due"
           value={dueCount}
@@ -180,9 +184,14 @@ export default async function LeadsPage({
           hint={overdueCount ? `${overdueCount} overdue` : 'All caught up'}
           href="/admin/leads?due=due&sort=followup&view=table"
         />
+        </MotionItem>
+        <MotionItem>
         <StatCard label="In the pipeline" value={inPipeline} icon="users" hint={`${countFor('TRIAL')} on trial`} />
+        </MotionItem>
+        <MotionItem>
         <StatCard label="Beds in pipeline" value={bedTotal._sum.bedCount ?? 0} icon="bed" hint={`${countFor('CONVERTED') + countFor('ACTIVE_CUSTOMER')} won`} />
-      </div>
+        </MotionItem>
+      </MotionGrid>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
@@ -223,19 +232,24 @@ export default async function LeadsPage({
           </FilterBar>
         </Suspense>
         </div>
-        <div className="inline-flex h-10 shrink-0 self-start items-center rounded-lg bg-slate-100 p-1 text-xs font-medium">
-          {(['board', 'table'] as const).map((v) => (
-            <Link
-              key={v}
-              href={viewHref(v)}
-              className={cn(
-                'flex h-8 items-center rounded-md px-3 capitalize transition-colors',
-                view === v ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900',
-              )}
-            >
-              {v}
-            </Link>
-          ))}
+        <div className="inline-flex h-10 shrink-0 self-start items-center rounded-xl border border-slate-200/80 bg-white p-1 text-xs font-medium shadow-xs">
+          {(['board', 'table'] as const).map((v) => {
+            const Icon = v === 'board' ? SquareKanban : Rows3
+            return (
+              <Link
+                key={v}
+                href={viewHref(v)}
+                aria-current={view === v ? 'page' : undefined}
+                className={cn(
+                  'flex h-8 items-center gap-1.5 rounded-lg px-3 capitalize transition-colors',
+                  view === v ? 'bg-ink-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                )}
+              >
+                <Icon className="size-3.5" />
+                {v}
+              </Link>
+            )
+          })}
         </div>
       </div>
 

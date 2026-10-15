@@ -436,7 +436,7 @@ export function LeadCard({
   if (bare) return <div>{body}</div>
   return (
     <Card>
-      <CardContent className="p-4">{body}</CardContent>
+      <CardContent className="p-4 sm:p-4">{body}</CardContent>
     </Card>
   )
 }

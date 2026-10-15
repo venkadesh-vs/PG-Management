@@ -252,15 +252,20 @@ export default async function OrganizationsPage({
                   return (
                     <TableRow key={org.id}>
                       <TableCell>
-                        <Link
-                          href={`/admin/organizations/${org.id}`}
-                          className="font-medium text-slate-900 hover:text-blue-700"
-                        >
-                          {org.name}
-                        </Link>
-                        <p className="text-xs text-slate-500">
-                          {org.city ?? '—'} · joined {formatDate(org.createdAt)}
-                        </p>
+                        <div className="flex items-center gap-3">
+                          <OrgMonogram name={org.name} />
+                          <div className="min-w-0">
+                            <Link
+                              href={`/admin/organizations/${org.id}`}
+                              className="font-medium text-slate-900 hover:text-blue-700"
+                            >
+                              {org.name}
+                            </Link>
+                            <p className="text-xs text-slate-500">
+                              {org.city ?? '—'} · joined {formatDate(org.createdAt)}
+                            </p>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <p className="text-sm text-slate-700">{org.ownerName}</p>
@@ -308,30 +313,54 @@ export default async function OrganizationsPage({
                 <li key={org.id}>
                   <Link
                     href={`/admin/organizations/${org.id}`}
-                    className="block rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+                    className="block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition hover:border-blue-200 hover:shadow-lift active:scale-[0.99]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="truncate font-medium text-slate-900">{org.name}</p>
-                      <Badge variant={STATUS_VARIANT[org.status] ?? 'default'} size="sm">
-                        {org.status.replace('_', ' ').toLowerCase()}
-                      </Badge>
+                    <div className="flex items-start gap-3">
+                      <OrgMonogram name={org.name} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 truncate font-semibold text-slate-900">{org.name}</p>
+                          <Badge variant={STATUS_VARIANT[org.status] ?? 'default'} size="sm" className="shrink-0">
+                            {org.status.replace('_', ' ').toLowerCase()}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {org.ownerName} · {formatPhone(org.contactPhone)}
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {org.ownerName} · {formatPhone(org.contactPhone)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {org.city ?? '—'} · {org._count.properties} PGs · {beds} beds · {org._count.residents} residents
+                    <dl className="mt-3 grid grid-cols-3 divide-x divide-slate-100 rounded-xl bg-slate-50/80 py-2 text-center ring-1 ring-inset ring-slate-100">
+                      {[
+                        { label: 'PGs', value: org._count.properties },
+                        { label: 'Beds', value: beds },
+                        { label: 'Residents', value: org._count.residents },
+                      ].map((m) => (
+                        <div key={m.label} className="min-w-0 px-1">
+                          <dt className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{m.label}</dt>
+                          <dd className="font-display text-sm font-semibold text-slate-900 tabular">{m.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="mt-2.5 truncate text-xs text-slate-500">
+                      {org.city ?? '—'}
                       {last ? ` · active ${relativeTime(last)}` : ''}
                       {org.trialEndsAt && org.status === 'TRIAL'
                         ? ` · trial ends ${relativeTime(org.trialEndsAt)}`
                         : ''}
                     </p>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-sm">
-                      <span className="text-xs text-slate-500">
+                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-sm">
+                      <span className="min-w-0 truncate text-xs text-slate-500">
                         Next billing {nextBilling ? formatDate(nextBilling) : '—'}
                       </span>
-                      <span className="font-semibold tabular">
-                        {mrr > 0 ? `${formatMoney(mrr)}/mo` : '—'}
+                      <span className="shrink-0 font-semibold text-slate-900 tabular">
+                        {mrr > 0 ? (
+                          <>
+                            {formatMoney(mrr)}
+                            <span className="text-xs font-normal text-slate-400">/mo</span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-normal text-slate-400">No MRR yet</span>
+                        )}
                       </span>
                     </div>
                   </Link>
@@ -346,5 +375,24 @@ export default async function OrganizationsPage({
         </>
       )}
     </div>
+  )
+}
+
+/** Initials tile so each account is recognisable at a glance. */
+function OrgMonogram({ name }: { name: string }) {
+  const initials =
+    name
+      .split(/[\s-]+/)
+      .filter((w) => /[a-z0-9]/i.test(w))
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toUpperCase())
+      .join('') || '?'
+  return (
+    <span
+      aria-hidden
+      className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 font-display text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-100"
+    >
+      {initials}
+    </span>
   )
 }

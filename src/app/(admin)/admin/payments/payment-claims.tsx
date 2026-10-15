@@ -50,15 +50,15 @@ export function PaymentClaims({ claims }: { claims: ClaimRow[] }) {
   }
 
   return (
-    <section id="claims" className="rounded-xl border border-sky-200 bg-white">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+    <section id="claims" className="overflow-hidden rounded-2xl border border-sky-200/80 bg-white shadow-card">
+      <div className="flex items-center gap-2.5 border-b border-sky-100 bg-sky-50/50 px-4 py-3 sm:px-5">
         <BadgeCheck className="size-4 text-sky-600" />
         <h2 className="text-sm font-semibold text-slate-900">Payments to verify</h2>
         <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">{claims.length}</span>
       </div>
       <ul className="divide-y divide-slate-100">
         {claims.map((c) => (
-          <li key={c.id} className="space-y-2 px-4 py-3">
+          <li key={c.id} className="space-y-2 px-4 py-3.5 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-900">

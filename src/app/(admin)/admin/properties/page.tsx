@@ -166,10 +166,15 @@ export default async function AdminPropertiesPage({
                       <TableCell className="text-right tabular">{property._count.rooms}</TableCell>
                       <TableCell className="text-right tabular">{beds}</TableCell>
                       <TableCell className="text-right tabular">
-                        {percent(occupied, beds)}%
-                        <span className="block text-[11px] text-slate-400">
-                          {occupied}/{beds}
-                        </span>
+                        <div className="ml-auto w-24">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[11px] text-slate-400">
+                              {occupied}/{beds}
+                            </span>
+                            <span className="font-medium text-slate-800">{percent(occupied, beds)}%</span>
+                          </div>
+                          <OccupancyMeter value={percent(occupied, beds)} className="mt-1" />
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular">
                         {property.subscription ? formatMoney(property.subscription.amount) : '—'}
@@ -200,12 +205,12 @@ export default async function AdminPropertiesPage({
               return (
                 <li
                   key={property.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className={cn('size-2 shrink-0 rounded-full', theme.bgSolid)} />
-                      <span className="truncate font-medium text-slate-900">{property.name}</span>
+                      <span className="truncate font-semibold text-slate-900">{property.name}</span>
                     </span>
                     {property.subscription ? (
                       <StatusChip
@@ -225,11 +230,14 @@ export default async function AdminPropertiesPage({
                     </Link>{' '}
                     · {property.city} · since {formatDate(property.createdAt)}
                   </p>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-sm">
-                    <span className="text-xs text-slate-500">
-                      {property._count.rooms} rooms · {occupied}/{beds} beds ({percent(occupied, beds)}%)
-                    </span>
-                    <span className="font-semibold tabular">
+                  <div className="mt-3 flex items-end justify-between gap-4 border-t border-slate-100 pt-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-500">
+                        {property._count.rooms} rooms · {occupied}/{beds} beds · {percent(occupied, beds)}%
+                      </p>
+                      <OccupancyMeter value={percent(occupied, beds)} className="mt-1.5 max-w-40" />
+                    </div>
+                    <span className="shrink-0 font-display text-base font-semibold text-slate-900 tabular">
                       {property.subscription ? formatMoney(property.subscription.amount) : '—'}
                     </span>
                   </div>
@@ -243,6 +251,21 @@ export default async function AdminPropertiesPage({
           </Suspense>
         </>
       )}
+    </div>
+  )
+}
+
+/** Thin occupancy bar; colour carries meaning (healthy / attention). */
+function OccupancyMeter({ value, className }: { value: number; className?: string }) {
+  return (
+    <div className={cn('h-1.5 overflow-hidden rounded-full bg-slate-100', className)}>
+      <div
+        className={cn(
+          'h-full rounded-full',
+          value >= 80 ? 'bg-emerald-500' : value >= 50 ? 'bg-blue-500' : value > 0 ? 'bg-amber-400' : 'bg-transparent',
+        )}
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
     </div>
   )
 }

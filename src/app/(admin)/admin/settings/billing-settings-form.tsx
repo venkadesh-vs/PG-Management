@@ -58,7 +58,7 @@ export function BillingSettingsForm({
   }
 
   return (
-    <Card>
+    <Card className="rounded-2xl border-slate-200/80">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Wallet className="size-4 text-slate-500" /> StayFlow billing

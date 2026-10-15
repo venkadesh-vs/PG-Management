@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Building2, TrendingUp } from 'lucide-react'
+import { ArrowRight, Building2, Clock, CreditCard, TrendingUp } from 'lucide-react'
 import { requireSuperAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { platformMetrics } from '@/server/services/subscriptions'
@@ -15,6 +15,7 @@ import { Badge, StatusChip } from '@/components/ui/badge'
 import { EmptyState, MotionGrid, MotionItem } from '@/components/ui/feedback'
 import { CategoryBarChart, DonutChart, RevenueChart } from '@/components/app/charts'
 import { ActivityTimeline } from '@/components/app/activity-timeline'
+import { PlatformHero } from './platform-hero'
 
 export const metadata: Metadata = { title: 'Platform' }
 
@@ -124,45 +125,20 @@ export default async function AdminDashboard() {
       />
 
       {/* ------------------------------------------------------ Headline */}
-      <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <MotionItem>
-          <StatCard
-            label="Monthly recurring revenue"
-            value={kpis.mrr}
-            format="money"
-            icon="sparkles"
-            hint={`${kpis.activeSubscriptions} active subscriptions`}
-            href="/admin/subscriptions"
-          />
-        </MotionItem>
-        <MotionItem>
-          <StatCard
-            label="Annual run rate"
-            value={kpis.arr}
-            format="moneyCompact"
-            icon="chart"
-            hint="MRR × 12"
-          />
-        </MotionItem>
-        <MotionItem>
-          <StatCard
-            label="Customers"
-            value={kpis.customers.total}
-            icon="building"
-            hint={`${kpis.customers.active} active · ${kpis.customers.trial} on trial`}
-            href="/admin/organizations"
-          />
-        </MotionItem>
-        <MotionItem>
-          <StatCard
-            label="New this month"
-            value={kpis.customers.newThisMonth}
-            icon="userPlus"
-            hint="Accounts created since the 1st"
-          />
-        </MotionItem>
-      </MotionGrid>
+      <PlatformHero
+        mrr={kpis.mrr}
+        arr={kpis.arr}
+        activeSubscriptions={kpis.activeSubscriptions}
+        customers={kpis.customers.total}
+        activeCustomers={kpis.customers.active}
+        trialCustomers={kpis.customers.trial}
+        newThisMonth={kpis.customers.newThisMonth}
+      />
 
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Risk &amp; follow-ups
+        </h2>
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MotionItem>
           <StatCard
@@ -209,7 +185,12 @@ export default async function AdminDashboard() {
           />
         </MotionItem>
       </MotionGrid>
+      </section>
 
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Operations &amp; collections
+        </h2>
       <MotionGrid className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MotionItem>
           <StatCard
@@ -250,10 +231,11 @@ export default async function AdminDashboard() {
           />
         </MotionItem>
       </MotionGrid>
+      </section>
 
       {/* -------------------------------------------------- Growth trends */}
       <section className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">MRR trend</CardTitle>
             <p className="text-xs text-slate-500">Monthly recurring revenue at each month end</p>
@@ -267,7 +249,7 @@ export default async function AdminDashboard() {
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">New customers</CardTitle>
             <p className="text-xs text-slate-500">Accounts created per month</p>
@@ -285,7 +267,7 @@ export default async function AdminDashboard() {
       </section>
 
       {/* ------------------------------------------------ Sales pipeline */}
-      <Card>
+      <Card className="rounded-2xl border-slate-200/80">
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-3">
           <div>
             <CardTitle className="text-sm">Sales pipeline</CardTitle>
@@ -312,20 +294,20 @@ export default async function AdminDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
             {[...LEAD_PIPELINE, ...LEAD_SIDE].map((stage) => {
               const style = leadStyle(stage)
               return (
                 <li key={stage}>
                   <Link
                     href={`/admin/leads?status=${stage}`}
-                    className="block rounded-xl border border-slate-200 bg-white px-3 py-2 transition-colors hover:border-blue-300"
+                    className="group block rounded-xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/60 px-3.5 py-3 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lift"
                   >
-                    <p className="flex items-center gap-1.5 truncate text-[11px] text-slate-500">
+                    <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500">
                       <span className={cn('size-1.5 shrink-0 rounded-full', style.dot)} />
-                      {style.label}
+                      <span className="truncate">{style.label}</span>
                     </p>
-                    <p className="font-display text-lg font-semibold text-slate-900 tabular">
+                    <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 tabular">
                       {kpis.leadsByStage[stage] ?? 0}
                     </p>
                   </Link>
@@ -338,7 +320,7 @@ export default async function AdminDashboard() {
 
       {/* -------------------------------------------------------- Charts */}
       <section className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="rounded-2xl border-slate-200/80 lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Subscription revenue</CardTitle>
             <p className="text-xs text-slate-500">Billed vs collected, last 6 months</p>
@@ -354,7 +336,7 @@ export default async function AdminDashboard() {
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Accounts by status</CardTitle>
           </CardHeader>
@@ -375,14 +357,19 @@ export default async function AdminDashboard() {
       {(expiring.length > 0 || failed.length > 0) && (
         <section className="grid gap-4 lg:grid-cols-2">
           {expiring.length > 0 && (
-            <Card className="border-amber-200">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Needs attention</CardTitle>
-                <p className="text-xs text-slate-500">
-                  Trials ending soon and subscriptions in grace
-                </p>
+            <Card className="overflow-hidden rounded-2xl border-amber-200/80">
+              <CardHeader className="flex-row items-center gap-3 space-y-0 border-b border-amber-100 bg-amber-50/50 pb-4">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200/70">
+                  <Clock className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm">Needs attention</CardTitle>
+                  <p className="text-xs text-slate-500">
+                    Trials ending soon and subscriptions in grace
+                  </p>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-2 sm:pt-2">
                 <ul className="divide-y divide-slate-100">
                   {expiring.map((sub) => {
                     const theme = themeFor(sub.property.type)
@@ -416,12 +403,17 @@ export default async function AdminDashboard() {
           )}
 
           {failed.length > 0 && (
-            <Card className="border-rose-200">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Failed payments</CardTitle>
-                <p className="text-xs text-slate-500">AutoPay attempts that did not go through</p>
+            <Card className="overflow-hidden rounded-2xl border-rose-200/80">
+              <CardHeader className="flex-row items-center gap-3 space-y-0 border-b border-rose-100 bg-rose-50/50 pb-4">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200/70">
+                  <CreditCard className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm">Failed payments</CardTitle>
+                  <p className="text-xs text-slate-500">AutoPay attempts that did not go through</p>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-2 sm:pt-2">
                 <ul className="divide-y divide-slate-100">
                   {failed.map((payment) => (
                     <li key={payment.id} className="flex items-start justify-between gap-3 py-2.5">
@@ -470,17 +462,21 @@ export default async function AdminDashboard() {
         {organizations.length === 0 ? (
           <EmptyState icon="building" title="No organizations yet" description="Converted leads appear here." />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <MotionGrid className="grid gap-3 lg:grid-cols-2">
             {organizations.map((org) => {
               const mrr = org.subscriptions
                 .filter((s) => s.status === 'ACTIVE')
                 .reduce((s, sub) => s + sub.amount, 0)
               return (
-                <Link key={org.id} href={`/admin/organizations/${org.id}`}>
-                  <Card className="transition-shadow hover:shadow-sm">
-                    <CardContent className="flex items-center gap-3 p-4">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-                        <Building2 className="size-5 text-slate-500" />
+                <MotionItem key={org.id}>
+                <Link
+                  href={`/admin/organizations/${org.id}`}
+                  className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                >
+                  <Card className="rounded-2xl border-slate-200/80 transition group-hover:-translate-y-0.5 group-hover:border-blue-200 group-hover:shadow-lift">
+                    <CardContent className="flex items-center gap-3.5 p-4 sm:p-4">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-700 ring-1 ring-inset ring-blue-100">
+                        <Building2 className="size-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-900">{org.name}</p>
@@ -489,9 +485,16 @@ export default async function AdminDashboard() {
                           {org._count.residents} residents
                         </p>
                       </div>
-                      <div className="shrink-0 text-right">
+                      <div className="flex shrink-0 flex-col items-end gap-1">
                         <p className="text-sm font-semibold text-slate-900 tabular">
-                          {mrr > 0 ? `${formatMoney(mrr)}/mo` : '—'}
+                          {mrr > 0 ? (
+                            <>
+                              {formatMoney(mrr)}
+                              <span className="text-xs font-normal text-slate-400">/mo</span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-normal text-slate-400">No MRR yet</span>
+                          )}
                         </p>
                         <Badge
                           variant={
@@ -509,15 +512,16 @@ export default async function AdminDashboard() {
                     </CardContent>
                   </Card>
                 </Link>
+                </MotionItem>
               )
             })}
-          </div>
+          </MotionGrid>
         )}
       </section>
 
       {/* ---------------------------------------------- Leads + activity */}
       <section className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Open enquiries</CardTitle>
             <Link
@@ -553,7 +557,7 @@ export default async function AdminDashboard() {
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="text-[11px] text-slate-400">
+                          <span className="hidden text-[11px] text-slate-400 sm:inline">
                             {relativeTime(lead.createdAt)}
                           </span>
                           <StatusChip label={style.label} chip={style.chip} />
@@ -567,7 +571,7 @@ export default async function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Platform activity</CardTitle>
             <Link
@@ -584,7 +588,7 @@ export default async function AdminDashboard() {
       </section>
 
       {topOrgs.length > 0 && (
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <TrendingUp className="size-4 text-slate-400" />

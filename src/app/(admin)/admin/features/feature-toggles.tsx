@@ -67,9 +67,14 @@ export function FeatureToggles({
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       {items.map((feature) => (
-        <motion.div key={feature.id} layout>
-          <Card className={cn(!feature.enabled && 'bg-slate-50/70')}>
-            <CardContent className="flex items-start gap-3 p-4">
+        <motion.div key={feature.id} layout className="h-full">
+          <Card
+            className={cn(
+              'h-full rounded-2xl border-slate-200/80 transition hover:shadow-lift',
+              feature.enabled ? 'hover:border-blue-200' : 'bg-slate-50/70',
+            )}
+          >
+            <CardContent className="flex items-start gap-3 p-4 sm:p-4">
               <div className="min-w-0 flex-1">
                 <p
                   className={cn(
@@ -85,7 +90,7 @@ export function FeatureToggles({
                     {feature.description}
                   </p>
                 )}
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   {feature.plans.length === 0 ? (
                     <span className="text-[11px] text-slate-400">Not on any plan</span>
                   ) : (

@@ -77,7 +77,7 @@ export default async function SystemSettingsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Database className="size-4 text-slate-400" />
@@ -85,7 +85,7 @@ export default async function SystemSettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
+            <dl className="grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2">
               <Stat label="Organizations" value={orgs} />
               <Stat label="Properties" value={properties} />
               <Stat label="Residents" value={residents} />
@@ -97,7 +97,7 @@ export default async function SystemSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Timer className="size-4 text-slate-400" />
@@ -109,8 +109,8 @@ export default async function SystemSettingsPage() {
               One daily pass generates rent, flags overdue invoices, applies late fees, sends
               reminders, bills subscriptions, enforces grace periods and snapshots occupancy.
             </p>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-sm font-semibold text-slate-900">
+            <div className="rounded-xl bg-slate-50/80 p-3.5 ring-1 ring-inset ring-slate-100">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 Last automated action
               </p>
               {lastAutomation ? (
@@ -126,8 +126,8 @@ export default async function SystemSettingsPage() {
                 </p>
               )}
             </div>
-            <div className="rounded-xl border border-slate-200 p-3">
-              <p className="font-mono text-xs text-slate-600">
+            <div className="overflow-x-auto rounded-xl bg-ink-950 p-3.5">
+              <p className="whitespace-nowrap font-mono text-xs leading-relaxed text-ink-200">
                 POST /api/cron/run
                 <br />
                 Authorization: Bearer &lt;CRON_SECRET&gt;
@@ -140,7 +140,7 @@ export default async function SystemSettingsPage() {
       <BillingSettingsForm paymentDetails={paymentDetails} schedule={schedule} />
 
       {settings.length > 0 && (
-        <Card>
+        <Card className="rounded-2xl border-slate-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Platform values</CardTitle>
           </CardHeader>
@@ -149,9 +149,12 @@ export default async function SystemSettingsPage() {
               {settings
                 .filter((s) => !s.key.startsWith('invoice:') && !s.key.startsWith('receipt:'))
                 .map((setting) => (
-                  <li key={setting.id} className="flex items-start justify-between gap-3 py-2.5">
-                    <span className="font-mono text-xs text-slate-500">{setting.key}</span>
-                    <span className="max-w-xs truncate text-right font-mono text-xs text-slate-700">
+                  <li
+                    key={setting.id}
+                    className="flex min-w-0 flex-col gap-0.5 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                  >
+                    <span className="min-w-0 break-all font-mono text-xs text-slate-500">{setting.key}</span>
+                    <span className="min-w-0 truncate font-mono text-xs text-slate-700 sm:max-w-xs sm:text-right">
                       {JSON.stringify(setting.value)}
                     </span>
                   </li>
@@ -166,8 +169,8 @@ export default async function SystemSettingsPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
+    <div className="flex min-w-0 items-baseline justify-between gap-2 border-b border-dashed border-slate-100 pb-2">
+      <dt className="min-w-0 truncate text-slate-500">{label}</dt>
       <dd className="font-semibold text-slate-900 tabular">{value.toLocaleString('en-IN')}</dd>
     </div>
   )
@@ -187,25 +190,25 @@ function IntegrationCard({
   demoCopy: string
 }) {
   return (
-    <Card className={cn(live ? 'border-emerald-200' : 'border-amber-200')}>
-      <CardContent className="space-y-3 p-5">
+    <Card className={cn('h-full rounded-2xl', live ? 'border-emerald-200/80' : 'border-amber-200/80')}>
+      <CardContent className="space-y-3 p-5 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div
               className={cn(
-                'flex size-9 items-center justify-center rounded-xl',
-                live ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600',
+                'flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset',
+                live ? 'bg-emerald-50 text-emerald-600 ring-emerald-100' : 'bg-amber-50 text-amber-600 ring-amber-100',
               )}
             >
               <Icon className="size-4" />
             </div>
-            <p className="text-sm font-semibold text-slate-900">{name}</p>
+            <p className="min-w-0 text-sm font-semibold text-slate-900">{name}</p>
           </div>
-          <Badge variant={live ? 'success' : 'warning'} size="sm">
+          <Badge variant={live ? 'success' : 'warning'} size="sm" className="shrink-0">
             {live ? 'Connected' : 'Demo mode'}
           </Badge>
         </div>
-        <p className="text-sm leading-relaxed text-slate-600">{live ? liveCopy : demoCopy}</p>
+        <p className="break-words text-sm leading-relaxed text-slate-600">{live ? liveCopy : demoCopy}</p>
         {live && (
           <p className="flex items-center gap-1.5 text-xs text-emerald-700">
             <ShieldCheck className="size-3.5" />

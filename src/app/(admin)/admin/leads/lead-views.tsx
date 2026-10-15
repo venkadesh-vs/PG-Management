@@ -49,37 +49,44 @@ export function LeadBoard(props: ViewProps) {
   const columns = [...LEAD_PIPELINE, ...LEAD_SIDE]
   return (
     <>
-      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-        <div className="flex gap-3" style={{ minWidth: `${columns.length * 15}rem` }}>
+      <div className="-mx-4 snap-x snap-mandatory overflow-x-auto overscroll-x-contain px-4 pb-3 [scrollbar-width:thin] sm:mx-0 sm:snap-none sm:px-0">
+        <div className="flex items-start gap-3" style={{ minWidth: `${columns.length * 16}rem` }}>
           {columns.map((status) => {
             const items = props.leads.filter((l) => l.status === status)
             const style = leadStyle(status)
             return (
-              <section key={status} className="flex w-60 shrink-0 flex-col rounded-xl bg-slate-50/80 p-2">
-                <header className="flex items-center justify-between px-1.5 py-1">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span className={cn('size-2 rounded-full', style.dot)} />
-                    {style.label}
+              <section
+                key={status}
+                className="flex w-64 shrink-0 snap-start flex-col rounded-2xl border border-slate-200/70 bg-slate-100/60 p-2"
+              >
+                <header className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-1">
+                  <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-slate-700">
+                    <span className={cn('size-2 shrink-0 rounded-full ring-2 ring-white', style.dot)} />
+                    <span className="truncate">{style.label}</span>
                   </span>
-                  <span className="rounded-full bg-white px-1.5 text-[11px] font-semibold text-slate-500 tabular">
+                  <span className="min-w-6 rounded-full bg-white px-2 py-0.5 text-center text-[11px] font-semibold text-slate-600 shadow-xs ring-1 ring-inset ring-slate-200/80 tabular">
                     {items.length}
                   </span>
                 </header>
                 <ul className="mt-1 space-y-2">
-                  {items.length === 0 && <li className="px-1.5 py-3 text-center text-[11px] text-slate-400">Nothing here</li>}
+                  {items.length === 0 && (
+                    <li className="rounded-xl border border-dashed border-slate-300/70 px-3 py-6 text-center text-[11px] text-slate-400">
+                      No leads in this stage
+                    </li>
+                  )}
                   {items.map((lead) => (
                     <li key={lead.id}>
                       <button
                         type="button"
                         onClick={() => open(lead.id)}
-                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-card transition hover:border-blue-300 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        className="w-full rounded-xl border border-slate-200/80 bg-white p-3.5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                       >
-                        <p className="truncate text-sm font-medium text-slate-900">{lead.name}</p>
+                        <p className="truncate text-sm font-semibold text-slate-900">{lead.name}</p>
                         <p className="truncate text-xs text-slate-500">
                           {lead.pgName ?? 'PG'}
                           {lead.city ? ` · ${lead.city}` : ''}
                         </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[11px] text-slate-500">
                           <span className="inline-flex items-center gap-1">
                             <Bed className="size-3" />
                             {lead.bedCount ?? '—'}
@@ -88,7 +95,7 @@ export function LeadBoard(props: ViewProps) {
                             <Building2 className="size-3" />
                             {lead.pgCount}
                           </span>
-                          <span>{relativeTime(lead.createdAt)}</span>
+                          <span className="ml-auto">{relativeTime(lead.createdAt)}</span>
                         </div>
                         {lead.status === 'DEMO_SCHEDULED' && lead.demoAt && (
                           <p className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700">
@@ -180,10 +187,10 @@ export function LeadTable(props: ViewProps) {
               <button
                 type="button"
                 onClick={() => open(lead.id)}
-                className="block w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-card"
+                className="block w-full rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-card transition active:scale-[0.99] hover:border-blue-200 hover:shadow-lift"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="truncate font-medium text-slate-900">{lead.name}</p>
+                  <p className="min-w-0 truncate font-semibold text-slate-900">{lead.name}</p>
                   <StatusChip label={style.label} chip={style.chip} />
                 </div>
                 <p className="mt-0.5 truncate text-xs text-slate-500">

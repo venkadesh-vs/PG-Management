@@ -187,7 +187,7 @@ export default async function AdminPaymentsPage({
                       const failed = invoice.payments.some((p) => p.status === 'FAILED')
                       return (
                         <TableRow key={invoice.id}>
-                          <TableCell className="font-mono text-sm">
+                          <TableCell className="whitespace-nowrap font-mono text-[13px] text-slate-700">
                             <a
                               href={`/api/documents/subscription-invoice/${invoice.id}.pdf`}
                               target="_blank"
@@ -212,7 +212,7 @@ export default async function AdminPaymentsPage({
                               {invoice.subscription.property.name}
                             </span>
                           </TableCell>
-                          <TableCell className="text-sm text-slate-600">
+                          <TableCell className="whitespace-nowrap text-sm text-slate-600">
                             {formatDate(invoice.dueDate)}
                           </TableCell>
                           <TableCell className="text-right font-semibold tabular">
@@ -255,12 +255,12 @@ export default async function AdminPaymentsPage({
                   return (
                     <li
                       key={invoice.id}
-                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+                      className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <Link
                           href={`/admin/organizations/${invoice.subscription.organization.id}`}
-                          className="truncate font-medium text-slate-900 hover:text-blue-700"
+                          className="min-w-0 truncate font-semibold text-slate-900 hover:text-blue-700"
                         >
                           {invoice.subscription.organization.name}
                         </Link>
@@ -282,7 +282,7 @@ export default async function AdminPaymentsPage({
                       )}
                       <div className="mt-2 flex items-center justify-between gap-2 text-sm">
                         <span className="text-xs text-slate-500">Due {formatDate(invoice.dueDate)}</span>
-                        <span className="font-semibold tabular">{formatMoney(invoice.total)}</span>
+                        <span className="shrink-0 font-display text-base font-semibold text-slate-900 tabular">{formatMoney(invoice.total)}</span>
                       </div>
                       {invoice.status !== 'PAID' && (
                         <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
@@ -338,7 +338,7 @@ export default async function AdminPaymentsPage({
                               {payment.subscription.property.name}
                             </span>
                           </TableCell>
-                          <TableCell className="text-sm text-slate-600">
+                          <TableCell className="whitespace-nowrap text-sm text-slate-600">
                             {formatDateTime(payment.attemptedAt)}
                           </TableCell>
                           <TableCell>
@@ -384,7 +384,7 @@ export default async function AdminPaymentsPage({
                     <li key={payment.id}>
                       <Link
                         href={`/admin/organizations/${payment.subscription.organization.id}`}
-                        className="block rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+                        className="block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition hover:border-blue-200 hover:shadow-lift"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="truncate font-medium text-slate-900">
@@ -420,7 +420,7 @@ export default async function AdminPaymentsPage({
                           <span className="text-xs text-slate-500">
                             {formatDateTime(payment.attemptedAt)}
                           </span>
-                          <span className="font-semibold tabular">{formatMoney(payment.amount)}</span>
+                          <span className="shrink-0 font-display text-base font-semibold text-slate-900 tabular">{formatMoney(payment.amount)}</span>
                         </div>
                       </Link>
                     </li>

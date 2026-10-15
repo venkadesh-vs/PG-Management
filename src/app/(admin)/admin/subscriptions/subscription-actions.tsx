@@ -97,7 +97,7 @@ export function SubscriptionAdminActions({
         aria-label={`Actions for ${label}`}
         value=""
         onChange={(e) => e.target.value && setAction(e.target.value as Action)}
-        className="h-8 w-auto text-xs"
+        className="h-8 w-[7.5rem] shrink-0 rounded-lg bg-white text-xs font-medium"
       >
         <option value="">Actions…</option>
         {available.map((a) => (

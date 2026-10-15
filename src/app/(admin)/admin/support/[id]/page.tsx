@@ -54,8 +54,8 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
         actions={<StatusChip label={ADMIN_STATUS_LABEL[status]} chip={TICKET_STATUS_STYLE[status].chip} />}
       />
       {org && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+        <Card className="rounded-2xl border-slate-200/80">
+          <CardContent className="flex flex-wrap items-center gap-3 p-4 sm:p-4">
             <div className="min-w-0 flex-1">
               <Link
                 href={`/admin/organizations/${org.id}`}
@@ -70,7 +70,7 @@ export default async function AdminTicketPage({ params }: { params: Promise<{ id
             </div>
             <a
               href={`tel:${org.contactPhone}`}
-              className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-700 ring-1 ring-inset ring-blue-100 transition hover:from-blue-100 hover:to-blue-100"
               aria-label={`Call ${org.ownerName}`}
             >
               <Phone className="size-4" />

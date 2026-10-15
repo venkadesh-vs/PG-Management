@@ -158,10 +158,12 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
           {sortedTickets.map((t) => {
             const status = t.status as TicketStatus
             return (
-              <Link key={t.id} href={`/admin/support/${t.id}`} className="block">
-                <Card className="transition-colors hover:border-slate-300">
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <LifeBuoy className="size-4 shrink-0 text-slate-400" />
+              <Link key={t.id} href={`/admin/support/${t.id}`} className="group block rounded-2xl">
+                <Card className="rounded-2xl border-slate-200/80 transition group-hover:-translate-y-0.5 group-hover:border-blue-200 group-hover:shadow-lift">
+                  <CardContent className="flex items-center gap-3 p-4 sm:p-4">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-700 ring-1 ring-inset ring-blue-100">
+                      <LifeBuoy className="size-4" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{t.subject}</p>
                       <p className="truncate text-xs text-slate-500">
@@ -180,7 +182,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                         )}
                       </div>
                     </div>
-                    <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                    <ChevronRight className="size-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500" />
                   </CardContent>
                 </Card>
               </Link>
@@ -209,6 +211,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
           hint="3 or more open complaints"
         />
         <StatCard
+          className="col-span-2 sm:col-span-1"
           label="Quiet for a week"
           value={quietOrgs.length}
           icon="clock"
@@ -235,9 +238,11 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
             const theme = themeFor(complaint.property.type)
             const style = COMPLAINT_STATUS_STYLE[complaint.status]
             return (
-              <Card key={complaint.id}>
-                <CardContent className="flex flex-wrap items-center gap-3 p-4">
-                  <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+              <Card key={complaint.id} className="rounded-2xl border-slate-200/80">
+                <CardContent className="flex items-start gap-3 p-4 sm:items-center sm:p-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
+                    <AlertTriangle className="size-4" />
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-900">
                       {complaint.title}
@@ -257,11 +262,14 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                       {' · '}
                       {complaint.code}
                     </p>
+                    <p className="mt-1 text-xs text-amber-600 sm:hidden">
+                      open {relativeTime(complaint.createdAt)}
+                    </p>
                   </div>
-                  <span className="shrink-0 text-xs text-amber-600">
+                  <span className="hidden shrink-0 text-xs text-amber-600 sm:inline">
                     open {relativeTime(complaint.createdAt)}
                   </span>
-                  <StatusChip label={style.label} chip={style.chip} />
+                  <StatusChip label={style.label} chip={style.chip} className="shrink-0" />
                 </CardContent>
               </Card>
             )
@@ -279,12 +287,12 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {atRisk.map((org) => (
-            <Card key={org.id}>
-              <CardContent className="flex items-center gap-3 p-4">
+            <Card key={org.id} className="rounded-2xl border-slate-200/80">
+              <CardContent className="flex items-center gap-3 p-4 sm:p-4">
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/admin/organizations/${org.id}`}
-                    className="truncate text-sm font-semibold text-slate-900 hover:text-blue-700"
+                    className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700"
                   >
                     {org.name}
                   </Link>
@@ -321,12 +329,12 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {quietOrgs.map((org) => (
-            <Card key={org.id}>
-              <CardContent className="flex items-center gap-3 p-4">
+            <Card key={org.id} className="rounded-2xl border-slate-200/80">
+              <CardContent className="flex items-center gap-3 p-4 sm:p-4">
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/admin/organizations/${org.id}`}
-                    className="truncate text-sm font-semibold text-slate-900 hover:text-blue-700"
+                    className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700"
                   >
                     {org.name}
                   </Link>
@@ -334,7 +342,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                     {org.ownerName} · {formatPhone(org.contactPhone)}
                   </p>
                 </div>
-                <span className="shrink-0 text-xs text-slate-500">
+                <span className="shrink-0 text-right text-xs text-slate-500">
                   {org.users[0]?.lastLoginAt
                     ? `last seen ${relativeTime(org.users[0].lastLoginAt)}`
                     : 'never signed in'}

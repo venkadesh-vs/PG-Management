@@ -120,7 +120,7 @@ export function PropertyForm({
     let raw = 0
     let explanation = ''
     if (plan.pricingBasis === 'STANDARD_RENT') {
-      raw = Math.round((values.standardRent * plan.multiplier) / 100)
+      raw = Math.round(((values.standardRent ?? 0) * plan.multiplier) / 100)
       explanation = `${plan.multiplier}% of the standard rent (${formatMoney(values.standardRent || 0)})`
     } else if (plan.pricingBasis === 'PER_BED') {
       explanation = `${formatMoney(plan.perBedPrice)} per bed, once beds are added`

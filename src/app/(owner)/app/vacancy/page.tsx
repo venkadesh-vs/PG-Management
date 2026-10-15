@@ -20,6 +20,7 @@ import {
   TableRow,
   TableWrap,
 } from '@/components/ui/table'
+import { roomTypeLabel } from '@/lib/rent-card'
 
 export const metadata: Metadata = { title: 'Vacancy' }
 
@@ -250,7 +251,7 @@ export default async function VacancyPage({
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-900">Room {r.number}</p>
                       <p className="truncate text-xs text-slate-500">
-                        {r.propertyName} · {r.floor} · {r.type.toLowerCase().replace('_', ' ')}
+                        {r.propertyName} · {r.floor} · {roomTypeLabel(r.type)}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">

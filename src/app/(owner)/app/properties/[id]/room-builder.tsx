@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/feedback'
 import { FloorMenu, RoomEditDialog, RoomMenu, type EditableRoom } from './room-editor'
+import { roomTypeLabel } from '@/lib/rent-card'
 
 type RoomRow = EditableRoom & {
   capacity: number
@@ -36,6 +37,7 @@ const CAPACITY_BY_TYPE: Record<string, number> = {
   DOUBLE: 2,
   TRIPLE: 3,
   QUAD: 4,
+  FIVE: 5,
   DORM: 6,
 }
 
@@ -152,7 +154,7 @@ export function RoomBuilder({
                           </div>
                         </div>
                         <p className="text-[11px] capitalize text-slate-500">
-                          {room.type.toLowerCase()} · {room.bedCount} beds
+                          {roomTypeLabel(room.type)} · {room.bedCount} beds
                         </p>
                         <p className="mt-1 text-xs font-medium text-slate-700 tabular">
                           {formatMoney(room.baseRent ?? standardRent)}
@@ -384,7 +386,8 @@ function RoomDialog({
                 <option value="DOUBLE">Double sharing</option>
                 <option value="TRIPLE">Triple sharing</option>
                 <option value="QUAD">Four sharing</option>
-                <option value="DORM">Dormitory</option>
+                <option value="FIVE">Five sharing</option>
+                <option value="DORM">Dormitory (6+)</option>
               </Select>
             </Field>
             <Field label="Beds" required>
@@ -506,6 +509,8 @@ function BulkRoomDialog({
                 <option value="DOUBLE">Double sharing</option>
                 <option value="TRIPLE">Triple sharing</option>
                 <option value="QUAD">Four sharing</option>
+                <option value="FIVE">Five sharing</option>
+                <option value="DORM">Dormitory (6+)</option>
               </Select>
             </Field>
             <Field label="Prefix" hint="Optional, e.g. A">

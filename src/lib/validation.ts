@@ -206,7 +206,8 @@ export const propertySchema = z.object({
   contactName: optionalString,
   contactPhone: optionalPhone,
   description: optionalString,
-  standardRent: rupees.refine((v) => v > 0, 'Standard rent is required'),
+  /** Ignored by the server: the standard rent is always worked out from the beds (src/lib/rent-card.ts). */
+  standardRent: rupees.optional(),
   standardDeposit: rupees,
   maintenanceFee: rupees.optional(),
   foodCharge: rupees.optional(),
@@ -228,7 +229,7 @@ export const roomSchema = z.object({
   propertyId: z.string().min(1),
   floorId: z.string().min(1, 'Choose a floor'),
   number: z.string().trim().min(1, 'Room number is required').max(12),
-  type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'DORM']),
+  type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'FIVE', 'DORM']),
   capacity: z.coerce.number().int().min(1, 'At least one bed').max(12),
   baseRent: rupees.optional(),
   hasAC: z.boolean().default(false),

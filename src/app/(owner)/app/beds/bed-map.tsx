@@ -31,6 +31,7 @@ import { Badge, StatusChip } from '@/components/ui/badge'
 import { Field, Textarea } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/feedback'
 import { OccupancyBar } from '@/components/app/occupancy-ring'
+import { roomTypeLabel } from '@/lib/rent-card'
 
 type BedRow = {
   id: string
@@ -212,7 +213,7 @@ export function BedMap({
                             Room {room.number}
                           </p>
                           <p className="text-[11px] capitalize text-slate-500">
-                            {room.type.toLowerCase()} · {formatMoney(room.baseRent ?? property.standardRent)}
+                            {roomTypeLabel(room.type)} · {formatMoney(room.baseRent ?? property.standardRent)}
                           </p>
                         </div>
                         <span
@@ -406,7 +407,7 @@ function BedPanel({
               Room {room.number} · Bed {bed.label}
             </p>
             <p className="mt-0.5 text-xs capitalize text-slate-500">
-              {property.name} · {room.type.toLowerCase()} room
+              {property.name} · {roomTypeLabel(room.type)} room
             </p>
           </div>
           <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>

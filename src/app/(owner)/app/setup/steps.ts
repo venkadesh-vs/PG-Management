@@ -137,7 +137,8 @@ export const SHARING_OPTIONS = [
   { type: 'DOUBLE', label: '2 sharing', capacity: 2 },
   { type: 'TRIPLE', label: '3 sharing', capacity: 3 },
   { type: 'QUAD', label: '4 sharing', capacity: 4 },
-  { type: 'DORM', label: 'Dorm (5+)', capacity: 6 },
+  { type: 'FIVE', label: '5 sharing', capacity: 5 },
+  { type: 'DORM', label: 'Dorm (6+)', capacity: 6 },
 ] as const
 
 export type SharingType = (typeof SHARING_OPTIONS)[number]['type']

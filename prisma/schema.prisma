@@ -62,6 +62,9 @@ enum RoomType {
   DOUBLE
   TRIPLE
   QUAD
+  /// 5 sharing
+  FIVE
+  /// 6 or more sharing
   DORM
 }
 
@@ -673,7 +676,10 @@ model Property {
   description  String?
 
   // Rent / charge configuration — every resident default flows from here.
+  /// Average bed rent, worked out from the rent card and rooms (src/lib/rent-card.ts); prices the subscription.
   standardRent     Int     @default(8000)
+  /// Rent per sharing type, non-AC and AC: { DOUBLE: { nonAc: 9000, ac: 11000 }, ... }
+  rentCard         Json?
   standardDeposit  Int     @default(10000)
   maintenanceFee   Int     @default(0)
   foodCharge       Int     @default(0)

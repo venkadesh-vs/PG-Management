@@ -250,8 +250,8 @@ export function floorName(level: number) {
   return `${level}${suffix} floor`
 }
 
-export function roomTypeFor(beds: number): 'SINGLE' | 'DOUBLE' | 'TRIPLE' | 'QUAD' | 'DORM' {
-  return beds <= 1 ? 'SINGLE' : beds === 2 ? 'DOUBLE' : beds === 3 ? 'TRIPLE' : beds === 4 ? 'QUAD' : 'DORM'
+export function roomTypeFor(beds: number): 'SINGLE' | 'DOUBLE' | 'TRIPLE' | 'QUAD' | 'FIVE' | 'DORM' {
+  return beds <= 1 ? 'SINGLE' : beds === 2 ? 'DOUBLE' : beds === 3 ? 'TRIPLE' : beds === 4 ? 'QUAD' : beds === 5 ? 'FIVE' : 'DORM'
 }
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

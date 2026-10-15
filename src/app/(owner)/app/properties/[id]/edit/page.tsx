@@ -5,6 +5,8 @@ import { assertPropertyAccess, ForbiddenError, NotFoundError } from '@/lib/tenan
 import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/app/page-header'
 import { PropertyForm } from '../../property-form'
+import { deriveRentCard, normaliseRentCard } from '@/lib/rent-card'
+import { RentCardEditor } from './rent-card-editor'
 
 export const metadata: Metadata = { title: 'Edit PG' }
 
@@ -28,6 +30,16 @@ export default async function EditPropertyPage({
   if (!property) notFound()
   if (property.archivedAt) redirect(`/app/properties/${id}`)
 
+  // The rooms decide which rows the card shows; a PG without a card starts
+  // from the rents its rooms already carry.
+  const rooms = await prisma.room.findMany({
+    where: { propertyId: property.id },
+    select: { type: true, capacity: true, hasAC: true, baseRent: true },
+  })
+  const derived = deriveRentCard(rooms, property.standardRent)
+  const saved = normaliseRentCard(property.rentCard)
+  const initialCard = Object.keys(saved).length ? saved : derived.card
+
   const electricityMode = (['INCLUDED', 'SHARED', 'METERED'] as const).includes(
     property.electricityMode as 'INCLUDED',
   )
@@ -46,6 +58,12 @@ export default async function EditPropertyPage({
           { label: property.name, href: `/app/properties/${property.id}` },
           { label: 'Edit' },
         ]}
+      />
+      <RentCardEditor
+        propertyId={property.id}
+        initial={initialCard}
+        used={derived.used}
+        standardRent={property.standardRent}
       />
       <PropertyForm
         plan={null}

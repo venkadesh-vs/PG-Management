@@ -279,7 +279,8 @@ const TYPE_OPTIONS = [
   ['DOUBLE', 'Double sharing'],
   ['TRIPLE', 'Triple sharing'],
   ['QUAD', 'Four sharing'],
-  ['DORM', 'Dormitory'],
+  ['FIVE', 'Five sharing'],
+  ['DORM', 'Dormitory (6+)'],
 ] as const
 
 export function RoomEditDialog({

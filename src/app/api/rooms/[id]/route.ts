@@ -14,6 +14,7 @@ import {
   nextBedLabels,
   resizeRoom,
 } from '@/server/services/bed-layout'
+import { refreshStandardRentSafely } from '@/server/services/quick-setup'
 
 /**
  * /api/rooms/<id>  (properties.manage)
@@ -30,7 +31,7 @@ const rupees = z.coerce.number().int('Enter a whole rupee amount').min(0, 'Canno
 const updateSchema = z.object({
   number: z.string().trim().min(1, 'Room number is required').max(12).optional(),
   floorId: z.string().min(1).optional(),
-  type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'DORM']).optional(),
+  type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'FIVE', 'DORM']).optional(),
   capacity: z.coerce.number().int().min(1, 'At least one bed').max(12).optional(),
   // '' clears the override so the PG's standard rent applies.
   baseRent: z.union([z.literal(''), rupees]).optional(),
@@ -152,6 +153,7 @@ export const PATCH = route(
     }
 
     await activity(user, room.propertyId, room.id, message)
+    await refreshStandardRentSafely(room.propertyId)
     return ok({ room: result.updated, message })
   },
   { module: 'properties', permission: 'properties.manage' },
@@ -186,6 +188,7 @@ export const POST = route(
 
     const message = `Bed ${bed.label} added to Room ${room.number}`
     await activity(user, room.propertyId, room.id, message)
+    await refreshStandardRentSafely(room.propertyId)
     return ok({ bed, message }, { status: 201 })
   },
   { module: 'properties', permission: 'properties.manage' },
@@ -232,6 +235,7 @@ export const DELETE = route(
       await tx.room.delete({ where: { id: room.id } })
     })
     await activity(user, room.propertyId, room.id, `Room ${room.number} deleted with ${beds.length} beds`)
+    await refreshStandardRentSafely(room.propertyId)
     return ok({ message: `Room ${room.number} deleted` })
   },
   { module: 'properties', permission: 'properties.manage' },

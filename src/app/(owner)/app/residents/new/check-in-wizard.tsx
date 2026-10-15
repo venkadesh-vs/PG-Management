@@ -36,6 +36,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox, Progress, Switch } from '@/components/ui/primitives'
 import { EmptyState } from '@/components/ui/feedback'
 import { InviteLinkPanel, type AccessLink } from '@/components/app/invite-link'
+import { roomTypeLabel } from '@/lib/rent-card'
 
 type PropertyOption = {
   id: string
@@ -657,7 +658,7 @@ export function CheckInWizard({
                                     Room {room.number}
                                   </p>
                                   <span className="text-[11px] text-slate-400">
-                                    {room.type.toLowerCase()}
+                                    {roomTypeLabel(room.type)}
                                     {room.hasAC ? ' · AC' : ''}
                                   </span>
                                 </div>

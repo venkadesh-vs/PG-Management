@@ -6,6 +6,7 @@ import { ensureOrgDefaults } from '@/server/services/org-defaults'
 import { canRunSetup, setupFacts, startOnboarding } from '@/server/services/onboarding'
 import { isStepKey, needsProperty, type SetupStepKey } from './steps'
 import { SetupWizard, type WizardSnapshot } from './wizard'
+import { QuickSetup } from './quick-setup'
 
 export const metadata: Metadata = { title: 'Set up your PG' }
 
@@ -21,6 +22,19 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
 
   const onboarding = await startOnboarding(organizationId)
   const data = onboarding.data
+
+  // A brand-new owner gets the three-screen quick setup. The detailed wizard
+  // below stays for anyone who already has a PG and reopens setup.
+  const pgCount = await prisma.property.count({ where: { organizationId, archivedAt: null } })
+  if (pgCount === 0) {
+    const plan = await prisma.plan.findFirst({
+      where: { active: true },
+      orderBy: { isDefault: 'desc' },
+      select: { pricingBasis: true, multiplier: true, perBedPrice: true, flatPrice: true, minAmount: true, maxAmount: true },
+    })
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { city: true } })
+    return <QuickSetup plan={plan} finishOnboarding defaultCity={org?.city} ownerName={user.name} />
+  }
 
   // Adopt an existing PG instead of creating a second one.
   let propertyId = data.propertyId

@@ -12,6 +12,7 @@ import {
 import { bedUpdateSchema, floorSchema, roomSchema } from '@/lib/validation'
 import { recordActivity } from '@/server/events'
 import { assertWithinPlan } from '@/server/services/plan-limits'
+import { refreshStandardRentSafely } from '@/server/services/quick-setup'
 
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('ADD_FLOOR') }).merge(floorSchema),
@@ -25,7 +26,7 @@ const schema = z.discriminatedUnion('action', [
     startNumber: z.coerce.number().int().min(1),
     count: z.coerce.number().int().min(1).max(40),
     capacity: z.coerce.number().int().min(1).max(12),
-    type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'DORM']),
+    type: z.enum(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD', 'FIVE', 'DORM']),
     baseRent: z.coerce.number().int().min(0).max(10_000_000, 'Amount is too large').optional(),
     hasAC: z.boolean().default(false),
   }),
@@ -64,6 +65,7 @@ export const POST = route(
             : {}),
         },
       })
+      if (body.rent !== undefined) await refreshStandardRentSafely(bed.propertyId)
       return ok({
         bed: updated,
         message: `Bed ${bed.label} in Room ${bed.room.number} updated`,
@@ -133,6 +135,7 @@ export const POST = route(
         summary: `Room ${room.number} added with ${room.beds.length} beds`,
       })
 
+      await refreshStandardRentSafely(body.propertyId)
       return ok(
         { room, message: `Room ${room.number} added with ${room.beds.length} beds` },
         { status: 201 },
@@ -180,6 +183,7 @@ export const POST = route(
       summary: `${created.length} rooms added (${created.length * body.capacity} beds)`,
     })
 
+    await refreshStandardRentSafely(body.propertyId)
     return ok(
       {
         created: created.length,

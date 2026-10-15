@@ -54,7 +54,8 @@ export const ROOM_PREFS = [
   { value: 'DOUBLE', label: 'Double sharing' },
   { value: 'TRIPLE', label: 'Triple sharing' },
   { value: 'QUAD', label: 'Four sharing' },
-  { value: 'DORM', label: 'Dorm' },
+  { value: 'FIVE', label: 'Five sharing' },
+  { value: 'DORM', label: 'Dorm (6+)' },
 ]
 
 export const BOOKING_STATUS: Record<string, { label: string; chip: string; dot: string }> = {

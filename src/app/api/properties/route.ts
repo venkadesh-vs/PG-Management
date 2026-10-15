@@ -37,7 +37,7 @@ export const POST = route(
           contactName: body.contactName || null,
           contactPhone: body.contactPhone || null,
           description: body.description || null,
-          standardRent: body.standardRent,
+          // Worked out from the rooms as they are added (refreshStandardRent), never typed.
           standardDeposit: body.standardDeposit,
           maintenanceFee: body.maintenanceFee ?? 0,
           foodCharge: body.foodCharge ?? 0,

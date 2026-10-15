@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { TOKEN_METHODS } from '../leads/lead-meta'
+import { roomTypeLabel } from '@/lib/rent-card'
 
 type PropertyOption = { id: string; name: string; standardRent: number; standardDeposit: number }
 type FreeRoom = {
@@ -344,7 +345,7 @@ export function NewBookingButton({
                         <div className="mb-2 flex items-center justify-between text-xs">
                           <span className="font-semibold text-slate-800">Room {room.number}</span>
                           <span className="text-slate-400">
-                            {room.floor} · {room.type.toLowerCase()}
+                            {room.floor} · {roomTypeLabel(room.type)}
                             {room.hasAC ? ' · AC' : ''}
                           </span>
                         </div>

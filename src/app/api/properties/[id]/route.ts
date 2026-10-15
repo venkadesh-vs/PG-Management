@@ -8,9 +8,7 @@ import { recordActivity } from '@/server/events'
 import {
   assertPlanCapacity,
   cancelAutopay,
-  repriceSubscription,
 } from '@/server/services/subscriptions'
-import { formatMoney } from '@/lib/utils'
 
 /**
  * /api/properties/<id>
@@ -69,7 +67,7 @@ export const PATCH = route(
         ...(has('contactName') ? { contactName: body.contactName || null } : {}),
         ...(has('contactPhone') ? { contactPhone: body.contactPhone || null } : {}),
         ...(has('description') ? { description: body.description || null } : {}),
-        ...(has('standardRent') ? { standardRent: body.standardRent } : {}),
+        // standardRent is never set by hand: it follows the room rents (refreshStandardRent).
         ...(has('standardDeposit') ? { standardDeposit: body.standardDeposit } : {}),
         ...(has('maintenanceFee') ? { maintenanceFee: body.maintenanceFee ?? 0 } : {}),
         ...(has('foodCharge') ? { foodCharge: body.foodCharge ?? 0 } : {}),
@@ -97,24 +95,7 @@ export const PATCH = route(
 
     // The subscription is priced off the standard rent, so a rent change
     // re-prices it (which also asks the owner to re-authorise AutoPay).
-    let message = `${updated.name} saved`
-    if (
-      property.subscription &&
-      property.subscription.status !== 'CANCELLED' &&
-      has('standardRent') &&
-      body.standardRent !== property.standardRent
-    ) {
-      try {
-        const repriced = await repriceSubscription(property.subscription.id)
-        if (repriced.changed) {
-          message += ` — subscription is now ${formatMoney(repriced.price.amount)}/month`
-          if (repriced.autopayStopped) message += '. Set up AutoPay again to approve the new amount.'
-        }
-      } catch (error) {
-        console.error('[properties] reprice failed', error)
-        message += ' — the subscription price could not be updated, please contact support'
-      }
-    }
+    const message = `${updated.name} saved`
 
     return ok({ property: { id: updated.id, name: updated.name }, message })
   },

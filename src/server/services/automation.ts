@@ -12,6 +12,7 @@ import {
 } from './billing'
 import { snapshotOccupancy } from './residents'
 import {
+  applyLateFees,
   enforceGracePeriods,
   replayFailedWebhooks,
   retryFailedCharges,
@@ -275,6 +276,7 @@ async function runSteps(
       report.subscriptions.failed += retries.failed
       report.subscriptions.billed += retries.recovered
     }
+    await applyLateFees(now)
     const grace = await enforceGracePeriods(now)
     report.subscriptions.suspended = grace.suspended
   } catch (error) {

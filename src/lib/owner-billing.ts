@@ -1,4 +1,5 @@
 import { addDays, daysBetween, startOfDay, toISODate } from './utils'
+import { LATE_FEE_AFTER_DAYS, WARNING_DAYS as OVERDUE_WARNING_DAYS } from './owner-bill'
 
 /**
  * StayFlow billing notices to PG owners: which reminder is due on which day,
@@ -14,6 +15,8 @@ export type OwnerBillingKind =
   | 'GRACE_REMINDER'
   | 'SUSPENDED'
   | 'PAYMENT_RECEIVED'
+  | 'OVERDUE_WARNING'
+  | 'LATE_FEE_ADDED'
 
 export type OwnerBillingChannel = 'WHATSAPP' | 'EMAIL'
 export const OWNER_BILLING_CHANNELS: OwnerBillingChannel[] = ['WHATSAPP', 'EMAIL']
@@ -66,6 +69,8 @@ export const reminderKey = {
   graceReminder: (invoiceId: string, daysLeft: number) => `grace:${invoiceId}:${daysLeft}`,
   suspended: (subscriptionId: string, graceEndsAt: Date) => `suspended:${subscriptionId}:${day(graceEndsAt)}`,
   paymentReceived: (invoiceId: string) => `paid:${invoiceId}`,
+  overdueWarning: (invoiceId: string, daysAfter: number) => `overdue:${invoiceId}:${daysAfter}`,
+  lateFeeAdded: (organizationId: string, day: Date) => `latefee:${organizationId}:${toISODate(startOfDay(day))}`,
 }
 
 // ------------------------------------------------------------ schedule ----
@@ -89,6 +94,7 @@ export type ScheduleInvoice = {
 export type DueReminder =
   | { kind: 'TRIAL_ENDING'; key: string; daysBefore: number; trialEndsAt: Date }
   | { kind: 'DUE_SOON'; key: string; daysBefore: number; invoice: ScheduleInvoice }
+  | { kind: 'OVERDUE_WARNING'; key: string; daysAfter: number; invoice: ScheduleInvoice; feeDay: Date }
   | { kind: 'GRACE_REMINDER'; key: string; daysLeft: number; invoice: ScheduleInvoice; lastActiveDay: Date }
 
 /** The last day the account is fully usable: suspension happens on graceEndsAt. */
@@ -134,6 +140,16 @@ export function remindersDue(params: {
     // AutoPay collects on its own; owners only hear about it if it fails.
     if (!sub.autopay && schedule.dueDaysBefore.includes(before)) {
       out.push({ kind: 'DUE_SOON', key: reminderKey.dueSoon(invoice.id, before), daysBefore: before, invoice })
+    }
+    // The two days after the due date: pay now and skip the late fee.
+    if ((OVERDUE_WARNING_DAYS as readonly number[]).includes(-before)) {
+      out.push({
+        kind: 'OVERDUE_WARNING',
+        key: reminderKey.overdueWarning(invoice.id, -before),
+        daysAfter: -before,
+        invoice,
+        feeDay: addDays(startOfDay(invoice.dueDate), LATE_FEE_AFTER_DAYS),
+      })
     }
     if (sub.status === 'GRACE' && sub.graceEndsAt && startOfDay(invoice.dueDate) < today) {
       const left = daysUntilPause(sub.graceEndsAt, today)

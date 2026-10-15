@@ -231,7 +231,7 @@ export async function putObject(key: string, bytes: Buffer, contentType: string)
  * Where the browser should fetch the bytes: a short-lived presigned URL for
  * S3, or null for local storage (the caller streams via readLocal).
  */
-export function getDownloadUrl(key: string): string | null {
+export function getDownloadUrl(key: string, expiresSeconds = 300): string | null {
   assertSafeKey(key)
-  return storageProvider() === 's3' ? s3PresignedGet(key) : null
+  return storageProvider() === 's3' ? s3PresignedGet(key, expiresSeconds) : null
 }

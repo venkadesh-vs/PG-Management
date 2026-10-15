@@ -236,8 +236,7 @@ export function PricingSection({ rule }: { rule: PricingRule }) {
             <p className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
               <Gift className="mt-0.5 size-4 shrink-0 text-emerald-700" aria-hidden />
               <span>
-                <strong className="font-semibold">Refer a PG owner, pay half.</strong> When an owner you refer pays their first month,
-                your next month is 50% off.
+                <strong className="font-semibold">Refer a PG owner, get credit.</strong> When an owner you refer (up to 5) pays their first month, half of it comes off your next bill.
               </span>
             </p>
 

@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
 import { PayInvoiceButton } from './pay-invoice-button'
+import { DueDayPicker } from './due-day-picker'
+import { LATE_FEE_AFTER_DAYS, LATE_FEE_PERCENT } from '@/lib/owner-bill'
 import { BillingRemindersCard } from './billing-reminders-card'
 import { ownerBillingChannels } from '@/server/services/owner-billing'
 import {
@@ -83,6 +85,28 @@ export default async function SubscriptionPage() {
   })
   const now = new Date()
   const planNames = new Map(plans.map((p) => [p.id, p.name]))
+  const billing = await prisma.organization.findUnique({
+    where: { id: user.organizationId },
+    select: { referralCredit: true, settings: { select: { billingDueDay: true } } },
+  })
+  const dueDay = billing?.settings?.billingDueDay ?? 5
+  // Open bills: every unpaid PG line due the same day is one bill, paid at once.
+  const openBills = new Map<string, typeof invoices>()
+  for (const inv of invoices) {
+    if (!PAYABLE.includes(inv.status) || inv.total <= inv.amountPaid) continue
+    const key = inv.dueDate.toISOString().slice(0, 10)
+    openBills.set(key, [...(openBills.get(key) ?? []), inv])
+  }
+  const bills = [...openBills.values()]
+    .map((lines) => ({
+      lines,
+      dueDate: lines[0].dueDate,
+      anchor: [...lines].sort((a, b) => a.id.localeCompare(b.id))[0],
+      due: lines.reduce((sum, l) => sum + (l.total - l.amountPaid), 0),
+      lateFee: lines.reduce((sum, l) => sum + l.lateFee, 0),
+      credit: lines.reduce((sum, l) => sum + l.discount, 0),
+    }))
+    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
 
   // What each PG would pay on each plan (prices derive from the PG itself).
   const optionsBySub = new Map<string, PlanOption[]>()
@@ -126,10 +150,74 @@ export default async function SubscriptionPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subscription"
-        subtitle="StayFlow is billed per PG. Each property carries its own subscription, priced from its own standard rent."
+        subtitle="One bill a month for all your PGs, due on the day you choose. Each PG is priced at one bed's rent."
         icon="sparkles"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Subscription' }]}
       />
+
+      {/* ------------------------------------------- One combined bill */}
+      <Card className="overflow-hidden">
+        <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_1.3fr]">
+          <div className="space-y-5">
+            <div>
+              <p className="font-display text-base font-semibold text-slate-900">Your StayFlow bill</p>
+              <p className="mt-0.5 text-sm text-slate-500">
+                All your PGs on one bill. Pay by the due day; a {LATE_FEE_PERCENT}% late fee is added {LATE_FEE_AFTER_DAYS} days after it.
+              </p>
+            </div>
+            <DueDayPicker day={dueDay} canEdit={!payUnavailable} />
+            {(billing?.referralCredit ?? 0) > 0 && (
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                Referral credit <strong className="font-semibold">{formatMoney(billing!.referralCredit)}</strong> comes off your next bill.
+              </p>
+            )}
+          </div>
+          <div className="space-y-3">
+            {bills.length === 0 ? (
+              <div className="flex h-full min-h-32 flex-col items-center justify-center rounded-2xl bg-slate-50 p-6 text-center">
+                <p className="text-sm font-semibold text-slate-800">Nothing to pay right now</p>
+                <p className="mt-1 text-xs text-slate-500">Your next bill appears here a few days before day {dueDay}.</p>
+              </div>
+            ) : (
+              bills.map((bill) => (
+                <div key={bill.anchor.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        Due {formatDate(bill.dueDate)} · {bill.lines.length} {bill.lines.length === 1 ? 'PG' : 'PGs'}
+                      </p>
+                      <p className="mt-0.5 font-display text-2xl font-semibold tabular-nums text-slate-900">{formatMoney(bill.due)}</p>
+                    </div>
+                    {!payUnavailable && (
+                      <PayInvoiceButton invoiceId={bill.anchor.id} number={`Bill due ${formatDate(bill.dueDate)}`} amount={bill.due} demo={demo} size="default" />
+                    )}
+                  </div>
+                  <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+                    {bill.lines.map((line) => (
+                      <li key={line.id} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-slate-600">{line.subscription.property.name}</span>
+                        <span className="tabular-nums text-slate-900">{formatMoney(line.total - line.amountPaid)}</span>
+                      </li>
+                    ))}
+                    {bill.credit > 0 && (
+                      <li className="flex justify-between text-xs font-medium text-emerald-700">
+                        <span>Referral credit applied</span>
+                        <span className="tabular-nums">−{formatMoney(bill.credit)}</span>
+                      </li>
+                    )}
+                    {bill.lateFee > 0 && (
+                      <li className="flex justify-between text-xs font-medium text-rose-700">
+                        <span>Late fee included ({LATE_FEE_PERCENT}%)</span>
+                        <span className="tabular-nums">{formatMoney(bill.lateFee)}</span>
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {payUnavailable && (
         <Card className="border-amber-200 bg-amber-50/50">
@@ -607,14 +695,6 @@ export default async function SubscriptionPage() {
                             Receipt
                           </a>
                         )}
-                        {!payUnavailable && PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
-                          <PayInvoiceButton
-                            invoiceId={invoice.id}
-                            number={invoice.number}
-                            amount={invoice.total - invoice.amountPaid}
-                            demo={demo}
-                          />
-                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -671,17 +751,6 @@ export default async function SubscriptionPage() {
                     <p className="mt-1 text-right text-[11px] font-medium text-emerald-700">
                       Referral reward −{formatMoney(invoice.discount)}
                     </p>
-                  )}
-                  {!payUnavailable && PAYABLE.includes(invoice.status) && invoice.total > invoice.amountPaid && (
-                    <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
-                      <PayInvoiceButton
-                        invoiceId={invoice.id}
-                        number={invoice.number}
-                        amount={invoice.total - invoice.amountPaid}
-                        demo={demo}
-                        size="default"
-                      />
-                    </div>
                   )}
                 </li>
               )

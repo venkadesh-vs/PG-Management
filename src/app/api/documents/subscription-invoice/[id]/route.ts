@@ -60,13 +60,12 @@ export const GET = route(
     const isDemo = invoice.payments.some((p) => p.isDemo)
 
     // A referral reward is a discount on the price, shown before GST.
+    // Price, then referral credit off it, then any late fee, before GST.
+    const price = invoice.amount + invoice.discount - invoice.lateFee
     const totals: [string, string, boolean?][] = [
-      ...(invoice.discount > 0
-        ? ([
-            ['Subscription price', rs(invoice.amount + invoice.discount)],
-            ['Less: referral discount', `- ${rs(invoice.discount)}`],
-          ] as [string, string][])
-        : []),
+      ...(invoice.discount > 0 || invoice.lateFee > 0 ? ([['Subscription price', rs(price)]] as [string, string][]) : []),
+      ...(invoice.discount > 0 ? ([['Less: referral credit', `- ${rs(invoice.discount)}`]] as [string, string][]) : []),
+      ...(invoice.lateFee > 0 ? ([['Late fee (1%)', rs(invoice.lateFee)]] as [string, string][]) : []),
       ['Taxable value', rs(invoice.amount)],
     ]
     if (invoice.tax > 0) {
@@ -114,7 +113,7 @@ export const GET = route(
         {
           label: `StayFlow subscription - ${invoice.subscription.property.name} (${formatDate(invoice.periodStart)} to ${formatDate(invoice.periodEnd)}) - SAC ${SAAS_SAC}`,
           qty: 1,
-          amount: invoice.amount + invoice.discount,
+          amount: price,
         },
       ],
       totals,

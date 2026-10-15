@@ -39,6 +39,7 @@ import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { RestrictedGate } from './restricted-gate'
 import { MobileBottomNav } from './mobile-bottom-nav'
 import { QuickAction, type ShellAccess } from './quick-action'
+import { HowItWorks } from './how-it-works'
 
 export type { ShellAccess }
 
@@ -189,6 +190,7 @@ export function AppShell({
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
+            {pathname.startsWith('/app') && <HowItWorks area="owner" />}
             <button
               type="button"
               onClick={() => setSearchOpen(true)}

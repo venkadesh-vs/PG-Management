@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Gift, IndianRupee, Send, UserPlus } from 'lucide-react'
+import { Gift, Hourglass, IndianRupee, Send, UserPlus } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { publicEnv } from '@/lib/public-env'
 import { referralLink, REFERRAL_STATUS_LABEL } from '@/lib/referrals'
@@ -17,7 +17,6 @@ export const metadata: Metadata = { title: 'Refer & earn' }
 const STATUS_BADGE = {
   PENDING: 'warning',
   EARNED: 'success',
-  APPLYING: 'blue',
   APPLIED: 'default',
   CANCELLED: 'default',
 } as const
@@ -31,7 +30,7 @@ export default async function ReferralsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Refer & earn"
-        subtitle={`Invite another PG owner. When they pay their first month, your next month is ${data.percent}% off.`}
+        subtitle={`Invite up to ${data.slots.limit} PG owners. When one pays their first month, you get ${data.percent}% of it as credit on your bill.`}
         icon="gift"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Refer & earn' }]}
       />
@@ -44,13 +43,13 @@ export default async function ReferralsPage() {
               {data.percent}% off one month for every PG owner you bring
             </p>
             <h2 className="mt-3 font-display text-xl font-semibold tracking-tight text-slate-900">
-              Your bill of ₹8,000 becomes ₹4,000 that month.
+              Your friend pays ₹14,000. You get ₹7,000 off your next bill.
             </h2>
             <ol className="mt-4 space-y-3 text-sm text-slate-700">
               {[
                 [Send, 'Share your code or link with a PG owner you know.'],
                 [UserPlus, 'They sign up (or book a demo) with your code and start their free trial.'],
-                [IndianRupee, `When they pay their first month, all your PGs' bills for your next month are ${data.percent}% off — automatically.`],
+                [IndianRupee, `When they pay their first month, ${data.percent}% of what they paid comes off your bills as credit, up to half of each bill. Anything left carries to the next one.`],
               ].map(([Icon, text], i) => {
                 const I = Icon as typeof Send
                 return (
@@ -66,15 +65,47 @@ export default async function ReferralsPage() {
           </div>
           <div className="min-w-0 space-y-2">
             <p className="text-sm font-semibold text-slate-900">Your referral code</p>
-            <ShareReferral code={data.code} link={link} percent={data.percent} />
+            {data.slots.expired ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                  <Hourglass className="size-4" />
+                  Your referral code has expired
+                </p>
+                <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-amber-900/50 line-through">{data.code}</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                  It has been used by {data.slots.limit} PG owners, the most one code allows. Every reward you have earned is
+                  still applied to your bills.
+                </p>
+              </div>
+            ) : (
+              <ShareReferral code={data.code} link={link} percent={data.percent} />
+            )}
+            <div className="pt-2">
+              <div className="flex items-center justify-between text-xs font-medium text-slate-600">
+                <span>
+                  Used by {data.slots.used} of {data.slots.limit} PG owners
+                </span>
+                <span className={data.slots.expired ? 'text-amber-700' : 'text-emerald-700'}>
+                  {data.slots.expired ? 'Expired' : `${data.slots.left} left`}
+                </span>
+              </div>
+              <div className="mt-1.5 grid grid-cols-5 gap-1">
+                {Array.from({ length: data.slots.limit }, (_, i) => (
+                  <span
+                    key={i}
+                    className={i < data.slots.used ? 'h-2 rounded-full bg-gradient-to-r from-marigold-300 to-marigold-400' : 'h-2 rounded-full bg-slate-200'}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       <StatGrid cols={4}>
         <StatCard label="Owners joined" value={data.totals.joined} icon="users" hint="With your code" />
-        <StatCard label="Rewards earned" value={data.totals.earned} icon="gift" tone="emerald" hint="They paid their first month" />
-        <StatCard label="Waiting to use" value={data.totals.waiting} icon="calendar" hint="Applies to your next bills" />
+        <StatCard label="Credit earned" value={data.totals.credit} format="money" icon="gift" tone="emerald" hint={`${data.totals.earned} paid their first month`} />
+        <StatCard label="Credit left" value={data.balance} format="money" icon="calendar" hint="Comes off your next bill" />
         <StatCard label="You saved" value={data.totals.saved} format="money" icon="wallet" tone="emerald" />
       </StatGrid>
 
@@ -100,19 +131,12 @@ export default async function ReferralsPage() {
                       {r.city ? ` · ${r.city}` : ''}
                       {r.earnedAt ? ` · paid ${formatDate(r.earnedAt)}` : ''}
                     </p>
-                    {r.bills.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
-                        {r.bills.map((b) => (
-                          <li key={b} className="text-[11px] text-slate-500">{b}</li>
-                        ))}
-                      </ul>
-                    )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <Badge variant={STATUS_BADGE[r.status]} size="sm">
                       {REFERRAL_STATUS_LABEL[r.status]}
                     </Badge>
-                    {r.saved > 0 && <span className="text-xs font-semibold text-emerald-700">Saved {formatMoney(r.saved)}</span>}
+                    {r.credit > 0 && <span className="text-xs font-semibold text-emerald-700">{formatMoney(r.credit)} credit</span>}
                   </div>
                 </li>
               ))}
@@ -125,10 +149,10 @@ export default async function ReferralsPage() {
         <CardContent className="space-y-1.5 p-5 text-xs text-slate-500">
           <p className="text-sm font-semibold text-slate-900">How the reward works</p>
           <p>· The reward unlocks when the owner you referred pays their first StayFlow bill. Signing up alone does not count.</p>
-          <p>· It takes {data.percent}% off each of your PGs&apos; bills for one month, starting with your next bill. It never goes below zero.</p>
-          <p>· Refer more owners and each reward covers another month. Rewards do not stack on the same bill.</p>
-          <p>· A PG on live AutoPay is charged a fixed amount by the bank, so its bill is not discounted. The reward waits for a bill you pay with Pay now.</p>
-          <p>· You cannot use your own code, and each new owner can be referred once.</p>
+          <p>· You get {data.percent}% of the new owner&apos;s first month as credit, the same whether you have one PG or many. It takes up to half off each combined bill, so you always pay at least half; anything left carries to the next bill until it is used up. Example: a ₹7,000 bill with ₹20,000 credit is ₹3,500 for five months, then ₹4,500.</p>
+          <p>· Each owner who pays adds more credit to your balance.</p>
+          <p>· Credit is used on bills you pay with Pay now or UPI. A PG still on its own fixed AutoPay mandate is charged in full.</p>
+          <p>· Each code works for up to 5 new PG owners, then it expires. You cannot use your own code, and each new owner can be referred once.</p>
         </CardContent>
       </Card>
     </div>

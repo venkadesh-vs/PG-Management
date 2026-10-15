@@ -9,6 +9,7 @@ import {
   IndianRupee,
   LayoutDashboard,
   MessageSquareWarning,
+  Play,
   PlayCircle,
   Users,
   UtensilsCrossed,
@@ -17,6 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { EASE_OUT } from '@/components/motion/reveal'
+import { HowItWorks } from '@/components/app/how-it-works'
 import { BED_STYLES, BrowserFrame, Pill, Tilt, type BedState } from './kit'
 
 /**
@@ -86,6 +88,25 @@ export function Hero() {
                 Book a demo
               </a>
             </Button>
+          </motion.div>
+
+          <motion.div {...rise(0.26)} className="mt-4 flex justify-center lg:justify-start">
+            <HowItWorks
+              area="owner"
+              videoId="setup"
+              trigger={(open) => (
+                <button
+                  type="button"
+                  onClick={open}
+                  className="group inline-flex items-center gap-2 text-sm font-medium text-white/75 transition hover:text-white"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-full bg-marigold-300 text-ink-950 shadow-[0_0_24px_-4px_rgb(252_191_77/0.8)] transition group-hover:scale-105">
+                    <Play className="ml-0.5 size-3.5 fill-current" aria-hidden />
+                  </span>
+                  Watch the 3-minute setup · English, தமிழ், हिन्दी, తెలుగు
+                </button>
+              )}
+            />
           </motion.div>
 
           <motion.ul {...rise(0.3)} className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-white/60 lg:justify-start">

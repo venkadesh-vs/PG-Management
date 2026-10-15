@@ -53,7 +53,18 @@ import { downgradeBlockers, type PlanLimits } from '@/lib/plan-entitlements'
 import { assertWithinPlan, countUsage } from './plan-limits'
 import { failedWebhooks, finishWebhook, reclaimFailedWebhook } from './webhook-log'
 import { ownerBillingEvents } from './owner-billing'
-import { closeRewardIfComplete, markReferralEarned, referralDiscountForBill } from './referrals'
+import { markReferralEarned, takeReferralCredit } from './referrals'
+import {
+  allocate,
+  clampDueDay,
+  DEFAULT_DUE_DAY,
+  lateFee as lateFeeFor,
+  LATE_FEE_AFTER_DAYS,
+  LATE_FEE_PERCENT,
+  nextBillDate,
+  PAUSE_AFTER_DAYS,
+  prorated,
+} from '@/lib/owner-bill'
 
 type Tx = Prisma.TransactionClient
 
@@ -112,6 +123,42 @@ export async function priceForProperty(
 }
 
 /** Creates the subscription for a newly added PG, starting its trial. */
+/** Bills are raised this many days before the owner's due day. */
+export const BILL_LEAD_DAYS = 5
+
+/** The owner's chosen due day (1–10) for their one combined bill. */
+export async function ownerDueDay(organizationId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  const row = await db.orgSetting.findUnique({ where: { organizationId }, select: { billingDueDay: true } })
+  return clampDueDay(row?.billingDueDay ?? DEFAULT_DUE_DAY)
+}
+
+/**
+ * Puts every PG of an owner on the same billing day. A PG whose next bill
+ * date is on another day moves forward to the owner's due day; the days in
+ * between are charged pro rata on that first combined bill (alignedFrom), so
+ * nothing is free and nothing is charged twice. PGs on a live Razorpay
+ * mandate keep their own date (the gateway charges them on its schedule).
+ */
+export async function alignOwnerBilling(organizationId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  const dueDay = await ownerDueDay(organizationId, db)
+  const subs = await db.subscription.findMany({
+    where: { organizationId, status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] } },
+    select: { id: true, nextBillingDate: true, alignedFrom: true, gatewaySubscriptionId: true, mandateStatus: true, autopayEnabled: true },
+  })
+  let moved = 0
+  for (const sub of subs) {
+    if (sub.gatewaySubscriptionId && sub.autopayEnabled && sub.mandateStatus === 'ACTIVE') continue
+    const target = nextBillDate(dueDay, sub.nextBillingDate)
+    if (startOfDay(sub.nextBillingDate).getTime() === target.getTime()) continue
+    await db.subscription.update({
+      where: { id: sub.id },
+      data: { nextBillingDate: target, alignedFrom: sub.alignedFrom ?? sub.nextBillingDate },
+    })
+    moved++
+  }
+  return { dueDay, moved }
+}
+
 export async function createSubscriptionForProperty(params: {
   propertyId: string
   planId?: string
@@ -132,6 +179,10 @@ export async function createSubscriptionForProperty(params: {
   const trialEndsAt = plan.trialDays > 0 ? addDays(now, plan.trialDays) : null
   const periodStart = now
   const periodEnd = addMonths(now, CYCLE_MONTHS[plan.billingCycle] ?? 1)
+  // Billing starts when the trial ends, on the owner's one billing day; the
+  // days in between are charged pro rata on that first combined bill.
+  const billingStarts = startOfDay(trialEndsAt ?? now)
+  const firstBill = nextBillDate(await ownerDueDay(property.organizationId, db), billingStarts)
 
   const subscription = await db.subscription.create({
     data: {
@@ -144,7 +195,8 @@ export async function createSubscriptionForProperty(params: {
       trialEndsAt,
       currentPeriodStart: periodStart,
       currentPeriodEnd: periodEnd,
-      nextBillingDate: trialEndsAt ?? periodEnd,
+      nextBillingDate: firstBill,
+      alignedFrom: firstBill.getTime() > billingStarts.getTime() ? billingStarts : null,
     },
   })
 
@@ -675,6 +727,86 @@ export async function settleSubscriptionInvoice(
   return { invoice: { ...invoice, ...updated }, alreadyPaid: false, reactivated }
 }
 
+type Db = Prisma.TransactionClient | typeof prisma
+
+/**
+ * The unpaid PG lines of one combined bill: the same owner, due the same day
+ * as `anchorInvoiceId`. Oldest first, so payments always settle in order.
+ */
+export async function billLines(db: Db, organizationId: string, anchorInvoiceId: string) {
+  const anchor = await db.subscriptionInvoice.findUnique({
+    where: { id: anchorInvoiceId },
+    select: { dueDate: true, subscription: { select: { organizationId: true } } },
+  })
+  if (!anchor || anchor.subscription.organizationId !== organizationId) throw new NotFoundError('Invoice not found')
+  const day = startOfDay(anchor.dueDate)
+  return db.subscriptionInvoice.findMany({
+    where: {
+      subscription: { organizationId },
+      status: { in: [...UNPAID_INVOICE] },
+      dueDate: { gte: day, lt: addDays(day, 1) },
+    },
+    include: { subscription: { include: { property: true, organization: true } } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+}
+
+const lineDue = (i: { total: number; amountPaid: number }) => Math.max(0, i.total - i.amountPaid)
+
+/**
+ * One payment for a whole combined bill: spread over its PG lines oldest
+ * first. A gateway payment id is suffixed per line (#2, #3...) so every line
+ * records its share once and the unique key still guards replays.
+ */
+export async function settleBill(
+  tx: Tx,
+  params: {
+    lineIds: string[]
+    amount: number
+    method: PaymentMethodKind
+    provider?: string | null
+    gatewayPaymentId?: string | null
+    isDemo: boolean
+    actor: { id?: string; name: string }
+    now?: Date
+  },
+) {
+  const lines = await tx.subscriptionInvoice.findMany({
+    where: { id: { in: params.lineIds } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  if (!lines.length) throw new NotFoundError('Invoice not found')
+  const { parts, unallocated } = allocate(
+    params.amount,
+    lines.map((l) => ({ id: l.id, due: lineDue(l) })),
+  )
+  // Nothing owed (paid twice): record it on the first line, which alerts the admins.
+  if (!parts.length) parts.push({ id: lines[0].id, amount: params.amount })
+  else if (unallocated > 0) parts[parts.length - 1].amount += unallocated
+
+  const settled = []
+  for (const [i, part] of parts.entries()) {
+    settled.push(
+      await settleSubscriptionInvoice(tx, {
+        invoiceId: part.id,
+        amount: part.amount,
+        method: params.method,
+        provider: params.provider,
+        gatewayPaymentId: params.gatewayPaymentId ? (i === 0 ? params.gatewayPaymentId : `${params.gatewayPaymentId}#${i + 1}`) : null,
+        isDemo: params.isDemo,
+        actor: params.actor,
+        now: params.now,
+      }),
+    )
+  }
+  return {
+    invoice: settled[0].invoice,
+    alreadyPaid: settled.every((r) => r.alreadyPaid),
+    reactivated: settled.some((r) => r.reactivated),
+    lines: settled.length,
+  }
+}
+
 /**
  * Claims the subscription's next billing cycle and raises its invoice. The
  * conditional update on nextBillingDate lets only one caller (a billing run
@@ -720,6 +852,7 @@ async function claimCycleAndInvoice(
       billingCycle: cycle,
       pendingPlanId: null,
       pendingBillingCycle: null,
+      alignedFrom: null,
     },
   })
   if (claim.count !== 1) return null
@@ -750,36 +883,30 @@ async function claimCycleAndInvoice(
     select: { gstin: true, state: true },
   })
   // amount = taxable value for the whole cycle; tax = 18% GST when registered.
-  // A referral reward comes off the taxable value, before GST.
-  const gross = cyclePrice(amount, cycle, plan.yearlyDiscountPercent)
-  const reward = await referralDiscountForBill(tx, {
-    organizationId: subscription.organizationId,
-    subscriptionId: subscription.id,
-    monthlyAmount: amount,
-    taxable: gross,
-    periodStart,
-    liveAutopay: current.autopayEnabled && current.mandateStatus === 'ACTIVE' && Boolean(current.gatewaySubscriptionId),
-  })
-  const gst = subscriptionGst(organization ?? {}, gross - (reward?.discount ?? 0))
-  const invoice = await tx.subscriptionInvoice.create({
+  // Days between joining the owner's billing day and this period are added
+  // pro rata; referral credit then comes off the taxable value, before GST.
+  const bridge = current.alignedFrom && startOfDay(current.alignedFrom) < periodStart ? prorated(amount, current.alignedFrom, periodStart) : 0
+  const gross = cyclePrice(amount, cycle, plan.yearlyDiscountPercent) + bridge
+  const liveAutopay = current.autopayEnabled && current.mandateStatus === 'ACTIVE' && Boolean(current.gatewaySubscriptionId)
+  const credit = liveAutopay ? 0 : await takeReferralCredit(tx, subscription.organizationId, gross)
+  const gst = subscriptionGst(organization ?? {}, gross - credit)
+  return tx.subscriptionInvoice.create({
     data: {
-      discount: reward?.discount ?? 0,
-      discountLabel: reward?.label ?? null,
-      referralRewardId: reward?.rewardId ?? null,
+      discount: credit,
+      discountLabel: credit > 0 ? 'Referral credit' : null,
       subscriptionId: subscription.id,
       number,
       periodStart,
       periodEnd,
-      issueDate: periodStart,
-      dueDate: startOfDay(addDays(periodStart, 3)),
+      issueDate: startOfDay(new Date()),
+      // One due date for every PG of the owner: their chosen day.
+      dueDate: periodStart,
       amount: gst.taxable,
       tax: gst.tax,
       total: gst.total,
       status: 'PENDING',
     },
   })
-  if (reward) await closeRewardIfComplete(tx, reward.rewardId, subscription.organizationId)
-  return invoice
 }
 
 /**
@@ -791,10 +918,22 @@ async function claimCycleAndInvoice(
  */
 export async function runSubscriptionBilling(params?: { now?: Date; organizationId?: string }) {
   const now = params?.now ?? new Date()
+  // Every owner's PGs share one billing day; line up any that are not yet.
+  const owners = await prisma.subscription.findMany({
+    where: {
+      status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] },
+      ...(params?.organizationId ? { organizationId: params.organizationId } : {}),
+    },
+    select: { organizationId: true },
+    distinct: ['organizationId'],
+  })
+  for (const o of owners) await alignOwnerBilling(o.organizationId)
+
+  // The combined bill is raised BILL_LEAD_DAYS before its due day.
   const due = await prisma.subscription.findMany({
     where: {
       status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] },
-      nextBillingDate: { lte: now },
+      nextBillingDate: { lte: addDays(now, BILL_LEAD_DAYS) },
       ...(params?.organizationId ? { organizationId: params.organizationId } : {}),
     },
     include: { property: true, plan: true, organization: true },
@@ -850,7 +989,7 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
       // webhook (subscription.charged) settles this invoice. We never debit
       // ourselves; if no charge arrives by graceEndsAt, enforceGracePeriods
       // suspends exactly as for a manual invoice.
-      const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
+      const graceEndsAt = addDays(periodStart, PAUSE_AFTER_DAYS)
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -874,7 +1013,7 @@ export async function runSubscriptionBilling(params?: { now?: Date; organization
     // it): the owner pays the invoice with Pay now. PAST_DUE ("payment due")
     // until the due date, then GRACE until graceEndsAt, then SUSPENDED.
     if (!demo || !mandateActive || !demoPaymentsAllowed()) {
-      const graceEndsAt = addDays(periodStart, subscription.plan.graceDays)
+      const graceEndsAt = addDays(periodStart, PAUSE_AFTER_DAYS)
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -1113,6 +1252,47 @@ export async function retryFailedCharges(now = new Date()) {
  *  - PAST_DUE / GRACE / ACTIVE (Razorpay AutoPay waiting for a charge) with an
  *    unpaid invoice and graceEndsAt passed → SUSPENDED (org suspended too).
  */
+/**
+ * Due day + LATE_FEE_AFTER_DAYS with the combined bill still unpaid: a
+ * one-time late fee of LATE_FEE_PERCENT on each unpaid line (so the same
+ * percent of the whole bill), GST recomputed. lateFeeAt makes it once only.
+ */
+export async function applyLateFees(now = new Date()) {
+  const lastDueDay = addDays(startOfDay(now), -LATE_FEE_AFTER_DAYS)
+  const lines = await prisma.subscriptionInvoice.findMany({
+    where: { status: { in: [...UNPAID_INVOICE] }, lateFeeAt: null, dueDate: { lt: addDays(lastDueDay, 1) } },
+    include: { subscription: { include: { organization: true, property: true } } },
+  })
+  const added = new Map<string, number>()
+  for (const line of lines) {
+    const fee = lateFeeFor(line.amount)
+    if (fee <= 0) continue
+    const gst = subscriptionGst(line.subscription.organization, line.amount + fee)
+    const done = await prisma.subscriptionInvoice.updateMany({
+      where: { id: line.id, lateFeeAt: null, status: { in: [...UNPAID_INVOICE] } },
+      data: { lateFee: fee, lateFeeAt: now, amount: gst.taxable, tax: gst.tax, total: gst.total },
+    })
+    if (done.count !== 1) continue
+    const orgId = line.subscription.organizationId
+    added.set(orgId, (added.get(orgId) ?? 0) + (gst.total - line.total))
+    await recordActivity({
+      organizationId: orgId,
+      propertyId: line.subscription.propertyId,
+      actorName: 'Billing',
+      event: 'INVOICE_ADJUSTED',
+      entityType: 'SubscriptionInvoice',
+      entityId: line.id,
+      summary: `${line.number}: ${LATE_FEE_PERCENT}% late fee ${formatMoney(fee)} added (${line.subscription.property.name})`,
+      before: { amount: line.amount, total: line.total },
+      after: { amount: gst.taxable, total: gst.total, lateFee: fee },
+    })
+  }
+  for (const [organizationId, amount] of added) {
+    await ownerBillingEvents.lateFeeAdded(organizationId, amount, now)
+  }
+  return { lines: lines.length, owners: added.size }
+}
+
 export async function enforceGracePeriods(now = new Date()) {
   const toGrace = await prisma.subscription.findMany({
     where: {
@@ -1207,14 +1387,17 @@ export async function markSubscriptionInvoicePaid(params: {
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.subscriptionInvoice.findUnique({
       where: { id: params.invoiceId },
-      select: { status: true, total: true, amountPaid: true },
+      select: { status: true, subscription: { select: { organizationId: true } } },
     })
     if (!invoice) throw new NotFoundError('Invoice not found')
-    if (invoice.status === 'PAID') throw new ConflictError('This invoice is already paid')
-    due = Math.max(0, invoice.total - invoice.amountPaid)
+    // The whole combined bill this line belongs to.
+    const lines = await billLines(tx, invoice.subscription.organizationId, params.invoiceId)
+    due = lines.reduce((sum, l) => sum + lineDue(l), 0)
+    if (!lines.length || due <= 0) throw new ConflictError('This bill is already paid')
     // Same settle + reactivation path as Pay now and AutoPay charges.
-    return settleSubscriptionInvoice(tx, {
-      invoiceId: params.invoiceId,
+    return settleBill(tx, {
+      lineIds: lines.map((l) => l.id),
+      amount: due,
       method: params.method ?? 'BANK_TRANSFER',
       provider: params.reference ? `manual:${params.reference.slice(0, 60)}` : 'manual',
       isDemo: paymentMode() === 'demo',
@@ -1280,20 +1463,14 @@ export async function platformMetrics() {
 // Pay now (one-off payment of a subscription invoice)
 // --------------------------------------------------------------------------
 
+/** The whole combined bill that `invoiceId` belongs to, with what is still owed. */
 async function loadPayableInvoice(invoiceId: string, organizationId: string) {
-  const invoice = await prisma.subscriptionInvoice.findUnique({
-    where: { id: invoiceId },
-    include: { subscription: { include: { property: true, organization: true } } },
-  })
-  if (!invoice || invoice.subscription.organizationId !== organizationId) {
-    throw new NotFoundError('Invoice not found')
-  }
-  if (!(UNPAID_INVOICE as readonly string[]).includes(invoice.status)) {
-    throw new ConflictError('This invoice is not awaiting payment')
-  }
-  const due = invoice.total - invoice.amountPaid
-  if (due <= 0) throw new ConflictError('This invoice is already paid')
-  return { invoice, due }
+  const lines = await billLines(prisma, organizationId, invoiceId)
+  const due = lines.reduce((sum, l) => sum + lineDue(l), 0)
+  if (!lines.length || due <= 0) throw new ConflictError('This bill is already paid')
+  // The bill is named after this line; paying it pays every line.
+  const invoice = lines.find((l) => l.id === invoiceId) ?? lines[0]
+  return { invoice, lines, due }
 }
 
 export type InvoiceCheckout =
@@ -1318,7 +1495,7 @@ export async function startInvoiceCheckout(params: {
   organizationId: string
   payer: { name: string; email: string }
 }): Promise<InvoiceCheckout> {
-  const { invoice, due } = await loadPayableInvoice(params.invoiceId, params.organizationId)
+  const { invoice, lines, due } = await loadPayableInvoice(params.invoiceId, params.organizationId)
   const creds = platformRazorpay()
   if (!creds) return { mode: 'demo', invoiceId: invoice.id, number: invoice.number, amount: due }
 
@@ -1330,16 +1507,18 @@ export async function startInvoiceCheckout(params: {
 
   // Re-use the open order for this invoice when the amount still matches, so
   // retrying checkout does not litter the account with orders.
+  // One order for the whole bill, linked to every line so settlement finds them.
   let orderId: string | null = null
-  if (invoice.gatewayOrderId) {
+  const shared = lines.every((l) => l.gatewayOrderId && l.gatewayOrderId === invoice.gatewayOrderId)
+  if (invoice.gatewayOrderId && shared) {
     const existing = await rzpFetchOrder(creds, invoice.gatewayOrderId).catch(() => null)
     if (existing && existing.status !== 'paid' && existing.amount === toPaise(due)) orderId = existing.id
   }
   if (!orderId) {
     const order = await createOrder({ amount: due, receipt: invoice.number, notes })
     orderId = order.id
-    await prisma.subscriptionInvoice.update({
-      where: { id: invoice.id },
+    await prisma.subscriptionInvoice.updateMany({
+      where: { id: { in: lines.map((l) => l.id) } },
       data: { gatewayOrderId: orderId },
     })
   }
@@ -1354,7 +1533,7 @@ export async function startInvoiceCheckout(params: {
     orderId,
     amountPaise: toPaise(due),
     currency: 'INR',
-    description: `${invoice.number} · ${invoice.subscription.property.name}`,
+    description: lines.length > 1 ? `StayFlow bill · ${lines.length} PGs` : `${invoice.number} · ${invoice.subscription.property.name}`,
     prefill: {
       name: params.payer.name || org.ownerName,
       email: params.payer.email || org.contactEmail,
@@ -1413,10 +1592,13 @@ async function settleInvoiceFromPlatformPayment(
   })
   if (exists) return { status: 'duplicate' }
 
+  // Every line the order was raised for (a combined bill); older orders name one invoice.
+  const linked = await prisma.subscriptionInvoice.findMany({ where: { gatewayOrderId: payment.order_id }, select: { id: true } })
+  const lineIds = linked.length ? linked.map((l) => l.id) : [notes.invoiceId]
   try {
     const result = await prisma.$transaction((tx) =>
-      settleSubscriptionInvoice(tx, {
-        invoiceId: notes.invoiceId,
+      settleBill(tx, {
+        lineIds,
         amount: fromPaise(payment.amount),
         method: payment.method === 'upi' ? 'UPI' : payment.method === 'card' ? 'CARD' : 'GATEWAY',
         provider: 'razorpay',
@@ -1478,10 +1660,10 @@ export async function payInvoiceDemo(params: {
   actor: { id?: string; name: string }
 }): Promise<SettleOutcome> {
   if (!demoPaymentsAllowed()) throw new ConflictError(PAYMENT_NOT_SET_UP)
-  const { invoice, due } = await loadPayableInvoice(params.invoiceId, params.organizationId)
+  const { invoice, lines, due } = await loadPayableInvoice(params.invoiceId, params.organizationId)
   const result = await prisma.$transaction((tx) =>
-    settleSubscriptionInvoice(tx, {
-      invoiceId: invoice.id,
+    settleBill(tx, {
+      lineIds: lines.map((l) => l.id),
       amount: due,
       method: 'GATEWAY',
       provider: 'demo',

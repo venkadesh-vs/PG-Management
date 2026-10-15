@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import {
+  alignOwnerBilling,
   cancelAutopay,
   cancelSubscription,
   changeSubscription,
@@ -58,6 +59,8 @@ const schema = z.discriminatedUnion('action', [
     reason: z.string().trim().max(500).optional(),
   }),
   z.object({ action: z.literal('RESUME_SUBSCRIPTION'), subscriptionId: z.string().min(1) }),
+  // The day (1–10) the owner's one combined bill falls due each month.
+  z.object({ action: z.literal('SET_DUE_DAY'), day: z.coerce.number().int().min(1).max(10) }),
 ])
 
 /**
@@ -73,6 +76,16 @@ export const POST = route(
     if (!organizationId) throw new ForbiddenError()
 
     try {
+      if (body.action === 'SET_DUE_DAY') {
+        await prisma.orgSetting.upsert({
+          where: { organizationId },
+          create: { organizationId, billingDueDay: body.day },
+          update: { billingDueDay: body.day },
+        })
+        // Every PG's next bill moves to the new day; days in between are pro-rated.
+        const { moved } = await alignOwnerBilling(organizationId)
+        return ok({ message: `Your StayFlow bill is now due on day ${body.day} of every month${moved ? ' for all your PGs' : ''}.` })
+      }
       if (body.action === 'PAY_INVOICE_START') {
         return ok(
           await startInvoiceCheckout({

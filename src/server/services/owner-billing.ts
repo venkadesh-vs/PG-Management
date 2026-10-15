@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { serverEnv } from '@/lib/env'
 import { ConflictError, NotFoundError } from '@/lib/tenancy'
-import { formatDate, formatMoney, startOfDay } from '@/lib/utils'
+import { formatDate, formatMoney, startOfDay, toISODate } from '@/lib/utils'
+import { LATE_FEE_PERCENT } from '@/lib/owner-bill'
 import { log } from '@/lib/logger'
 import {
   DEFAULT_REMINDER_SCHEDULE,
@@ -139,6 +140,8 @@ export type OwnerBillingData = {
   daysBefore?: number
   daysLeft?: number
   reactivated?: boolean
+  /** "5 Nov": the due date, for overdue warnings. */
+  dueLabel?: string
 }
 
 type Rendered = {
@@ -197,6 +200,24 @@ function render(kind: OwnerBillingKind, d: OwnerBillingData): Rendered {
         variables: (name) => [name, d.propertyName, amount, link],
         subject: `Your StayFlow account for ${d.propertyName} is paused`,
       }
+    case 'OVERDUE_WARNING': {
+      return {
+        title: 'Payment overdue · pay to avoid the late fee',
+        body: `${amount} for ${d.propertyName} was due on ${d.dueLabel ?? ''}. Pay before ${date} to avoid a ${LATE_FEE_PERCENT}% late fee.`,
+        template: 'owner_invoice_due',
+        variables: (name) => [name, d.invoiceNumber ?? '', amount, d.propertyName, `before ${date}`, link],
+        subject: `StayFlow payment overdue · pay before ${date} to avoid a late fee`,
+      }
+    }
+    case 'LATE_FEE_ADDED': {
+      return {
+        title: 'Late fee added',
+        body: `A ${LATE_FEE_PERCENT}% late fee of ${amount} was added to your StayFlow bill. Pay soon to keep your account active.`,
+        template: 'owner_grace_reminder',
+        variables: (name) => [name, amount, d.propertyName, date, '', link],
+        subject: `Late fee added to your StayFlow bill`,
+      }
+    }
     case 'PAYMENT_RECEIVED': {
       const status = d.reactivated ? 'Your account is active again.' : 'Your account is active.'
       return {
@@ -319,58 +340,65 @@ export async function runOwnerBillingReminders(now = new Date(), organizationId?
   })
 
   let sent = 0
+  // Trial endings stay per PG (each PG has its own trial).
   for (const sub of subscriptions) {
     const due = remindersDue({
       today,
-      subscription: {
-        id: sub.id,
-        status: sub.status,
-        trialEndsAt: sub.trialEndsAt,
-        graceEndsAt: sub.graceEndsAt,
-        autopay: sub.autopayEnabled && sub.mandateStatus === 'ACTIVE',
-      },
-      invoices: sub.invoices.map((i) => ({
-        id: i.id,
-        number: i.number,
-        dueDate: i.dueDate,
-        balance: Math.max(0, i.total - i.amountPaid),
-      })),
+      subscription: { id: sub.id, status: sub.status, trialEndsAt: sub.trialEndsAt, graceEndsAt: sub.graceEndsAt, autopay: false },
+      invoices: [],
       schedule,
     })
     for (const reminder of due) {
+      if (reminder.kind !== 'TRIAL_ENDING') continue
+      const result = await notifyOwnerBilling(
+        sub.organizationId,
+        'TRIAL_ENDING',
+        { propertyName: sub.property.name, amount: sub.amount, date: reminder.trialEndsAt, daysBefore: reminder.daysBefore },
+        { key: reminder.key, subscriptionId: sub.id },
+      )
+      if (result.sent) sent++
+    }
+  }
+
+  // Bill reminders: one combined bill per owner per due day, so one message.
+  const bills = new Map<string, { organizationId: string; subs: typeof subscriptions; lines: (typeof subscriptions)[number]['invoices'] }>()
+  for (const sub of subscriptions) {
+    for (const line of sub.invoices) {
+      const key = `${sub.organizationId}:${toISODate(startOfDay(line.dueDate))}`
+      const bill = bills.get(key) ?? { organizationId: sub.organizationId, subs: [], lines: [] }
+      if (!bill.subs.includes(sub)) bill.subs.push(sub)
+      bill.lines.push(line)
+      bills.set(key, bill)
+    }
+  }
+  for (const bill of bills.values()) {
+    const anchor = [...bill.lines].sort((a, b) => a.id.localeCompare(b.id))[0]
+    const balance = bill.lines.reduce((sum, l) => sum + Math.max(0, l.total - l.amountPaid), 0)
+    const graced = bill.subs.filter((s) => s.status === 'GRACE' && s.graceEndsAt)
+    const lead = graced[0] ?? bill.subs[0]
+    const autopay = bill.subs.every((s) => s.autopayEnabled && s.mandateStatus === 'ACTIVE')
+    const propertyName = bill.subs.length > 1 ? `your ${bill.subs.length} PGs` : bill.subs[0].property.name
+    const due = remindersDue({
+      today,
+      subscription: { id: lead.id, status: lead.status, trialEndsAt: null, graceEndsAt: lead.graceEndsAt, autopay },
+      invoices: [{ id: anchor.id, number: anchor.number, dueDate: anchor.dueDate, balance }],
+      schedule,
+    })
+    for (const reminder of due) {
+      if (reminder.kind === 'TRIAL_ENDING') continue
+      const base = { propertyName, amount: reminder.invoice.balance, invoiceNumber: reminder.invoice.number }
+      const opts = { key: reminder.key, subscriptionId: lead.id, invoiceId: anchor.id }
       const result =
-        reminder.kind === 'TRIAL_ENDING'
-          ? await notifyOwnerBilling(
-              sub.organizationId,
-              'TRIAL_ENDING',
-              { propertyName: sub.property.name, amount: sub.amount, date: reminder.trialEndsAt, daysBefore: reminder.daysBefore },
-              { key: reminder.key, subscriptionId: sub.id },
-            )
-          : reminder.kind === 'DUE_SOON'
+        reminder.kind === 'DUE_SOON'
+          ? await notifyOwnerBilling(bill.organizationId, 'DUE_SOON', { ...base, date: reminder.invoice.dueDate, daysBefore: reminder.daysBefore }, opts)
+          : reminder.kind === 'OVERDUE_WARNING'
             ? await notifyOwnerBilling(
-                sub.organizationId,
-                'DUE_SOON',
-                {
-                  propertyName: sub.property.name,
-                  amount: reminder.invoice.balance,
-                  invoiceNumber: reminder.invoice.number,
-                  date: reminder.invoice.dueDate,
-                  daysBefore: reminder.daysBefore,
-                },
-                { key: reminder.key, subscriptionId: sub.id, invoiceId: reminder.invoice.id },
+                bill.organizationId,
+                'OVERDUE_WARNING',
+                { ...base, date: reminder.feeDay, dueLabel: formatDate(reminder.invoice.dueDate) },
+                opts,
               )
-            : await notifyOwnerBilling(
-                sub.organizationId,
-                'GRACE_REMINDER',
-                {
-                  propertyName: sub.property.name,
-                  amount: reminder.invoice.balance,
-                  invoiceNumber: reminder.invoice.number,
-                  date: reminder.lastActiveDay,
-                  daysLeft: reminder.daysLeft,
-                },
-                { key: reminder.key, subscriptionId: sub.id, invoiceId: reminder.invoice.id },
-              )
+            : await notifyOwnerBilling(bill.organizationId, 'GRACE_REMINDER', { ...base, date: reminder.lastActiveDay, daysLeft: reminder.daysLeft }, opts)
       if (result.sent) sent++
     }
   }
@@ -431,13 +459,26 @@ export async function paywallState(organizationId: string) {
     total: i.total,
     paid: i.amountPaid,
     balance: Math.max(0, i.total - i.amountPaid),
+    dueDate: i.dueDate,
   }))
   const totalDue = rows.reduce((sum, r) => sum + r.balance, 0)
+  // One combined bill per due day: paid (or claimed) in one go.
+  const byDay = new Map<string, typeof rows>()
+  for (const r of rows) {
+    const key = toISODate(startOfDay(r.dueDate))
+    byDay.set(key, [...(byDay.get(key) ?? []), r])
+  }
+  const bills = [...byDay.values()].map((lines) => ({
+    id: [...lines].sort((a, b) => a.id.localeCompare(b.id))[0].id,
+    number: `Bill due ${formatDate(lines[0].dueDate)}${lines.length > 1 ? ` · ${lines.length} PGs` : ''}`,
+    balance: lines.reduce((sum, l) => sum + l.balance, 0),
+  }))
   const notes = rows.map((r) => r.number).join(', ')
   return {
     organizationName: org.name,
     status: org.status,
     invoices: rows,
+    bills,
     totalDue,
     details,
     upiLink: upiPayLink({
@@ -485,7 +526,17 @@ export async function createPaymentClaim(params: {
   })
   if (pending) throw new ConflictError('We already have your payment details for this invoice and are checking them')
 
-  const amount = Math.max(0, invoice.total - invoice.amountPaid)
+  // The claim covers the whole combined bill this line belongs to.
+  const day = startOfDay(invoice.dueDate)
+  const lines = await prisma.subscriptionInvoice.findMany({
+    where: { subscription: { organizationId: params.organizationId }, status: { in: [...UNPAID] }, dueDate: { gte: day, lt: new Date(day.getTime() + 86_400_000) } },
+    select: { id: true, total: true, amountPaid: true },
+  })
+  const otherPending = await prisma.subscriptionPaymentClaim.findFirst({
+    where: { invoiceId: { in: lines.map((l) => l.id) }, status: 'PENDING' },
+  })
+  if (otherPending) throw new ConflictError('We already have your payment details for this bill and are checking them')
+  const amount = lines.reduce((sum, l) => sum + Math.max(0, l.total - l.amountPaid), 0)
   const claim = await prisma.subscriptionPaymentClaim.create({
     data: {
       organizationId: params.organizationId,
@@ -609,13 +660,38 @@ export async function reviewPaymentClaim(params: {
 }
 
 /** Key-and-send helpers used by the subscription lifecycle. */
+/** The owner's whole unpaid bill due on `dueDate`: total and how many PGs. */
+async function billOn(organizationId: string, dueDate: Date) {
+  const day = startOfDay(dueDate)
+  const lines = await prisma.subscriptionInvoice.findMany({
+    where: { subscription: { organizationId }, status: { in: [...UNPAID] }, dueDate: { gte: day, lt: new Date(day.getTime() + 86_400_000) } },
+    select: { total: true, amountPaid: true, subscriptionId: true, subscription: { select: { property: { select: { name: true } } } } },
+  })
+  const pgs = new Set(lines.map((l) => l.subscriptionId)).size
+  return {
+    amount: lines.reduce((s, l) => s + Math.max(0, l.total - l.amountPaid), 0),
+    propertyName: pgs > 1 ? `your ${pgs} PGs` : (lines[0]?.subscription.property.name ?? 'your PG'),
+    day,
+  }
+}
+
 export const ownerBillingEvents = {
-  invoiceRaised: (sub: { id: string; organizationId: string; propertyName: string }, invoice: { id: string; number: string; total: number; dueDate: Date }) =>
-    notifyOwnerBilling(
+  // Keyed per owner and due day: one message for the whole combined bill.
+  invoiceRaised: async (sub: { id: string; organizationId: string; propertyName: string }, invoice: { id: string; number: string; total: number; dueDate: Date }) => {
+    const bill = await billOn(sub.organizationId, invoice.dueDate)
+    return notifyOwnerBilling(
       sub.organizationId,
       'INVOICE_RAISED',
-      { propertyName: sub.propertyName, amount: invoice.total, invoiceNumber: invoice.number, date: invoice.dueDate },
-      { key: reminderKey.invoiceRaised(invoice.id), subscriptionId: sub.id, invoiceId: invoice.id },
+      { propertyName: bill.propertyName, amount: bill.amount || invoice.total, invoiceNumber: invoice.number, date: invoice.dueDate },
+      { key: `bill:${sub.organizationId}:${toISODate(bill.day)}`, subscriptionId: sub.id, invoiceId: invoice.id },
+    )
+  },
+  lateFeeAdded: (organizationId: string, amount: number, now = new Date()) =>
+    notifyOwnerBilling(
+      organizationId,
+      'LATE_FEE_ADDED',
+      { propertyName: 'your PGs', amount },
+      { key: reminderKey.lateFeeAdded(organizationId, now) },
     ),
   graceStarted: async (sub: { id: string; organizationId: string; propertyName: string; graceEndsAt: Date }, now = new Date()) => {
     const invoice = await prisma.subscriptionInvoice.findFirst({
@@ -634,7 +710,7 @@ export const ownerBillingEvents = {
         date: lastActiveDay(sub.graceEndsAt),
         daysLeft: left,
       },
-      { key: reminderKey.graceStarted(invoice.id), subscriptionId: sub.id, invoiceId: invoice.id },
+      { key: `grace-start:${sub.organizationId}:${toISODate(startOfDay(invoice.dueDate))}`, subscriptionId: sub.id, invoiceId: invoice.id },
     )
   },
   suspended: async (sub: { id: string; organizationId: string; propertyName: string; graceEndsAt: Date | null }) => {
@@ -646,7 +722,7 @@ export const ownerBillingEvents = {
       sub.organizationId,
       'SUSPENDED',
       { propertyName: sub.propertyName, amount: due },
-      { key: reminderKey.suspended(sub.id, sub.graceEndsAt ?? new Date()), subscriptionId: sub.id },
+      { key: `suspended:${sub.organizationId}:${toISODate(startOfDay(sub.graceEndsAt ?? new Date()))}`, subscriptionId: sub.id },
     )
   },
   paymentReceived: (

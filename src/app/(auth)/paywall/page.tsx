@@ -94,14 +94,14 @@ export default async function PaywallPage() {
             </p>
           )}
 
-          {canPay && gateway && state.invoices.length > 0 && (
+          {canPay && gateway && state.bills.length > 0 && (
             <div className="mt-6 space-y-2">
               <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <CreditCard className="size-4 text-slate-500" /> Pay online now
               </p>
               <div className="flex flex-wrap gap-2">
-                {state.invoices.map((inv) => (
-                  <PayInvoiceButton key={inv.id} invoiceId={inv.id} number={inv.number} amount={inv.balance} demo={demo} size="default" />
+                {state.bills.map((bill) => (
+                  <PayInvoiceButton key={bill.id} invoiceId={bill.id} number={bill.number} amount={bill.balance} demo={demo} size="default" />
                 ))}
               </div>
               <p className="text-xs text-slate-500">UPI, cards or netbanking through Razorpay. Access returns the moment it succeeds.</p>
@@ -143,7 +143,7 @@ export default async function PaywallPage() {
             <div className="mt-4">
               <PaidClaimForm
                 canPay={canPay}
-                invoices={state.invoices.map((i) => ({ id: i.id, number: i.number, balance: i.balance }))}
+                invoices={state.bills}
               />
             </div>
           </div>

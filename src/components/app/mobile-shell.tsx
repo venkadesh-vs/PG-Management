@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown'
+import { HowItWorks } from './how-it-works'
 
 /**
  * The shell for the resident and worker apps. Both are phone-first: a compact
@@ -78,6 +79,7 @@ export function MobileShell({
             {subtitle && <p className="truncate text-[11px] text-slate-500">{subtitle}</p>}
           </div>
 
+          <HowItWorks area={nav[0].href === '/tenant' ? 'resident' : 'staff'} />
           <Link
             href={`${nav[0].href === '/tenant' ? '/tenant' : '/worker'}/notifications`}
             aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}

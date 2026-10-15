@@ -29,11 +29,11 @@ export const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'I run more than one PG. Does that work?',
-    a: 'Yes. Each PG has its own rooms, rent configuration and subscription. You switch between them from one selector and can compare them side by side.',
+    a: 'Yes. Each PG has its own rooms and rent card, and you switch between them from one selector. You get one StayFlow bill a month for all of them, due on the day you pick between the 1st and the 10th.',
   },
   {
     q: 'Is there a referral offer?',
-    a: 'Yes. Every PG owner gets a referral code. When an owner you refer pays their first month, your next month is 50% off: a ₹8,000 bill becomes ₹4,000. Each new owner you bring earns you another half-price month.',
+    a: 'Yes. Every PG owner gets a referral code. When an owner you refer pays their first month, half of what they paid comes off your next bill: they pay ₹14,000, you get ₹7,000 credit. Credit takes up to half off each bill, and anything left carries to the next one. Each code works for up to 5 new owners.',
   },
   {
     q: 'Is my data safe?',

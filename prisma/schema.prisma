@@ -457,6 +457,8 @@ model Organization {
   signupSource     String?
   /// This owner's code for referring other PG owners (made on first use).
   referralCode     String?    @unique
+  /// Referral credit not used yet (₹, before GST); taken off the next combined bill.
+  referralCredit   Int        @default(0)
   /// The organization whose code this one signed up with.
   referredByOrgId  String?
   referralsMade    Referral[] @relation("ReferralReferrer")
@@ -526,6 +528,8 @@ model OrgSetting {
 
   currency        String @default("INR")
   timezone        String @default("Asia/Kolkata")
+  /// Day of the month (1–10) the owner's one combined StayFlow bill is due.
+  billingDueDay   Int    @default(5)
   rentDueDay      Int    @default(5) // day of month rent invoices fall due
   rentGenerateDay Int    @default(1) // day of month invoices are generated
 
@@ -1714,6 +1718,8 @@ model Subscription {
   currentPeriodEnd   DateTime
   nextBillingDate    DateTime
   graceEndsAt        DateTime?
+  /// When this PG joined the owner's billing day; the days from here to its first bill are charged pro rata on it.
+  alignedFrom        DateTime?
   cancelledAt        DateTime?
   cancelReason       String?
 
@@ -1771,6 +1777,9 @@ model SubscriptionInvoice {
   discount         Int           @default(0)
   discountLabel    String?
   referralRewardId String?
+  /// One-time late fee (before GST) added on due day + 3; lateFeeAt makes it once only.
+  lateFee          Int           @default(0)
+  lateFeeAt        DateTime?
   referralReward   Referral?     @relation(fields: [referralRewardId], references: [id], onDelete: SetNull)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -2705,6 +2714,8 @@ model Referral {
   /// PENDING | EARNED | APPLYING | APPLIED | CANCELLED
   status              String       @default("PENDING")
   discountPercent     Int          @default(50)
+  /// Credit given to the referrer: half of what the new owner paid for their first month.
+  creditAmount        Int?
   earnedAt            DateTime?
   /// The referred owner's first paid invoice that unlocked the reward.
   qualifyingInvoiceId String?

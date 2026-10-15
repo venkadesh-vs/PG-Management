@@ -52,13 +52,29 @@ describe('reminder schedule', () => {
   it('sends grace reminders 3 and 1 days before the pause', () => {
     // Invoice raised 9 Oct, grace 7 days: paused on 16 Oct, last active day 15 Oct.
     const grace = sub({ status: 'GRACE', graceEndsAt: d('2026-10-16') })
-    const at = (day: string) => remindersDue({ today: d(day), subscription: grace, invoices: [inv], schedule: DEFAULT_REMINDER_SCHEDULE })
+    const at = (day: string) =>
+      remindersDue({ today: d(day), subscription: grace, invoices: [inv], schedule: DEFAULT_REMINDER_SCHEDULE }).filter(
+        (r) => r.kind === 'GRACE_REMINDER',
+      )
     expect(at('2026-10-13')[0]).toMatchObject({ kind: 'GRACE_REMINDER', daysLeft: 3, key: 'grace:inv1:3' })
     expect(at('2026-10-14')).toEqual([])
     const last = at('2026-10-15')[0]
     expect(last).toMatchObject({ kind: 'GRACE_REMINDER', daysLeft: 1 })
     expect(last.kind === 'GRACE_REMINDER' && last.lastActiveDay.getDate()).toBe(15)
     expect(at('2026-10-16')).toEqual([])
+  })
+
+  it('warns on the two days after the due date about the late fee', () => {
+    const due = sub({ status: 'PAST_DUE' })
+    const at = (day: string) =>
+      remindersDue({ today: d(day), subscription: due, invoices: [inv], schedule: DEFAULT_REMINDER_SCHEDULE }).filter(
+        (r) => r.kind === 'OVERDUE_WARNING',
+      )
+    const first = at('2026-10-13')[0]
+    expect(first).toMatchObject({ kind: 'OVERDUE_WARNING', daysAfter: 1, key: 'overdue:inv1:1' })
+    expect(first.kind === 'OVERDUE_WARNING' && first.feeDay.getDate()).toBe(15)
+    expect(at('2026-10-14')[0]).toMatchObject({ daysAfter: 2 })
+    expect(at('2026-10-15')).toEqual([])
   })
 
   it('never reminds about a paid invoice', () => {

@@ -110,7 +110,7 @@ export function PaidClaimForm({
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       {invoices.length > 1 && (
-        <Field label="Invoice" htmlFor="claim-invoice">
+        <Field label="Bill" htmlFor="claim-invoice">
           <Select id="claim-invoice" value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}>
             {invoices.map((i) => (
               <option key={i.id} value={i.id}>

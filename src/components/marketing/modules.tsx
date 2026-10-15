@@ -3,10 +3,12 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import {
   BedDouble,
+  CalendarCheck,
   CheckCircle2,
   Gift,
   IndianRupee,
   LineChart,
+  PlayCircle,
   Repeat,
   Smartphone,
   Users,
@@ -96,9 +98,23 @@ const MODULES: Module[] = [
   {
     icon: Gift,
     title: 'Refer & earn',
-    text: 'Bring another PG owner. When they pay their first month, your next month is half price.',
-    points: [`${inr(8000)} → ${inr(4000)}`],
+    text: 'Bring up to 5 PG owners. Half of each one’s first month comes off your bill as credit.',
+    points: [`They pay ${inr(14000)} · you get ${inr(7000)}`],
     tone: 'gold',
+  },
+  {
+    icon: PlayCircle,
+    title: 'Video guides on every page',
+    text: 'Short step-by-step videos show a new owner how to set up and use each page, in their own language.',
+    points: ['Setup in 3 minutes', 'Every main module', 'Owner, staff & resident'],
+    wide: true,
+    visual: <VideoMini />,
+  },
+  {
+    icon: CalendarCheck,
+    title: 'One bill for all your PGs',
+    text: 'One StayFlow bill a month for every PG you run, due on the day you pick, from the 1st to the 10th.',
+    points: ['Pick your due day', 'One payment', '1% late fee only after 3 days'],
   },
 ]
 
@@ -195,6 +211,28 @@ function ModuleCard({ module: m }: { module: Module }) {
 
 function MiniFrame({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">{children}</div>
+}
+
+function VideoMini() {
+  const langs = ['English', 'தமிழ்', 'हिन्दी', 'తెలుగు']
+  return (
+    <MiniFrame>
+      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-ink-950">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgb(104_99_238/0.35),transparent_60%)]" />
+        <span className="relative flex size-11 items-center justify-center rounded-full bg-marigold-300 text-ink-950 shadow-lg">
+          <PlayCircle className="size-6" aria-hidden />
+        </span>
+        <span className="absolute bottom-2 left-2.5 text-[10px] font-medium text-white/80">Set up your PG · 3:10</span>
+      </div>
+      <ul className="mt-2 flex flex-wrap gap-1">
+        {langs.map((l, i) => (
+          <li key={l} className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', i === 1 ? 'bg-ink-950 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200/70')}>
+            {l}
+          </li>
+        ))}
+      </ul>
+    </MiniFrame>
+  )
 }
 
 function RentMini() {

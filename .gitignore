@@ -21,3 +21,6 @@ tsconfig.tsbuildinfo
 
 # agent worktrees
 /.claude/worktrees/
+
+# tutorial videos live in Backblaze (videos/), not in git
+/public/videos/

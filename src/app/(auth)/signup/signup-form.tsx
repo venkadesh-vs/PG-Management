@@ -32,7 +32,14 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 const FIELDS = ['ownerName', 'orgName', 'email', 'phone', 'city', 'password', 'referralCode'] as const
 
-export function SignupForm({ referral }: { referral?: { code: string; by: string } | null }) {
+export function SignupForm({
+  referral,
+  expiredCode,
+}: {
+  referral?: { code: string; by: string } | null
+  /** A shared link whose code has already been used the maximum number of times. */
+  expiredCode?: string | null
+}) {
   const router = useRouter()
   const toast = useToast()
   const [showPassword, setShowPassword] = React.useState(false)
@@ -70,6 +77,11 @@ export function SignupForm({ referral }: { referral?: { code: string; by: string
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      {expiredCode && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          The referral code <strong className="font-semibold">{expiredCode}</strong> has expired. You can still start your free trial.
+        </p>
+      )}
       {referral && (
         <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
           <Gift className="mt-0.5 size-4 shrink-0" />

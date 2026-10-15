@@ -7,11 +7,11 @@ import { formatMoney } from '@/lib/utils'
 import {
   makeReferralCode,
   normaliseReferralCode,
-  pickReward,
   REFERRAL_DISCOUNT_PERCENT,
-  referralDiscount,
-  rewardWindowEnd,
+  REFERRAL_LIMIT,
+  referralSlots,
 } from '@/lib/referrals'
+import { applyCredit, referralCredit } from '@/lib/owner-bill'
 import { notifyOrgAdmins, recordActivity } from '../events'
 
 type Tx = Prisma.TransactionClient
@@ -52,10 +52,13 @@ export async function ensureReferralCode(organizationId: string): Promise<string
 export async function referrerForCode(rawCode: string | null | undefined) {
   const code = normaliseReferralCode(rawCode)
   if (!code) return null
-  return prisma.organization.findFirst({
+  const org = await prisma.organization.findFirst({
     where: { referralCode: code, status: { not: 'CANCELLED' } },
     select: { id: true, name: true, referralCode: true },
   })
+  if (!org) return null
+  const used = await prisma.referral.count({ where: { referrerOrgId: org.id, status: { not: 'CANCELLED' } } })
+  return { ...org, ...referralSlots(used) }
 }
 
 /**
@@ -84,6 +87,16 @@ export async function linkReferral(
   })
   if (!referrer || referrer.id === params.newOrgId) {
     if (params.strict) throw new ValidationError('referralCode: That referral code is not valid')
+    return null
+  }
+  // A code works for REFERRAL_LIMIT new owners. Lock the referrer while
+  // counting so two sign-ups at once cannot both take the last slot.
+  await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id" = ${referrer.id} FOR UPDATE`
+  const used = await tx.referral.count({ where: { referrerOrgId: referrer.id, status: { not: 'CANCELLED' } } })
+  if (referralSlots(used).expired) {
+    if (params.strict) {
+      throw new ValidationError(`referralCode: This referral code has expired. It has already been used by ${REFERRAL_LIMIT} PG owners.`)
+    }
     return null
   }
   const digits = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '').slice(-10)
@@ -115,24 +128,41 @@ export async function linkReferral(
 
 /**
  * Called whenever a subscription invoice is fully paid. The first paid bill
- * (with money in it) of a referred organization unlocks the referrer's reward.
+ * of a referred owner earns the referrer a credit: REFERRAL_CREDIT_PERCENT of
+ * what the new owner's first combined bill came to (before GST), added to
+ * the referrer's balance and taken off their next bill(s).
  */
 export async function markReferralEarned(tx: Tx, invoice: { id: string; total: number; organizationId: string }) {
   if (invoice.total <= 0) return null
   const referral = await tx.referral.findUnique({ where: { referredOrgId: invoice.organizationId } })
   if (!referral || referral.status !== 'PENDING') return null
+
+  // The new owner's whole first bill: every PG line due the same day.
+  const paid = await tx.subscriptionInvoice.findUnique({ where: { id: invoice.id }, select: { dueDate: true } })
+  const day = new Date(paid!.dueDate)
+  day.setHours(0, 0, 0, 0)
+  const firstBill = await tx.subscriptionInvoice.findMany({
+    where: { subscription: { organizationId: invoice.organizationId }, dueDate: { gte: day, lt: new Date(day.getTime() + 86_400_000) } },
+    select: { amount: true, discount: true, lateFee: true },
+  })
+  const firstMonth = firstBill.reduce((sum, l) => sum + l.amount - l.lateFee, 0)
+  const credit = referralCredit(firstMonth, referral.discountPercent)
+
   const earned = await tx.referral.updateMany({
     where: { id: referral.id, status: 'PENDING' },
-    data: { status: 'EARNED', earnedAt: new Date(), qualifyingInvoiceId: invoice.id },
+    data: { status: 'EARNED', earnedAt: new Date(), qualifyingInvoiceId: invoice.id, creditAmount: credit },
   })
   if (earned.count !== 1) return null
+  if (credit > 0) {
+    await tx.organization.update({ where: { id: referral.referrerOrgId }, data: { referralCredit: { increment: credit } } })
+  }
   const referred = await tx.organization.findUniqueOrThrow({ where: { id: invoice.organizationId }, select: { name: true } })
   await notifyOrgAdmins(
     referral.referrerOrgId,
     {
       kind: 'SUBSCRIPTION',
-      title: `You earned ${referral.discountPercent}% off a month`,
-      body: `${referred.name} paid their first StayFlow bill. Your next month's bills are ${referral.discountPercent}% off.`,
+      title: `You earned ${formatMoney(credit)} credit`,
+      body: `${referred.name} paid their first StayFlow bill. ${formatMoney(credit)} comes off your next bill.`,
       link: '/app/referrals',
     },
     tx,
@@ -144,7 +174,7 @@ export async function markReferralEarned(tx: Tx, invoice: { id: string; total: n
       event: 'SUBSCRIPTION_CHANGED',
       entityType: 'Referral',
       entityId: referral.id,
-      summary: `Referral reward earned: ${referred.name} paid their first bill (${referral.discountPercent}% off one month)`,
+      summary: `Referral credit ${formatMoney(credit)} earned: ${referred.name} paid their first bill`,
     },
     tx,
   )
@@ -152,108 +182,64 @@ export async function markReferralEarned(tx: Tx, invoice: { id: string; total: n
 }
 
 /**
- * The referral discount for a bill being raised. Picks the oldest open reward
- * this PG has not used, moves it to APPLYING (one month window from its
- * first bill) and to APPLIED when every PG has had it or the month is over.
- * Returns nothing for a PG on live AutoPay: the gateway charges it a fixed
- * amount, so the reward waits for a bill paid with Pay now.
+ * Takes referral credit off one PG line of a bill being raised (before GST).
+ * Lines of the same bill draw from the balance in turn, so the credit comes
+ * off the whole bill and whatever is left carries to the next one.
  */
-export async function referralDiscountForBill(
-  tx: Tx,
-  params: {
-    organizationId: string
-    subscriptionId: string
-    monthlyAmount: number
-    taxable: number
-    periodStart: Date
-    liveAutopay: boolean
-  },
-): Promise<{ discount: number; label: string; rewardId: string } | null> {
-  const now = new Date()
-  // Close rewards whose month is over.
-  await tx.referral.updateMany({
-    where: { referrerOrgId: params.organizationId, status: 'APPLYING', windowEndsAt: { lte: params.periodStart } },
-    data: { status: 'APPLIED', appliedAt: now },
+export async function takeReferralCredit(tx: Tx, organizationId: string, lineTaxable: number): Promise<number> {
+  if (lineTaxable <= 0) return 0
+  const org = await tx.organization.findUnique({ where: { id: organizationId }, select: { referralCredit: true } })
+  const { used } = applyCredit(lineTaxable, org?.referralCredit ?? 0)
+  if (used <= 0) return 0
+  // Conditional decrement: two runs can never spend the same credit twice.
+  const spent = await tx.organization.updateMany({
+    where: { id: organizationId, referralCredit: { gte: used } },
+    data: { referralCredit: { decrement: used } },
   })
-  if (params.liveAutopay || params.taxable <= 0) return null
-
-  const rewards = await tx.referral.findMany({
-    where: { referrerOrgId: params.organizationId, status: { in: ['EARNED', 'APPLYING'] } },
-    include: { referred: { select: { name: true } } },
-  })
-  if (!rewards.length) return null
-  const used = await tx.subscriptionInvoice.findMany({
-    where: { subscriptionId: params.subscriptionId, referralRewardId: { in: rewards.map((r) => r.id) } },
-    select: { referralRewardId: true },
-  })
-  const reward = pickReward(rewards, new Set(used.map((u) => u.referralRewardId!)), params.periodStart)
-  if (!reward) return null
-
-  const discount = referralDiscount(params.monthlyAmount, params.taxable, reward.discountPercent)
-  if (discount <= 0) return null
-
-  if (reward.status === 'EARNED') {
-    await tx.referral.update({
-      where: { id: reward.id },
-      data: { status: 'APPLYING', firstAppliedAt: now, windowEndsAt: rewardWindowEnd(params.periodStart) },
-    })
+  if (spent.count !== 1) return 0
+  // A referral is fully used once nothing is left on the balance.
+  if ((org?.referralCredit ?? 0) - used <= 0) {
+    await tx.referral.updateMany({ where: { referrerOrgId: organizationId, status: 'EARNED' }, data: { status: 'APPLIED', appliedAt: new Date() } })
   }
-  return {
-    discount,
-    label: `Referral reward: ${reward.discountPercent}% off (${reward.referred.name} joined with your code)`,
-    rewardId: reward.id,
-  }
-}
-
-/** After a bill used a reward: done once every billable PG of the organization has had it. */
-export async function closeRewardIfComplete(tx: Tx, rewardId: string, organizationId: string) {
-  const [billable, usedBy] = await Promise.all([
-    tx.subscription.count({ where: { organizationId, status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] } } }),
-    tx.subscriptionInvoice.findMany({ where: { referralRewardId: rewardId }, select: { subscriptionId: true }, distinct: ['subscriptionId'] }),
-  ])
-  if (usedBy.length >= billable) {
-    await tx.referral.updateMany({ where: { id: rewardId, status: 'APPLYING' }, data: { status: 'APPLIED', appliedAt: new Date() } })
-  }
+  return used
 }
 
 /** Everything the owner's Refer & earn page shows. */
 export async function referralOverview(organizationId: string) {
   const code = await ensureReferralCode(organizationId)
-  const now = new Date()
-  const rows = await prisma.referral.findMany({
-    where: { referrerOrgId: organizationId },
-    include: {
-      referred: { select: { name: true, city: true, createdAt: true } },
-      invoices: { select: { discount: true, number: true, subscription: { select: { property: { select: { name: true } } } } } },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+  const [rows, org, savedAgg] = await Promise.all([
+    prisma.referral.findMany({
+      where: { referrerOrgId: organizationId },
+      include: { referred: { select: { name: true, city: true, createdAt: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.organization.findUnique({ where: { id: organizationId }, select: { referralCredit: true } }),
+    prisma.subscriptionInvoice.aggregate({
+      where: { subscription: { organizationId }, discountLabel: 'Referral credit' },
+      _sum: { discount: true },
+    }),
+  ])
   const referrals = rows.map((r) => ({
     id: r.id,
     name: r.referred.name,
     city: r.referred.city,
     joinedAt: r.createdAt,
-    // A month that has passed reads as used even before the next bill closes it.
-    status: (r.status === 'APPLYING' && r.windowEndsAt && r.windowEndsAt <= now ? 'APPLIED' : r.status) as
-      | 'PENDING'
-      | 'EARNED'
-      | 'APPLYING'
-      | 'APPLIED'
-      | 'CANCELLED',
+    status: (r.status === 'APPLYING' ? 'EARNED' : r.status) as 'PENDING' | 'EARNED' | 'APPLIED' | 'CANCELLED',
     percent: r.discountPercent,
     earnedAt: r.earnedAt,
-    saved: r.invoices.reduce((s, i) => s + i.discount, 0),
-    bills: r.invoices.map((i) => `${i.number} · ${i.subscription.property.name} · −${formatMoney(i.discount)}`),
+    credit: r.creditAmount ?? 0,
   }))
   return {
     code,
     percent: REFERRAL_DISCOUNT_PERCENT,
+    slots: referralSlots(rows.filter((r) => r.status !== 'CANCELLED').length),
     referrals,
+    balance: org?.referralCredit ?? 0,
     totals: {
       joined: referrals.length,
-      earned: referrals.filter((r) => r.status !== 'PENDING' && r.status !== 'CANCELLED').length,
-      waiting: referrals.filter((r) => r.status === 'EARNED').length,
-      saved: referrals.reduce((s, r) => s + r.saved, 0),
+      earned: referrals.filter((r) => r.status === 'EARNED' || r.status === 'APPLIED').length,
+      credit: referrals.reduce((s, r) => s + r.credit, 0),
+      saved: savedAgg._sum.discount ?? 0,
     },
   }
 }

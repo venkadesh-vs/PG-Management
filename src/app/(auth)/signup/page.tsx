@@ -29,7 +29,10 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         </>
       }
     >
-      <SignupForm referral={referrer ? { code: referrer.referralCode!, by: referrer.name } : null} />
+      <SignupForm
+        referral={referrer && !referrer.expired ? { code: referrer.referralCode!, by: referrer.name } : null}
+        expiredCode={referrer?.expired ? referrer.referralCode : null}
+      />
     </AuthShell>
   )
 }

@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { motion } from 'framer-motion'
-import { Eye, EyeOff, LogIn, ShieldCheck, UserRound, Users, Wrench } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, UserRound, Users, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
@@ -39,6 +39,9 @@ export function LoginForm({
   const router = useRouter()
   const toast = useToast()
   const [showPassword, setShowPassword] = React.useState(false)
+  const reduce = useReducedMotion()
+  const rise = (delay: number) =>
+    reduce ? {} : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const, delay } }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -71,25 +74,33 @@ export function LoginForm({
   return (
     <div className="space-y-6">
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <motion.div {...rise(0.25)}>
         <Field label="Email address" required error={form.formState.errors.email?.message} htmlFor="email">
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@yourpg.com"
-            aria-invalid={Boolean(form.formState.errors.email)}
-            {...form.register('email')}
-          />
+          <div className="relative">
+            <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-slate-400" />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@yourpg.com"
+              className="h-12 pl-11"
+              aria-invalid={Boolean(form.formState.errors.email)}
+              {...form.register('email')}
+            />
+          </div>
         </Field>
+        </motion.div>
 
+        <motion.div {...rise(0.33)}>
         <Field label="Password" required error={form.formState.errors.password?.message} htmlFor="password">
           <div className="relative">
+            <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-slate-400" />
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               placeholder="••••••••"
-              className="pr-11"
+              className="h-12 pl-11 pr-12"
               aria-invalid={Boolean(form.formState.errors.password)}
               {...form.register('password')}
             />
@@ -97,12 +108,13 @@ export function LoginForm({
               type="button"
               onClick={() => setShowPassword((s) => !s)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             >
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
         </Field>
+        </motion.div>
 
         <div className="-mt-1 flex justify-end">
           <Link
@@ -113,16 +125,18 @@ export function LoginForm({
           </Link>
         </div>
 
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          className="w-full"
-          loading={form.formState.isSubmitting}
-        >
-          {!form.formState.isSubmitting && <LogIn className="size-4" />}
-          Sign in
-        </Button>
+        <motion.div {...rise(0.41)}>
+          <Button
+            type="submit"
+            variant="primary"
+            size="xl"
+            className="shine w-full"
+            loading={form.formState.isSubmitting}
+          >
+            Sign in
+            {!form.formState.isSubmitting && <ArrowRight className="size-4 transition-transform group-hover/btn:translate-x-0.5" />}
+          </Button>
+        </motion.div>
       </form>
 
       {demoUsers.length > 0 && (

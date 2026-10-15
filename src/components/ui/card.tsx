@@ -42,7 +42,8 @@ CardDescription.displayName = 'CardDescription'
 
 const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('p-4 pt-0 sm:p-5 sm:pt-0', className)} {...props} />
+    // No top padding by default (it follows a header); padding passed in wins at every size.
+    <div ref={ref} className={cn('px-4 pb-4 sm:px-5 sm:pb-5', className)} {...props} />
   ),
 )
 CardContent.displayName = 'CardContent'

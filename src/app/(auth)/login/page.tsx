@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { serverEnv } from '@/lib/env'
 import { LoginForm } from './login-form'
 import { Logo } from '@/components/marketing/logo'
-import { BrandPanel } from '../brand-panel'
+import { PgScene } from './pg-scene'
+import { FeatureTiles, SceneIntro, SignInCard } from './login-chrome'
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -31,35 +32,41 @@ export default async function LoginPage() {
   const demoPassword = serverEnv.demoMode ? serverEnv.seedPassword : ''
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand panel — hidden on mobile so the form is immediately usable. */}
-      <BrandPanel />
+    <div className="relative grid min-h-dvh bg-ink-950 lg:grid-cols-[1.1fr_1fr]">
+      {/* ------------------------------------------------ The PG at dusk */}
+      <div className="grain relative isolate overflow-hidden px-5 pb-16 pt-6 sm:px-10 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:justify-between lg:px-12 lg:py-9">
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute -left-40 -top-40 size-[36rem] rounded-full bg-blue-600/30 blur-[130px]" />
+          <div className="absolute -bottom-40 right-0 size-[30rem] rounded-full bg-marigold-400/15 blur-[120px]" />
+          <div className="dot-grid absolute inset-0 opacity-[0.07] invert [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+          <div className="absolute inset-y-0 right-0 hidden w-px bg-gradient-to-b from-transparent via-marigold-300/30 to-transparent lg:block" />
+        </div>
 
-      {/* Form panel */}
-      <div className="relative isolate flex flex-col justify-center overflow-hidden bg-white px-5 py-10 sm:px-10 lg:px-16">
-        <div aria-hidden className="mesh-blue pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-40 lg:hidden" />
-        <div className="mx-auto w-full max-w-md">
-          <div className="lg:hidden">
-            <Logo />
-          </div>
+        <Logo variant="light" />
 
-          <div className="mt-10 space-y-2 lg:mt-0">
-            <h2 className="font-display text-[1.75rem] font-semibold tracking-tight text-slate-900">
-              Sign in
-            </h2>
-            <p className="text-sm text-slate-500">
-              Welcome back. Enter your details to open your dashboard.
-            </p>
-          </div>
+        <div className="mx-auto mt-8 w-full max-w-xl lg:mt-0">
+          <SceneIntro />
+          <PgScene className="mx-auto mt-7 w-full max-w-[360px] sm:max-w-[400px] xl:max-w-[420px]" />
+        </div>
 
-          <div className="mt-8">
+        <FeatureTiles />
+      </div>
+
+      {/* ------------------------------------------------------ The form */}
+      <div className="relative z-10 -mt-10 flex flex-col justify-center rounded-t-[2rem] bg-slate-50 px-5 pb-10 pt-8 sm:px-10 lg:mt-0 lg:rounded-none lg:px-16">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-t-[2rem] lg:rounded-none">
+          <div className="absolute -right-24 -top-24 size-80 rounded-full bg-blue-200/40 blur-3xl" />
+          <div className="absolute -bottom-24 -left-16 size-72 rounded-full bg-marigold-200/40 blur-3xl" />
+        </div>
+        <div className="relative mx-auto w-full max-w-md">
+          <SignInCard>
             <LoginForm demoUsers={demoUsers} demoPassword={demoPassword} />
-          </div>
+          </SignInCard>
 
           <p className="mt-8 text-center text-sm text-slate-500">
             New here?{' '}
             <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-700">
-              Create an account
+              Start your free trial
             </Link>
           </p>
           <p className="mt-2 text-center text-xs text-slate-400">

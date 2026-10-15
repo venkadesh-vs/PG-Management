@@ -115,10 +115,10 @@ export const BED_STATUS_STYLE: Record<
   },
   OCCUPIED: {
     label: 'Occupied',
-    dot: 'bg-slate-700',
-    chip: 'bg-slate-100 text-slate-700 border-slate-300',
-    tile: 'bg-white border-slate-200 hover:border-slate-400',
-    tileText: 'text-slate-800',
+    dot: 'bg-blue-600',
+    chip: 'bg-blue-50 text-blue-700 border-blue-200/70',
+    tile: 'bg-gradient-to-b from-blue-50 to-blue-100/70 border-blue-200 hover:border-blue-400',
+    tileText: 'text-blue-800',
   },
   RESERVED: {
     label: 'Reserved',

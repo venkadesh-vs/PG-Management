@@ -57,7 +57,6 @@ export function RentToolbar({
       {canManage && (
         <Button
           variant="outline"
-          size="sm"
           loading={busy === 'REFRESH_OVERDUE'}
           onClick={() => run('REFRESH_OVERDUE', 'Overdue refreshed')}
         >
@@ -66,13 +65,13 @@ export function RentToolbar({
         </Button>
       )}
       {canRemind && (
-        <Button variant="outline" size="sm" onClick={() => setConfirm('remind')}>
+        <Button variant="outline" onClick={() => setConfirm('remind')}>
           <MessageCircle className="size-4" />
           Send reminders
         </Button>
       )}
       {canManage && (
-        <Button variant="primary" size="sm" onClick={() => setConfirm('generate')}>
+        <Button variant="primary" onClick={() => setConfirm('generate')}>
           <FileText className="size-4" />
           Generate rent
         </Button>

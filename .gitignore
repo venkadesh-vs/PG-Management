@@ -18,3 +18,6 @@ tsconfig.tsbuildinfo
 
 # local page-check screenshots
 /shot-*.png
+
+# agent worktrees
+/.claude/worktrees/

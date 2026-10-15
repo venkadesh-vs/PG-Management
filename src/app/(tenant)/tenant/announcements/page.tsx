@@ -7,6 +7,8 @@ import { formatDate, relativeTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/feedback'
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
+import { IconTile, PhoneHeader } from '../_ui/phone-ui'
 
 export const metadata: Metadata = { title: 'Announcements' }
 
@@ -38,12 +40,7 @@ export default async function TenantAnnouncementsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">
-          Announcements
-        </h1>
-        <p className="mt-0.5 text-sm text-slate-500">Notices from your PG.</p>
-      </div>
+      <PhoneHeader icon={Megaphone} title="Announcements" subtitle="Notices from your PG." />
 
       {announcements.length === 0 ? (
         <EmptyState
@@ -52,33 +49,33 @@ export default async function TenantAnnouncementsPage() {
           description="Water supply, menu changes and other notices from your PG will appear here."
         />
       ) : (
-        <ul className="space-y-3">
+        <Stagger onView={false} className="space-y-3">
           {announcements.map((announcement) => (
-            <li key={announcement.id}>
-              <Card className={cn(announcement.pinned && 'border-amber-200 bg-amber-50/30')}>
+            <StaggerItem key={announcement.id}>
+              <Card
+                className={cn(
+                  'relative overflow-hidden',
+                  announcement.pinned &&
+                    'border-marigold-200/80 bg-gradient-to-br from-marigold-50/80 via-white to-white',
+                )}
+              >
                 <CardContent className="p-5">
                   <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        'flex size-9 shrink-0 items-center justify-center rounded-xl',
-                        announcement.pinned ? 'bg-amber-100' : 'bg-sky-50',
-                      )}
-                    >
-                      {announcement.pinned ? (
-                        <Pin className="size-4 text-amber-600" />
-                      ) : (
-                        <Megaphone className="size-4 text-sky-600" />
-                      )}
-                    </div>
+                    <IconTile icon={announcement.pinned ? Pin : Megaphone} tone={announcement.pinned ? 'marigold' : 'blue'} />
                     <div className="min-w-0 flex-1">
-                      <p className="font-display text-sm font-semibold text-slate-900">
+                      {announcement.pinned && (
+                        <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-marigold-700">
+                          Pinned
+                        </p>
+                      )}
+                      <p className="font-display text-[15px] font-semibold leading-snug text-slate-900">
                         {announcement.title}
                       </p>
                       <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-slate-600">
                         {announcement.body}
                       </p>
                       <p
-                        className="mt-2 text-[11px] text-slate-400"
+                        className="mt-3 text-xs text-slate-400"
                         title={formatDate(announcement.publishedAt)}
                       >
                         {relativeTime(announcement.publishedAt)}
@@ -88,9 +85,9 @@ export default async function TenantAnnouncementsPage() {
                   </div>
                 </CardContent>
               </Card>
-            </li>
+            </StaggerItem>
           ))}
-        </ul>
+        </Stagger>
       )}
     </div>
   )

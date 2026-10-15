@@ -1,16 +1,17 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, UserRound, Wrench } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { COMPLAINT_STATUS_STYLE, PRIORITY_STYLE } from '@/lib/theme'
-import { relativeTime } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
+import { cn, relativeTime } from '@/lib/utils'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
 import { getLookup, getLookupLabels } from '@/server/services/org-defaults'
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import { RaiseComplaintButton } from './raise-complaint'
+import { IconTile, PhoneHeader, TAPPABLE } from '../_ui/phone-ui'
 
 export const metadata: Metadata = { title: 'Complaints' }
 
@@ -39,19 +40,14 @@ export default async function TenantComplaintsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">
-            Complaints
-          </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {open.length > 0
-              ? `${open.length} being looked at`
-              : 'Report anything that needs fixing.'}
-          </p>
-        </div>
-        <RaiseComplaintButton categories={categories} />
-      </div>
+      <PhoneHeader
+        icon={Wrench}
+        title="Complaints"
+        subtitle={
+          open.length > 0 ? `${open.length} being looked at` : 'Report anything that needs fixing.'
+        }
+        action={<RaiseComplaintButton categories={categories} />}
+      />
 
       {complaints.length === 0 ? (
         <EmptyState
@@ -61,41 +57,50 @@ export default async function TenantComplaintsPage() {
           action={<RaiseComplaintButton variant="outline" categories={categories} />}
         />
       ) : (
-        <ul className="space-y-2">
+        <Stagger onView={false} className="space-y-2.5">
           {complaints.map((complaint) => {
             const status = COMPLAINT_STATUS_STYLE[complaint.status]
             const priority = PRIORITY_STYLE[complaint.priority]
+            const isOpen = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'].includes(complaint.status)
             return (
-              <li key={complaint.id}>
-                <Link href={`/tenant/complaints/${complaint.id}`}>
-                  <Card className="transition-shadow hover:shadow-sm">
-                    <CardContent className="flex items-center gap-3 p-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="truncate text-sm font-medium text-slate-900">
-                            {complaint.title}
-                          </p>
-                          <StatusChip label={priority.label} chip={priority.chip} />
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {complaint.code} · {categoryLabels[complaint.category] ?? complaint.category} ·{' '}
-                          {relativeTime(complaint.createdAt)}
-                          {complaint.assignedStaff
-                            ? ` · ${complaint.assignedStaff.name} is on it`
-                            : ''}
-                        </p>
+              <StaggerItem key={complaint.id}>
+                <Link
+                  href={`/tenant/complaints/${complaint.id}`}
+                  className={cn(
+                    'flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card',
+                    TAPPABLE,
+                  )}
+                >
+                  <IconTile icon={Wrench} tone={isOpen ? 'blue' : 'slate'} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
+                        {complaint.title}
+                      </p>
+                      <StatusChip label={status.label} chip={status.chip} className="shrink-0" />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {complaint.code} · {categoryLabels[complaint.category] ?? complaint.category} ·{' '}
+                      {relativeTime(complaint.createdAt)}
+                    </p>
+                    <div className="mt-2.5 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <StatusChip label={priority.label} chip={priority.chip} />
+                        {complaint.assignedStaff && (
+                          <span className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
+                            <UserRound className="size-3.5 shrink-0" />
+                            <span className="truncate">{complaint.assignedStaff.name} is on it</span>
+                          </span>
+                        )}
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <StatusChip label={status.label} chip={status.chip} />
-                        <ChevronRight className="size-4 text-slate-300" />
-                      </div>
-                    </CardContent>
-                  </Card>
+                      <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                    </div>
+                  </div>
                 </Link>
-              </li>
+              </StaggerItem>
             )
           })}
-        </ul>
+        </Stagger>
       )}
     </div>
   )

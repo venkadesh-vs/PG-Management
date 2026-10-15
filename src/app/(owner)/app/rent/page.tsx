@@ -11,7 +11,7 @@ import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, star
 import { collectionBreakdown } from '@/server/services/analytics'
 import { PageHeader } from '@/components/app/page-header'
 import { ExportButton } from '@/components/app/export-button'
-import { StatCard, StatGrid } from '@/components/app/stat-card'
+import { CollectionHero } from './collection-hero'
 import { StatusChip } from '@/components/ui/badge'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
@@ -142,7 +142,7 @@ export default async function RentPage({
         icon="wallet"
         breadcrumbs={[{ label: 'Dashboard', href: '/app' }, { label: 'Rent & Payments' }]}
         actions={
-          <>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center [&>*]:w-full sm:[&>*]:w-auto">
             {user.permissions.includes('reports.export') && (
               <Suspense fallback={null}>
                 <ExportButton kind="outstanding" label="Export dues" />
@@ -153,44 +153,18 @@ export default async function RentPage({
               canManage={user.permissions.includes('rent.manage')}
               canRemind={user.permissions.includes('payments.record')}
             />
-          </>
+          </div>
         }
       />
 
-      <StatGrid cols={4}>
-        <StatCard
-          label="Collected this month"
-          value={collection.paid}
-          format="money"
-          icon="money"
-          tone="emerald"
-          hint={`of ${formatMoney(collection.total)} billed`}
-        />
-        <StatCard
-          label="Pending"
-          value={pending._sum.balance ?? 0}
-          format="money"
-          icon="clock"
-          tone="amber"
-          hint={`${pending._count} invoices not yet due`}
-        />
-        <StatCard
-          label="Overdue"
-          value={overdue._sum.balance ?? 0}
-          format="money"
-          icon="warning"
-          tone="red"
-          hint={`${overdue._count} invoices past due date`}
-        />
-        <StatCard
-          label="Collection rate"
-          value={collection.total ? Math.round((collection.paid / collection.total) * 100) : 0}
-          format="percent"
-          icon="chart"
-         
-          hint="This month"
-        />
-      </StatGrid>
+      <CollectionHero
+        collected={collection.paid}
+        billed={collection.total}
+        pending={pending._sum.balance ?? 0}
+        pendingCount={pending._count}
+        overdue={overdue._sum.balance ?? 0}
+        overdueCount={overdue._count}
+      />
 
       <AutopayPanel
         organizationId={scope.organizationId}
@@ -313,46 +287,62 @@ export default async function RentPage({
             </Table>
           </TableWrap>
 
-          <ul className="space-y-2 md:hidden">
-            {invoices.map((invoice) => (
-              <li key={invoice.id} className="relative">
-                <div className="absolute right-2 top-2 z-10">
-                  <InvoiceActions invoice={invoiceRow(invoice)} can={invoiceCan} />
-                </div>
-                <Link
-                  href={`/app/residents/${invoice.resident.id}`}
-                  className="block rounded-xl border border-slate-200 bg-white p-4 pr-11 shadow-xs"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">
-                        {invoice.resident.fullName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {invoice.number} · {formatMonth(invoice.periodStart)}
-                      </p>
+          <ul className="space-y-2.5 md:hidden">
+            {invoices.map((invoice) => {
+              const overdueDays = daysBetween(invoice.dueDate, today)
+              const late = invoice.balance > 0 && overdueDays > 0
+              return (
+                <li key={invoice.id} className="relative">
+                  <div className="absolute right-2 top-2.5 z-10">
+                    <InvoiceActions invoice={invoiceRow(invoice)} can={invoiceCan} />
+                  </div>
+                  <Link
+                    href={`/app/residents/${invoice.resident.id}`}
+                    className="block rounded-2xl border border-slate-200/80 bg-white p-4 pr-12 shadow-card transition active:scale-[0.99]"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        aria-hidden
+                        className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/60 font-display text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-100"
+                      >
+                        {invoice.resident.fullName.charAt(0)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-slate-900">{invoice.resident.fullName}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {invoice.number} · {formatMonth(invoice.periodStart)}
+                        </p>
+                      </div>
                     </div>
-                    <StatusChip
-                      label={INVOICE_STATUS_STYLE[invoice.status].label}
-                      chip={INVOICE_STATUS_STYLE[invoice.status].chip}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-xs text-slate-500">
-                      Due {formatDate(invoice.dueDate)}
-                    </span>
-                    <span
-                      className={cn(
-                        'font-semibold tabular',
-                        invoice.balance > 0 ? 'text-rose-600' : 'text-emerald-600',
-                      )}
-                    >
-                      {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                    <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+                      <div className="min-w-0 space-y-1">
+                        <StatusChip
+                          label={INVOICE_STATUS_STYLE[invoice.status].label}
+                          chip={INVOICE_STATUS_STYLE[invoice.status].chip}
+                        />
+                        <p className="text-xs text-slate-500">
+                          Due {formatDate(invoice.dueDate)}
+                          {late && <span className="ml-1 font-medium text-rose-600">+{overdueDays}d</span>}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[11px] uppercase tracking-wider text-slate-400">
+                          {invoice.balance > 0 ? 'Balance' : 'Settled'}
+                        </p>
+                        <p
+                          className={cn(
+                            'font-display text-lg font-semibold tabular-nums',
+                            invoice.balance > 0 ? 'text-rose-600' : 'text-emerald-600',
+                          )}
+                        >
+                          {invoice.balance > 0 ? formatMoney(invoice.balance) : 'Paid'}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
 
           <Suspense fallback={null}>

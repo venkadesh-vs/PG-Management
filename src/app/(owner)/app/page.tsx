@@ -233,7 +233,7 @@ export default async function OwnerDashboard({
       <MotionGrid
         className={cn(
           'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4',
-          show.money && show.expenses ? 'xl:grid-cols-6' : show.money ? 'xl:grid-cols-4' : 'xl:grid-cols-2',
+          show.money && show.expenses ? 'min-[1700px]:grid-cols-6' : show.money ? 'xl:grid-cols-4' : 'xl:grid-cols-2',
         )}
       >
         <MotionItem>

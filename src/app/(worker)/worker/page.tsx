@@ -2,20 +2,23 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import {
   ArrowRight,
+  CalendarCheck,
   CheckCircle2,
   ClipboardList,
+  Gauge,
+  ReceiptText,
   ShoppingCart,
+  Sparkles,
   Utensils,
 } from 'lucide-react'
 import { requireWorker } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import {
-  startOfDay,
-} from '@/lib/utils'
+import { formatDate, startOfDay } from '@/lib/utils'
 import { MEAL_TYPES, expectedMealCount } from '@/server/services/kitchen'
-import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/feedback'
 import { TaskCard } from './tasks/task-card'
+import { ActionCard, IconTile, PhoneSection } from './_ui/phone'
+import { Stagger, StaggerItem } from './_ui/stagger'
 
 export const metadata: Metadata = { title: 'Home' }
 
@@ -79,196 +82,224 @@ export default async function WorkerHome() {
   const lowStockItems = lowStock.filter((i) => i.currentStock <= i.minimumStock)
   const overdue = tasks.filter((t) => t.dueDate && t.dueDate < today)
 
-  return (
-    <div className="space-y-5">
-      {/* --------------------------------------------------------- Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm ring-1 ring-white/5">
-        <div className="dot-grid absolute inset-0 opacity-[0.12]" />
-        <div className="relative">
-          <p className="text-sm text-white/75">
-            {new Date().getHours() < 12 ? 'Good morning' : 'Good afternoon'},
-          </p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">
-            {staff.name.split(' ')[0]}
-          </h1>
-          {can.tasks && (
-            <p className="mt-1 text-sm text-white/75">
-              {tasks.length === 0
-                ? 'No open tasks right now.'
-                : `${tasks.length} task${tasks.length === 1 ? '' : 's'} waiting${
-                    overdue.length ? ` · ${overdue.length} overdue` : ''
-                  }`}
-            </p>
-          )}
 
-          {(can.tasks || can.attendance) && (
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {can.tasks && <Tile label="Open" value={String(tasks.length)} />}
-              {can.tasks && <Tile label="Done today" value={String(doneToday)} />}
-              {can.attendance && (
-                <Tile
-                  label="Attendance"
-                  value={attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'Pending'}
-                />
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : 'Good afternoon'
+  const attendanceLabel = attendance ? attendance.status.replace('_', ' ').toLowerCase() : 'Pending'
+
+  return (
+    <Stagger className="space-y-6">
+      {/* --------------------------------------------------------- Header */}
+      <StaggerItem>
+        <section className="relative isolate overflow-hidden rounded-3xl bg-ink-950 p-5 text-white shadow-float ring-1 ring-white/10">
+          <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-blue-500/30 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-52 rounded-full bg-marigold-300/20 blur-3xl" />
+          <div aria-hidden className="dot-grid pointer-events-none absolute inset-0 opacity-[0.07]" />
+          <div className="relative">
+            <div className="flex items-center justify-between gap-3">
+              <p className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-medium text-white/70 ring-1 ring-inset ring-white/10">
+                <Sparkles className="size-3 text-marigold-300" />
+                {formatDate(today)}
+              </p>
+              {staff.property && (
+                <p className="min-w-0 truncate text-[11px] font-medium text-white/50">{staff.property.name}</p>
               )}
             </div>
+            <p className="mt-4 text-sm text-white/60">{greeting},</p>
+            <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">
+              {staff.name.split(' ')[0]}
+            </h1>
+            {can.tasks && (
+              <p className="mt-1.5 text-sm text-white/70">
+                {tasks.length === 0 ? (
+                  'No open tasks right now.'
+                ) : (
+                  <>
+                    <span className="font-semibold text-marigold-300">
+                      {tasks.length} task{tasks.length === 1 ? '' : 's'}
+                    </span>{' '}
+                    waiting
+                    {overdue.length ? (
+                      <span className="text-rose-300"> · {overdue.length} overdue</span>
+                    ) : null}
+                  </>
+                )}
+              </p>
+            )}
+
+            {(can.tasks || can.attendance) && (
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                {can.tasks && <Tile icon={ClipboardList} label="Open" value={String(tasks.length)} />}
+                {can.tasks && <Tile icon={CheckCircle2} label="Done today" value={String(doneToday)} />}
+                {can.attendance && (
+                  <Tile
+                    icon={CalendarCheck}
+                    label="Attendance"
+                    value={attendanceLabel}
+                    highlight={!attendance}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      </StaggerItem>
+
+      {(can.meters || can.expenses) && (
+        <StaggerItem className="space-y-3">
+          {can.meters && (
+            <ActionCard
+              href="/worker/meters"
+              icon={Gauge}
+              tone="amber"
+              title="Meter readings"
+              description="Enter each room's electricity reading with a photo"
+            />
           )}
-        </div>
-      </div>
-
-      {can.meters && (
-        <Link
-          href="/worker/meters"
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
-        >
-          <span>
-            <span className="block text-sm font-semibold text-slate-900">Meter readings</span>
-            <span className="block text-xs text-slate-500">Enter each room&apos;s electricity reading with a photo</span>
-          </span>
-          <span className="text-sm font-medium text-blue-700">Open</span>
-        </Link>
-      )}
-
-      {can.expenses && (
-        <Link
-          href="/worker/expenses"
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300"
-        >
-          <span>
-            <span className="block text-sm font-semibold text-slate-900">Add an expense</span>
-            <span className="block text-xs text-slate-500">Bought floor cleaner, bulbs or gas? Note it here with the bill</span>
-          </span>
-          <span className="text-sm font-medium text-blue-700">Open</span>
-        </Link>
-      )}
-
-      {/* ---------------------------------------------------------- Tasks */}
-      {can.tasks && (
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900">
-            <ClipboardList className="size-4 text-slate-400" />
-            Your tasks
-          </h2>
-          <Link href="/worker/tasks" className="text-xs font-semibold text-blue-600">
-            See all
-          </Link>
-        </div>
-
-        {tasks.length === 0 ? (
-          <EmptyState
-            icon="check"
-            title="Nothing pending"
-            description="New work assigned to you shows up here straight away."
-            compact
-          />
-        ) : (
-          <ul className="space-y-2">
-            {tasks.map((task) => (
-              <li key={task.id}>
-                <TaskCard
-                  task={{
-                    id: task.id,
-                    title: task.title,
-                    description: task.description,
-                    status: task.status,
-                    priority: task.priority,
-                    kind: task.kind,
-                    dueDate: task.dueDate?.toISOString() ?? null,
-                    propertyName: task.property.name,
-                    propertyType: task.property.type,
-                    roomNumber: task.room?.number ?? null,
-                    complaintCode: task.complaint?.code ?? null,
-                    createdAt: task.createdAt.toISOString(),
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      )}
-
-      {/* --------------------------------------------------------- Kitchen */}
-      {isKitchen && staff.property && (
-        <Card>
-          <CardContent className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-slate-900">
-                <Utensils className="size-4 text-slate-500" />
-                Today&apos;s kitchen
-              </h2>
-              <Link href="/worker/food" className="text-xs font-semibold text-blue-600">
-                Open
-              </Link>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {meals.map((entry) => (
-                <div
-                  key={entry.type}
-                  className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-center"
-                >
-                  <p className="text-[11px] font-medium text-slate-500">
-                    {entry.type.toLowerCase()}
-                  </p>
-                  <p className="font-display text-2xl font-semibold text-slate-900 tabular">
-                    {entry.meal?.actualCount ?? entry.expected}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {entry.meal?.actualCount != null ? 'served' : 'to cook'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          {can.expenses && (
+            <ActionCard
+              href="/worker/expenses"
+              icon={ReceiptText}
+              tone="emerald"
+              title="Add an expense"
+              description="Bought floor cleaner, bulbs or gas? Note it here with the bill"
+            />
+          )}
+        </StaggerItem>
       )}
 
       {/* ------------------------------------------------------ Low stock */}
       {lowStockItems.length > 0 && (
-        <Link href="/worker/grocery">
-          <Card className="border-rose-200 bg-rose-50/50 transition-shadow hover:shadow-sm">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
-                <ShoppingCart className="size-5 text-rose-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-rose-900">
-                  {lowStockItems.length} item{lowStockItems.length === 1 ? '' : 's'} running low
-                </p>
-                <p className="truncate text-xs text-rose-800/80">
-                  {lowStockItems
-                    .slice(0, 3)
-                    .map((i) => i.name)
-                    .join(', ')}
-                  {lowStockItems.length > 3 ? '…' : ''}
-                </p>
-              </div>
-              <ArrowRight className="size-4 shrink-0 text-rose-400" />
-            </CardContent>
-          </Card>
-        </Link>
+        <StaggerItem>
+          <Link
+            href="/worker/grocery"
+            className="group flex items-center gap-3 rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-lift"
+          >
+            <IconTile icon={ShoppingCart} tone="rose" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-rose-900">
+                {lowStockItems.length} item{lowStockItems.length === 1 ? '' : 's'} running low
+              </p>
+              <p className="mt-0.5 line-clamp-1 text-xs text-rose-800/80">
+                {lowStockItems
+                  .slice(0, 3)
+                  .map((i) => i.name)
+                  .join(', ')}
+                {lowStockItems.length > 3 ? '…' : ''}
+              </p>
+            </div>
+            <ArrowRight className="size-4 shrink-0 text-rose-400 transition group-hover:translate-x-0.5" />
+          </Link>
+        </StaggerItem>
+      )}
+
+      {/* ---------------------------------------------------------- Tasks */}
+      {can.tasks && (
+        <StaggerItem>
+          <PhoneSection icon={ClipboardList} title="Your tasks" href="/worker/tasks" />
+          {tasks.length === 0 ? (
+            <EmptyState
+              icon="check"
+              title="Nothing pending"
+              description="New work assigned to you shows up here straight away."
+              compact
+            />
+          ) : (
+            <ul className="space-y-3">
+              {tasks.map((task) => (
+                <li key={task.id}>
+                  <TaskCard
+                    task={{
+                      id: task.id,
+                      title: task.title,
+                      description: task.description,
+                      status: task.status,
+                      priority: task.priority,
+                      kind: task.kind,
+                      dueDate: task.dueDate?.toISOString() ?? null,
+                      propertyName: task.property.name,
+                      propertyType: task.property.type,
+                      roomNumber: task.room?.number ?? null,
+                      complaintCode: task.complaint?.code ?? null,
+                      createdAt: task.createdAt.toISOString(),
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </StaggerItem>
+      )}
+
+      {/* --------------------------------------------------------- Kitchen */}
+      {isKitchen && staff.property && (
+        <StaggerItem>
+          <PhoneSection icon={Utensils} title="Today's kitchen" href="/worker/food" linkLabel="Open" />
+          <div className="grid grid-cols-3 gap-2">
+            {meals.map((entry) => {
+              const served = entry.meal?.actualCount != null
+              return (
+                <div
+                  key={entry.type}
+                  className={
+                    served
+                      ? 'rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 text-center'
+                      : 'rounded-2xl border border-slate-200/80 bg-white p-3 text-center shadow-card'
+                  }
+                >
+                  <p className="text-[11px] font-medium capitalize text-slate-500">
+                    {entry.type.toLowerCase()}
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-semibold text-slate-900 tabular">
+                    {entry.meal?.actualCount ?? entry.expected}
+                  </p>
+                  <p className={served ? 'text-[11px] font-medium text-emerald-700' : 'text-[11px] text-slate-400'}>
+                    {served ? 'served' : 'to cook'}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </StaggerItem>
       )}
 
       {doneToday > 0 && (
-        <Card className="border-emerald-200 bg-emerald-50/50">
-          <CardContent className="flex items-center gap-3 p-4">
-            <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />
+        <StaggerItem>
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4">
+            <IconTile icon={CheckCircle2} tone="emerald" size="sm" />
             <p className="text-sm text-emerald-900">
-              You completed {doneToday} task{doneToday === 1 ? '' : 's'} today. Nice work.
+              You completed <span className="font-semibold">{doneToday}</span> task
+              {doneToday === 1 ? '' : 's'} today. Nice work.
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </StaggerItem>
       )}
-    </div>
+    </Stagger>
   )
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({
+  icon: Icon,
+  label,
+  value,
+  highlight,
+}: {
+  icon: React.ElementType
+  label: string
+  value: string
+  highlight?: boolean
+}) {
   return (
-    <div className="rounded-xl border border-white/15 bg-white/10 p-2.5 backdrop-blur">
-      <p className="text-[11px] font-medium text-white/70">{label}</p>
-      <p className="truncate font-display text-lg font-semibold capitalize">{value}</p>
+    <div
+      className={
+        highlight
+          ? 'rounded-2xl bg-marigold-300/15 p-3 ring-1 ring-inset ring-marigold-300/30'
+          : 'rounded-2xl bg-white/[0.06] p-3 ring-1 ring-inset ring-white/10'
+      }
+    >
+      <Icon className={highlight ? 'size-3.5 text-marigold-300' : 'size-3.5 text-white/50'} />
+      <p className="mt-2 truncate font-display text-lg font-semibold capitalize leading-none tabular">{value}</p>
+      <p className="mt-1 truncate text-[11px] font-medium text-white/55">{label}</p>
     </div>
   )
 }

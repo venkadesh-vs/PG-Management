@@ -4,6 +4,7 @@ import { publicEnv } from '@/lib/public-env'
 import { SiteFooter, SiteHeader } from '@/components/marketing/site-chrome'
 import { Hero } from '@/components/marketing/hero'
 import { ModulesSection } from '@/components/marketing/modules'
+import { ShowcaseSection } from '@/components/marketing/showcase'
 import { ElectricitySection } from '@/components/marketing/electricity'
 import { AutopaySection } from '@/components/marketing/autopay'
 import { FaqSection, PricingSection } from '@/components/marketing/pricing'
@@ -146,6 +147,7 @@ export default async function LandingPage() {
       <main id="main">
         <Hero />
         <ModulesSection />
+        <ShowcaseSection />
         <AutopaySection />
         <ElectricitySection />
         <PricingSection rule={rule} />

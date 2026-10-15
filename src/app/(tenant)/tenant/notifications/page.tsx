@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import { requireTenant } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { Bell } from 'lucide-react'
 import { NotificationList } from '@/components/app/notification-list'
+import { PhoneHeader } from '../_ui/phone-ui'
 
 export const metadata: Metadata = { title: 'Notifications' }
 
@@ -16,14 +18,11 @@ export default async function TenantNotificationsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">
-          Notifications
-        </h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Rent, payments, complaints and notices from your PG.
-        </p>
-      </div>
+      <PhoneHeader
+        icon={Bell}
+        title="Notifications"
+        subtitle="Rent, payments, complaints and notices from your PG."
+      />
       <NotificationList
         notifications={notifications.map((n) => ({
           id: n.id,

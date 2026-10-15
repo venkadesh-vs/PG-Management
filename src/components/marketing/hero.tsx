@@ -65,7 +65,7 @@ export function Hero() {
           >
             Your PG.
             <br />
-            <span className="bg-gradient-to-r from-marigold-200 via-marigold-300 to-amber-100 bg-clip-text text-transparent">Finally under control.</span>
+            <span className="animate-gradient-x bg-gradient-to-r from-marigold-200 via-amber-50 to-marigold-300 bg-[length:200%_auto] bg-clip-text text-transparent">Finally under control.</span>
           </motion.h1>
 
           <motion.p {...rise(0.14)} className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 text-pretty sm:text-lg lg:mx-0">

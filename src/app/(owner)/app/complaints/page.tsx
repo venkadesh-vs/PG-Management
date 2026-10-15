@@ -15,6 +15,7 @@ import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect, Pagination, SearchInput } from '@/components/app/filters'
 import { NewComplaintButton } from './new-complaint'
 import { SlaChip } from '@/components/app/sla-chip'
+import { CategoryTile } from './category-icon'
 import { refreshSlaBreaches } from '@/server/services/complaints'
 import { ExportButton } from '@/components/app/export-button'
 
@@ -241,57 +242,60 @@ export default async function ComplaintsPage({
                 <li key={complaint.id}>
                   <Link
                     href={`/app/complaints/${complaint.id}`}
-                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:border-slate-300 hover:border-slate-300 sm:flex-row sm:items-center"
+                    className="group flex gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lift sm:items-center sm:gap-4"
                   >
-                    <div
-                      className={cn(
-                        'flex size-10 shrink-0 items-center justify-center rounded-xl',
-                        complaint.priority === 'URGENT' || complaint.priority === 'HIGH'
-                          ? 'bg-rose-50 text-rose-600'
-                          : 'bg-slate-100 text-slate-500',
-                      )}
-                    >
-                      <span className="text-[10px] font-bold uppercase" title={categoryLabels[complaint.category] ?? complaint.category}>
-                        {(categoryLabels[complaint.category] ?? complaint.category).slice(0, 4)}
-                      </span>
-                    </div>
+                    <CategoryTile
+                      category={complaint.category}
+                      label={categoryLabels[complaint.category] ?? complaint.category}
+                      hot={complaint.priority === 'URGENT' || complaint.priority === 'HIGH'}
+                    />
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-medium text-slate-900">{complaint.title}</p>
-                        <StatusChip label={priorityStyle.label} chip={priorityStyle.chip} />
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {complaint.code} ·{' '}
-                        <span className="inline-flex items-center gap-1">
-                          <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
-                          {complaint.property.name}
-                        </span>
-                        {` · ${categoryLabels[complaint.category] ?? complaint.category}`}
-                        {complaint.room ? ` · Room ${complaint.room.number}` : ''}
-                        {complaint.resident ? ` · ${complaint.resident.fullName}` : ''}
-                      </p>
-                    </div>
-
-                    <div className="flex shrink-0 flex-wrap items-center gap-3">
-                      <SlaChip
-                        status={complaint.status}
-                        slaDueAt={complaint.slaDueAt}
-                        createdAt={complaint.createdAt}
-                        resolvedAt={complaint.resolvedAt}
-                      />
-                      <div className="text-right">
-                        <p className="text-xs text-slate-500">
-                          {complaint.assignedStaff ? complaint.assignedStaff.name : 'Unassigned'}
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          {relativeTime(complaint.createdAt)}
+                    <div className="flex min-w-0 flex-1 flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-2">
+                          <p className="min-w-0 font-medium leading-snug text-slate-900 transition-colors group-hover:text-blue-700 sm:truncate">
+                            {complaint.title}
+                          </p>
+                          <StatusChip label={priorityStyle.label} chip={priorityStyle.chip} className="shrink-0" />
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 sm:line-clamp-1">
+                          <span className="font-medium text-slate-600">{complaint.code}</span> ·{' '}
+                          <span className="inline-flex items-center gap-1">
+                            <span className={cn('size-1.5 rounded-full', theme.bgSolid)} />
+                            {complaint.property.name}
+                          </span>
+                          {` · ${categoryLabels[complaint.category] ?? complaint.category}`}
+                          {complaint.room ? ` · Room ${complaint.room.number}` : ''}
+                          {complaint.resident ? ` · ${complaint.resident.fullName}` : ''}
                         </p>
                       </div>
-                      <StatusChip
-                        label={COMPLAINT_STATUS_STYLE[complaint.status].label}
-                        chip={COMPLAINT_STATUS_STYLE[complaint.status].chip}
-                      />
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-100 pt-2.5 lg:shrink-0 lg:flex-nowrap lg:border-0 lg:pt-0">
+                        <SlaChip
+                          status={complaint.status}
+                          slaDueAt={complaint.slaDueAt}
+                          createdAt={complaint.createdAt}
+                          resolvedAt={complaint.resolvedAt}
+                        />
+                        <div className="min-w-0 lg:w-28 lg:text-right">
+                          <p
+                            className={cn(
+                              'truncate text-xs',
+                              complaint.assignedStaff ? 'font-medium text-slate-700' : 'text-slate-400',
+                            )}
+                          >
+                            {complaint.assignedStaff ? complaint.assignedStaff.name : 'Unassigned'}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            {relativeTime(complaint.createdAt)}
+                          </p>
+                        </div>
+                        <StatusChip
+                          label={COMPLAINT_STATUS_STYLE[complaint.status].label}
+                          chip={COMPLAINT_STATUS_STYLE[complaint.status].chip}
+                          className="ml-auto lg:ml-0"
+                        />
+                      </div>
                     </div>
                   </Link>
                 </li>

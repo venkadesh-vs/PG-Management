@@ -127,8 +127,15 @@ export function ModulesSection() {
 function ModuleCard({ module: m }: { module: Module }) {
   const gold = m.tone === 'gold'
   const Icon = m.icon
+  // A soft light follows the pointer across the card.
+  function track(event: React.MouseEvent<HTMLElement>) {
+    const box = event.currentTarget.getBoundingClientRect()
+    event.currentTarget.style.setProperty('--x', `${event.clientX - box.left}px`)
+    event.currentTarget.style.setProperty('--y', `${event.clientY - box.top}px`)
+  }
   return (
     <article
+      onMouseMove={track}
       className={cn(
         'group relative flex h-full flex-col overflow-hidden rounded-3xl p-6 transition duration-300 hover:-translate-y-0.5',
         gold
@@ -136,8 +143,17 @@ function ModuleCard({ module: m }: { module: Module }) {
           : 'bg-white shadow-[0_1px_2px_rgb(27_25_24/0.04),0_18px_40px_-28px_rgb(27_25_24/0.28)] ring-1 ring-slate-200/80 hover:ring-blue-200',
       )}
     >
+      <div
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100',
+          gold
+            ? 'bg-[radial-gradient(360px_circle_at_var(--x)_var(--y),rgb(252_191_77/0.16),transparent_45%)]'
+            : 'bg-[radial-gradient(360px_circle_at_var(--x)_var(--y),rgb(104_99_238/0.09),transparent_45%)]',
+        )}
+      />
       {gold && (
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-marigold-400/20 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 animate-float-slow rounded-full bg-marigold-400/20 blur-3xl" />
       )}
       <div className={cn('relative flex min-w-0 flex-1 flex-col gap-5', m.visual && 'md:flex-row md:items-center')}>
         <div className="min-w-0 flex-1">

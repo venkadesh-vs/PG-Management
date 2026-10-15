@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { BadgeCheck, Clock, FileText, IdCard } from 'lucide-react'
+import { BadgeCheck, Clock, FileText, FolderLock, IdCard } from 'lucide-react'
 import { requireTenant } from '@/lib/auth'
 import { getLookupLabels } from '@/server/services/org-defaults'
 import { prisma } from '@/lib/prisma'
@@ -7,6 +7,8 @@ import { formatDate, maskId } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/feedback'
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
+import { IconTile, PhoneHeader } from '../_ui/phone-ui'
 
 export const metadata: Metadata = { title: 'Documents' }
 
@@ -25,12 +27,7 @@ export default async function TenantDocumentsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold tracking-tight text-slate-900">
-          Documents
-        </h1>
-        <p className="mt-0.5 text-sm text-slate-500">Your ID proofs and agreement.</p>
-      </div>
+      <PhoneHeader icon={FolderLock} title="Documents" subtitle="Your ID proofs and agreement." />
 
       {/* --------------------------------------------------- KYC status */}
       <Card
@@ -41,13 +38,12 @@ export default async function TenantDocumentsPage() {
         }
       >
         <CardContent className="flex items-start gap-3 p-5">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
-            {resident.kycStatus === 'VERIFIED' ? (
-              <BadgeCheck className="size-5 text-emerald-600" />
-            ) : (
-              <Clock className="size-5 text-amber-600" />
-            )}
-          </div>
+          <IconTile
+            icon={resident.kycStatus === 'VERIFIED' ? BadgeCheck : Clock}
+            tone={resident.kycStatus === 'VERIFIED' ? 'emerald' : 'amber'}
+            size="lg"
+            className="bg-white"
+          />
           <div>
             <p
               className={`text-sm font-semibold ${
@@ -76,10 +72,8 @@ export default async function TenantDocumentsPage() {
       {resident.idNumber && (
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-              <IdCard className="size-5 text-slate-500" />
-            </div>
-            <div>
+            <IconTile icon={IdCard} />
+            <div className="min-w-0">
               <p className="text-sm font-medium text-slate-800">
                 {resident.idType ? (idTypeLabels[resident.idType] ?? resident.idType.replace('_', ' ')) : 'ID proof'}
               </p>
@@ -96,17 +90,15 @@ export default async function TenantDocumentsPage() {
           description="Documents your PG uploads during admission will be listed here."
         />
       ) : (
-        <ul className="space-y-2">
+        <Stagger onView={false} className="space-y-2.5">
           {resident.documents.map((doc) => (
-            <li key={doc.id}>
+            <StaggerItem key={doc.id}>
               <Card>
                 <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-                    <FileText className="size-5 text-slate-500" />
-                  </div>
+                  <IconTile icon={FileText} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-800">{doc.label}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs capitalize text-slate-500">
                       {doc.kind.replace('_', ' ').toLowerCase()} · {formatDate(doc.uploadedAt)}
                     </p>
                   </div>
@@ -115,12 +107,12 @@ export default async function TenantDocumentsPage() {
                   </Badge>
                 </CardContent>
               </Card>
-            </li>
+            </StaggerItem>
           ))}
-        </ul>
+        </Stagger>
       )}
 
-      <p className="text-center text-xs text-slate-400">
+      <p className="px-4 text-center text-xs leading-relaxed text-slate-400">
         This demo records documents without storing the files themselves. Ask your PG for a copy if
         you need one.
       </p>

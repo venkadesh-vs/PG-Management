@@ -144,10 +144,27 @@ export function QuickSetup({
   function addTypeToFloor(level: number) {
     setGroups((gs) => {
       const at = gs.map((g) => g.level).lastIndexOf(level)
-      const copy: Group = { key: seq++, level, rooms: 2, sharing: 'TRIPLE', ac: false }
+      // Suggest a sharing type the floor doesn't have yet.
+      const used = new Set(gs.filter((g) => g.level === level).map((g) => g.sharing))
+      const sharing = SHARING.find((s) => !used.has(s.type))?.type ?? 'TRIPLE'
+      const copy: Group = { key: seq++, level, rooms: 2, sharing, ac: false }
       return [...gs.slice(0, at + 1), copy, ...gs.slice(at + 1)]
     })
   }
+
+  /** Moves a whole floor (every room type on it) to another level. */
+  function moveFloor(from: number, to: number) {
+    setGroups((gs) => gs.map((g) => (g.level === from ? { ...g, level: to } : g)))
+  }
+
+  function removeFloor(level: number) {
+    setGroups((gs) => gs.filter((g) => g.level !== level))
+  }
+
+  // Floors in order, each with its room-type rows.
+  const floorList = [...new Set(groups.map((g) => g.level))]
+    .sort((a, b) => a - b)
+    .map((level) => ({ level, rows: groups.filter((g) => g.level === level) }))
 
   function validate(s: number): string | null {
     if (s === 0) {
@@ -302,84 +319,115 @@ export function QuickSetup({
 
             {step === 1 && (
               <div className="space-y-5">
-                <StepTitle icon={Layers} title="Your building" hint="One row per floor. Mixed floor? Add another room type to it." />
+                <StepTitle
+                  icon={Layers}
+                  title="Your building"
+                  hint="Floor by floor. A floor with different room types? Add each sharing type as its own row."
+                />
                 <ul className="space-y-3">
-                  {groups.map((g, i) => {
-                    const firstOfFloor = groups.findIndex((x) => x.level === g.level) === i
+                  {floorList.map(({ level, rows }) => {
+                    const floorRooms = rows.reduce((s, g) => s + g.rooms, 0)
+                    const floorBeds = rows.reduce((s, g) => s + g.rooms * capacityFor(g.sharing), 0)
                     return (
                       <motion.li
-                        key={g.key}
+                        key={rows[0].key}
                         layout={!reduce}
                         initial={reduce ? false : { opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={cn('rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4', !firstOfFloor && 'ml-4 border-dashed sm:ml-8')}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4"
                       >
                         <div className="flex flex-wrap items-center gap-3">
                           <select
-                            value={g.level}
-                            onChange={(e) => updateGroup(g.key, { level: Number(e.target.value) })}
+                            value={level}
+                            onChange={(e) => moveFloor(level, Number(e.target.value))}
                             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800"
                             aria-label="Floor"
                           >
-                            {Array.from({ length: 16 }, (_, l) => (
-                              <option key={l} value={l}>
-                                {floorLabel(l)}
-                              </option>
-                            ))}
+                            {Array.from({ length: 16 }, (_, l) => l)
+                              .filter((l) => l === level || !floorList.some((f) => f.level === l))
+                              .map((l) => (
+                                <option key={l} value={l}>
+                                  {floorLabel(l)}
+                                </option>
+                              ))}
                           </select>
-                          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-                            <button type="button" aria-label="Fewer rooms" onClick={() => updateGroup(g.key, { rooms: Math.max(1, g.rooms - 1) })} className="flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
-                              <Minus className="size-4" />
-                            </button>
-                            <input
-                              value={g.rooms}
-                              onChange={(e) => updateGroup(g.key, { rooms: Math.min(60, Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1)) })}
-                              inputMode="numeric"
-                              aria-label="Rooms"
-                              className="w-10 bg-transparent text-center text-sm font-semibold tabular-nums text-slate-900 outline-none"
-                            />
-                            <button type="button" aria-label="More rooms" onClick={() => updateGroup(g.key, { rooms: Math.min(60, g.rooms + 1) })} className="flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
-                              <Plus className="size-4" />
-                            </button>
-                          </div>
-                          <span className="text-sm text-slate-500">rooms</span>
-                          <button
-                            type="button"
-                            onClick={() => updateGroup(g.key, { ac: !g.ac })}
-                            className={cn(
-                              'ml-auto inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition',
-                              g.ac ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-slate-500',
-                            )}
-                          >
-                            <Snowflake className="size-3.5" />
-                            {g.ac ? 'AC' : 'Non-AC'}
-                          </button>
-                          {groups.length > 1 && (
-                            <button type="button" aria-label="Remove row" onClick={() => setGroups((gs) => gs.filter((x) => x.key !== g.key))} className="flex size-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+                          <span className="text-xs text-slate-500 tabular-nums">
+                            {floorRooms} room{floorRooms === 1 ? '' : 's'} · {floorBeds} bed{floorBeds === 1 ? '' : 's'}
+                          </span>
+                          {floorList.length > 1 && (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${floorLabel(level).toLowerCase()}`}
+                              onClick={() => removeFloor(level)}
+                              className="ml-auto flex size-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            >
                               <Trash2 className="size-4" />
                             </button>
                           )}
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {SHARING.map((s) => (
-                            <button
-                              key={s.type}
-                              type="button"
-                              onClick={() => updateGroup(g.key, { sharing: s.type })}
-                              className={cn(
-                                'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
-                                g.sharing === s.type ? 'border-blue-500 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-                              )}
-                            >
-                              {s.label}
-                            </button>
+                        <ul className="mt-3 space-y-2">
+                          {rows.map((g) => (
+                            <li key={g.key} className="rounded-xl border border-slate-200 bg-white p-2.5 sm:p-3">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+                                  <button type="button" aria-label="Fewer rooms" onClick={() => updateGroup(g.key, { rooms: Math.max(1, g.rooms - 1) })} className="flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+                                    <Minus className="size-4" />
+                                  </button>
+                                  <input
+                                    value={g.rooms}
+                                    onChange={(e) => updateGroup(g.key, { rooms: Math.min(60, Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1)) })}
+                                    inputMode="numeric"
+                                    aria-label="Rooms"
+                                    className="w-10 bg-transparent text-center text-sm font-semibold tabular-nums text-slate-900 outline-none"
+                                  />
+                                  <button type="button" aria-label="More rooms" onClick={() => updateGroup(g.key, { rooms: Math.min(60, g.rooms + 1) })} className="flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+                                    <Plus className="size-4" />
+                                  </button>
+                                </div>
+                                <span className="text-sm text-slate-500">rooms</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateGroup(g.key, { ac: !g.ac })}
+                                  className={cn(
+                                    'ml-auto inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition',
+                                    g.ac ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-slate-500',
+                                  )}
+                                >
+                                  <Snowflake className="size-3.5" />
+                                  {g.ac ? 'AC' : 'Non-AC'}
+                                </button>
+                                {rows.length > 1 && (
+                                  <button type="button" aria-label="Remove this room type" onClick={() => setGroups((gs) => gs.filter((x) => x.key !== g.key))} className="flex size-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {SHARING.map((s) => (
+                                  <button
+                                    key={s.type}
+                                    type="button"
+                                    onClick={() => updateGroup(g.key, { sharing: s.type })}
+                                    className={cn(
+                                      'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
+                                      g.sharing === s.type ? 'border-blue-500 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                                    )}
+                                  >
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </li>
                           ))}
-                        </div>
-                        {firstOfFloor && (
-                          <button type="button" onClick={() => addTypeToFloor(g.level)} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
-                            + Another room type on {floorLabel(g.level).toLowerCase()}
-                          </button>
-                        )}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={() => addTypeToFloor(level)}
+                          className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+                        >
+                          <Plus className="size-3.5" />
+                          Add another sharing type on {floorLabel(level).toLowerCase()}
+                        </button>
                       </motion.li>
                     )
                   })}

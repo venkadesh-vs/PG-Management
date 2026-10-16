@@ -61,7 +61,7 @@ import {
   lateFee as lateFeeFor,
   LATE_FEE_AFTER_DAYS,
   LATE_FEE_PERCENT,
-  alignedBillDate,
+  billingBase,
   nextBillDate,
   PAUSE_AFTER_DAYS,
   prorated,
@@ -144,19 +144,18 @@ export async function alignOwnerBilling(organizationId: string, db: Prisma.Trans
   const dueDay = await ownerDueDay(organizationId, db)
   const subs = await db.subscription.findMany({
     where: { organizationId, status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] } },
-    select: { id: true, nextBillingDate: true, alignedFrom: true, gatewaySubscriptionId: true, mandateStatus: true, autopayEnabled: true },
+    select: { id: true, status: true, nextBillingDate: true, alignedFrom: true, trialEndsAt: true, gatewaySubscriptionId: true, mandateStatus: true, autopayEnabled: true },
   })
   let moved = 0
   for (const sub of subs) {
     if (sub.gatewaySubscriptionId && sub.autopayEnabled && sub.mandateStatus === 'ACTIVE') continue
-    const target = alignedBillDate(dueDay, sub)
-    if (startOfDay(sub.nextBillingDate).getTime() === target.getTime()) continue
-    const original = sub.alignedFrom ?? sub.nextBillingDate
-    await db.subscription.update({
-      where: { id: sub.id },
-      // Back on its original date: nothing to pro-rate any more.
-      data: { nextBillingDate: target, alignedFrom: startOfDay(original).getTime() === target.getTime() ? null : original },
-    })
+    // A trial still running is never billed before it ends.
+    const trial = sub.status === 'TRIALING' ? sub.trialEndsAt : null
+    const base = billingBase({ ...sub, trialEndsAt: trial })
+    const target = nextBillDate(dueDay, base)
+    const alignedFrom = base.getTime() === target.getTime() ? null : base
+    if (startOfDay(sub.nextBillingDate).getTime() === target.getTime() && (sub.alignedFrom?.getTime() ?? null) === (alignedFrom?.getTime() ?? null)) continue
+    await db.subscription.update({ where: { id: sub.id }, data: { nextBillingDate: target, alignedFrom } })
     moved++
   }
   return { dueDay, moved }
@@ -2640,6 +2639,7 @@ export async function adminSubscriptionAction(params: {
     if (subscription.status === 'CANCELLED') throw new ConflictError('Reactivate the subscription first')
     const base = subscription.trialEndsAt && subscription.trialEndsAt > now ? subscription.trialEndsAt : now
     const trialEndsAt = addDays(base, input.days)
+    const firstBill = nextBillDate(await ownerDueDay(subscription.organizationId), startOfDay(trialEndsAt))
     await prisma.$transaction(async (tx) => {
       // A trial that lapsed unpaid: its open invoices are withdrawn.
       await tx.subscriptionInvoice.updateMany({
@@ -2657,7 +2657,10 @@ export async function adminSubscriptionAction(params: {
             type: 'TRIAL_EXTENDED',
           }),
           trialEndsAt,
-          nextBillingDate: trialEndsAt,
+          // First bill on the owner's due day after the new trial end; the
+          // days in between are charged pro rata from the trial end.
+          nextBillingDate: firstBill,
+          alignedFrom: firstBill.getTime() > startOfDay(trialEndsAt).getTime() ? startOfDay(trialEndsAt) : null,
           graceEndsAt: null,
           failedAttempts: 0,
           nextRetryAt: null,
@@ -2755,7 +2758,7 @@ export async function adminSubscriptionAction(params: {
             cancelReason: null,
             graceEndsAt: status === 'ACTIVE' ? null : addDays(now, subscription.plan.graceDays),
             // A period that ended while cancelled is billed afresh from today.
-            ...(subscription.nextBillingDate < now ? { nextBillingDate: now } : {}),
+            ...(subscription.nextBillingDate < now ? { nextBillingDate: now, alignedFrom: null } : {}),
           },
         })
         await tx.organization.updateMany({

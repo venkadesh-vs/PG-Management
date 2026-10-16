@@ -40,15 +40,23 @@ export function nextBillDate(dueDay: number, from: Date): Date {
 }
 
 /**
- * Where a subscription's next bill goes when the owner's due day is applied.
- * Always counted from the date it had before any move (`alignedFrom`), so
- * changing the due day back and forth never pushes the bill months ahead.
+ * Where billing starts counting for a subscription: its original date
+ * (before any move to the owner's due day), never before the trial ends and
+ * never in the past. Days from here to the bill are charged pro rata.
  */
-export function alignedBillDate(dueDay: number, sub: { nextBillingDate: Date; alignedFrom: Date | null }, today = new Date()): Date {
-  const original = dateOnly(sub.alignedFrom ?? sub.nextBillingDate)
-  // Never into the past: the days since then are charged pro rata on the first bill.
-  const from = original < dateOnly(today) ? dateOnly(today) : original
-  return nextBillDate(dueDay, from)
+export function billingBase(sub: { nextBillingDate: Date; alignedFrom: Date | null; trialEndsAt?: Date | null }, today = new Date()): Date {
+  const candidates = [dateOnly(sub.alignedFrom ?? sub.nextBillingDate), dateOnly(today)]
+  if (sub.trialEndsAt) candidates.push(dateOnly(sub.trialEndsAt))
+  return new Date(Math.max(...candidates.map((d) => d.getTime())))
+}
+
+/**
+ * Where a subscription's next bill goes when the owner's due day is applied.
+ * Always counted from billingBase, so changing the due day back and forth
+ * never pushes the bill months ahead, and it never lands inside a trial.
+ */
+export function alignedBillDate(dueDay: number, sub: { nextBillingDate: Date; alignedFrom: Date | null; trialEndsAt?: Date | null }, today = new Date()): Date {
+  return nextBillDate(dueDay, billingBase(sub, today))
 }
 
 export type BillStage = 'upcoming' | 'due' | 'warning' | 'late' | 'paused'

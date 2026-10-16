@@ -23,6 +23,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input, Select } from '@/components/ui/input'
+import { UpiIdInput } from '@/components/ui/india-inputs'
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 import { Badge } from '@/components/ui/badge'
 import { TeamPanel, type TeamMember } from './team-panel'
@@ -264,7 +265,7 @@ export function SettingsForm({
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <Field label="UPI ID" hint="yourpg@okicici">
-                  <Input {...form.register('upiId')} disabled={!canEdit} />
+                  <UpiIdInput {...form.register('upiId')} disabled={!canEdit} />
                 </Field>
                 <Field label="Payee name" hint="As it should appear in the UPI app">
                   <Input {...form.register('upiPayeeName')} disabled={!canEdit} />

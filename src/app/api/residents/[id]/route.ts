@@ -1,3 +1,5 @@
+import { ValidationError } from '@/lib/tenancy'
+import { idNumberProblem } from '@/lib/india'
 import { prisma } from '@/lib/prisma'
 import { parseBody, route } from '@/lib/api-helpers'
 import {
@@ -65,6 +67,8 @@ export const PATCH = route(
     await assertResidentAccess(user, id)
 
     const body = await parseBody(request, residentUpdateSchema)
+    const idProblem = idNumberProblem(body.idType, body.idNumber)
+    if (idProblem) throw new ValidationError(idProblem)
 
     // Rent never changes silently: a new amount is a dated rent revision
     // (history, audit, notes on months already invoiced).

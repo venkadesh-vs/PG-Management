@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { api } from '@/lib/client'
 import { toISODate } from '@/lib/utils'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import {
   Dialog,
   DialogContent,
@@ -73,8 +75,8 @@ export function NewLeadButton({
     event.preventDefault()
     const nextErrors: Record<string, string> = {}
     if (values.name.trim().length < 2) nextErrors.name = 'Enter their name'
-    if (!/^(\+?91[-\s]?)?[6-9]\d{9}$/.test(values.phone.replace(/\s/g, ''))) {
-      nextErrors.phone = 'Enter a valid 10-digit mobile number'
+    if (!INDIA.mobile.test(values.phone)) {
+      nextErrors.phone = INDIA_MESSAGE.mobile
     }
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
@@ -115,7 +117,7 @@ export function NewLeadButton({
               <Input autoFocus placeholder="e.g. Priya Raman" value={values.name} onChange={(e) => set('name', e.target.value)} />
             </Field>
             <Field label="Mobile number" required error={errors.phone} hint="Same number again? We’ll update their enquiry.">
-              <Input inputMode="tel" placeholder="10-digit number" value={values.phone} onChange={(e) => set('phone', e.target.value)} />
+              <PhoneInput value={values.phone} onChange={(e) => set('phone', e.target.value)} />
             </Field>
             <Field label="Email">
               <Input type="email" placeholder="Optional" value={values.email} onChange={(e) => set('email', e.target.value)} />

@@ -15,6 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { cleanPhone, PhoneInput, PincodeInput } from '@/components/ui/india-inputs'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 
 export type ProfileValues = {
   phone: string
@@ -67,8 +69,20 @@ export function EditProfile({
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
-    if (!/^(\+?91[-\s]?)?[6-9]\d{9}$/.test(values.phone.trim())) {
-      setError({ field: 'phone', message: 'Enter a valid 10-digit mobile number' })
+    if (!INDIA.mobile.test(cleanPhone(values.phone))) {
+      setError({ field: 'phone', message: INDIA_MESSAGE.mobile })
+      return
+    }
+    // Optional numbers are checked only when edited, so an old value never blocks a save.
+    const changed = (key: keyof ProfileValues) => values[key] !== initial[key] && values[key].trim() !== ''
+    for (const key of ['whatsappPhone', 'guardianPhone'] as const) {
+      if (changed(key) && !INDIA.mobile.test(cleanPhone(values[key]))) {
+        setError({ field: key, message: INDIA_MESSAGE.mobile })
+        return
+      }
+    }
+    if (changed('pincode') && !INDIA.pincode.test(values.pincode.trim())) {
+      setError({ field: 'pincode', message: INDIA_MESSAGE.pincode })
       return
     }
     setBusy(true)
@@ -106,10 +120,10 @@ export function EditProfile({
 
             <div className="grid gap-4 py-3 sm:grid-cols-2">
               <Field label="Mobile number" required error={err('phone')}>
-                <Input type="tel" inputMode="tel" value={values.phone} onChange={(e) => set('phone', e.target.value)} />
+                <PhoneInput value={values.phone} onChange={(e) => set('phone', e.target.value)} />
               </Field>
               <Field label="WhatsApp number" hint="Leave empty if same as mobile" error={err('whatsappPhone')}>
-                <Input type="tel" inputMode="tel" value={values.whatsappPhone} onChange={(e) => set('whatsappPhone', e.target.value)} />
+                <PhoneInput value={values.whatsappPhone} onChange={(e) => set('whatsappPhone', e.target.value)} />
               </Field>
               <Field label="Email" error={err('email')}>
                 <Input type="email" inputMode="email" value={values.email} onChange={(e) => set('email', e.target.value)} />
@@ -140,7 +154,7 @@ export function EditProfile({
                 </Select>
               </Field>
               <Field label="Their phone" error={err('guardianPhone')} className="sm:col-span-2">
-                <Input type="tel" inputMode="tel" value={values.guardianPhone} onChange={(e) => set('guardianPhone', e.target.value)} />
+                <PhoneInput value={values.guardianPhone} onChange={(e) => set('guardianPhone', e.target.value)} />
               </Field>
 
               <p className="pt-1 text-sm font-semibold text-slate-900 sm:col-span-2">Home address</p>
@@ -155,7 +169,7 @@ export function EditProfile({
                   <Input value={values.state} onChange={(e) => set('state', e.target.value)} />
                 </Field>
                 <Field label="PIN code" error={err('pincode')}>
-                  <Input inputMode="numeric" maxLength={6} value={values.pincode} onChange={(e) => set('pincode', e.target.value)} />
+                  <PincodeInput value={values.pincode} onChange={(e) => set('pincode', e.target.value)} />
                 </Field>
               </div>
 

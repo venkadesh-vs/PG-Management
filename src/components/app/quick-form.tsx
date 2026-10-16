@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Switch } from '@/components/ui/primitives'
 
@@ -255,11 +256,17 @@ export function QuickForm({
                         onChange={(e) => set(field.name, e.target.value)}
                         aria-invalid={Boolean(error)}
                       />
+                    ) : field.kind === 'tel' ? (
+                      <PhoneInput
+                        value={String(values[field.name] ?? '')}
+                        onChange={(e) => set(field.name, e.target.value)}
+                        aria-invalid={Boolean(error)}
+                      />
                     ) : (
                       <Input
                         type={field.kind === 'number' ? 'number' : field.kind}
                         inputMode={
-                          field.kind === 'number' ? 'numeric' : field.kind === 'tel' ? 'tel' : undefined
+                          field.kind === 'number' ? 'numeric' : undefined
                         }
                         value={String(values[field.name] ?? '')}
                         placeholder={field.placeholder}

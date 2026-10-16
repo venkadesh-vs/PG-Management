@@ -39,9 +39,11 @@ import {
   type RentCard,
   type SharingType,
 } from '@/lib/rent-card'
+import { INDIA } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
+import { PincodeInput } from '@/components/ui/india-inputs'
 import { Switch } from '@/components/ui/primitives'
 
 type Group = { key: number; level: number; rooms: number; sharing: SharingType; ac: boolean }
@@ -171,7 +173,7 @@ export function QuickSetup({
       if (name.trim().length < 3) return 'Give your PG a name'
       if (addressLine.trim().length < 3) return 'Enter the area or street'
       if (city.trim().length < 2) return 'Enter the city'
-      if (!/^\d{6}$/.test(pincode)) return 'Enter the 6-digit PIN code'
+      if (!INDIA.pincode.test(pincode)) return 'Enter the 6-digit PIN code'
     }
     if (s === 1 && !groups.length) return 'Add at least one floor'
     if (s === 2) {
@@ -311,7 +313,7 @@ export function QuickSetup({
                     <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="h-12" />
                   </Field>
                   <Field label="PIN code" required hint={state ? `State: ${state}` : 'We fill the state from it'}>
-                    <Input value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="600097" className="h-12" />
+                    <PincodeInput value={pincode} onChange={(e) => setPincode(e.target.value)} className="h-12" />
                   </Field>
                 </div>
               </div>

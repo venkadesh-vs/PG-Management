@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 
 type Task = {
   id: string
@@ -228,7 +229,7 @@ export function RepairCard({
                   <Input value={vendorName} maxLength={120} onChange={(e) => setVendorName(e.target.value)} />
                 </Field>
                 <Field label="Mobile" className="min-w-0">
-                  <Input inputMode="tel" value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
+                  <PhoneInput value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
                 </Field>
               </div>
               <DialogFooter>

@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 
 export type FormKind = 'LEAVE' | 'VISITOR' | 'ROOM_CHANGE' | 'SERVICE'
 
@@ -207,7 +208,7 @@ export function RequestFormDialog({
                         <Input value={text('visitorName')} onChange={set('visitorName')} placeholder="Ramesh Kumar" required />
                       </Field>
                       <Field label="Phone">
-                        <Input type="tel" inputMode="tel" value={text('visitorPhone')} onChange={set('visitorPhone')} placeholder="98765 43210" />
+                        <PhoneInput value={text('visitorPhone')} onChange={set('visitorPhone')} />
                       </Field>
                       <Field label="How many people?">
                         <Input type="number" min={1} max={20} value={text('visitorCount')} onChange={set('visitorCount')} />

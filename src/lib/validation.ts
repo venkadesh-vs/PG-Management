@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { INDIA, INDIA_MESSAGE } from './india'
 
 /**
  * Shared Zod schemas. The same object validates the React Hook Form on the
@@ -45,7 +46,7 @@ export const checkInSchema = z.object({
   pincode: z
     .string()
     .trim()
-    .regex(/^\d{6}$/, 'PIN code must be 6 digits')
+    .regex(INDIA.pincode, INDIA_MESSAGE.pincode)
     .optional()
     .or(z.literal('')),
 
@@ -202,7 +203,7 @@ export const propertySchema = z.object({
   addressLine: z.string().trim().min(5, 'Enter the address'),
   city: z.string().trim().min(2, 'Enter the city'),
   state: z.string().trim().min(2, 'Enter the state'),
-  pincode: z.string().trim().regex(/^\d{6}$/, 'PIN code must be 6 digits'),
+  pincode: z.string().trim().regex(INDIA.pincode, INDIA_MESSAGE.pincode),
   contactName: optionalString,
   contactPhone: optionalPhone,
   description: optionalString,
@@ -426,7 +427,7 @@ export const settingsSchema = z.object({
   reminderOnDueDate: z.boolean(),
   reminderAfterDays: z.coerce.number().int().min(1).max(15),
   whatsappEnabled: z.boolean(),
-  upiId: optionalString,
+  upiId: z.string().trim().regex(INDIA.upi, INDIA_MESSAGE.upi).optional().or(z.literal('')),
   upiPayeeName: optionalString,
   invoicePrefix: z.string().trim().min(1).max(6),
   receiptPrefix: z.string().trim().min(1).max(6),

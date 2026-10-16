@@ -6,9 +6,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { BedDouble, Check, Loader2, Plus, Search, UserRound, X } from 'lucide-react'
 import { api } from '@/lib/client'
 import { cn, formatDate, formatMoney, toISODate } from '@/lib/utils'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { cleanPhone, PhoneInput } from '@/components/ui/india-inputs'
 import { Switch } from '@/components/ui/primitives'
 import {
   Dialog,
@@ -56,7 +58,7 @@ function initialState(properties: PropertyOption[], defaultPropertyId: string | 
   return {
     leadId: prefill?.leadId ?? '',
     name: prefill?.name ?? '',
-    phone: prefill?.phone ?? '',
+    phone: cleanPhone(prefill?.phone ?? ''),
     email: prefill?.email ?? '',
     propertyId: property?.id ?? '',
     bedId: '',
@@ -163,7 +165,7 @@ export function NewBookingButton({
       ...v,
       leadId: lead.id,
       name: lead.name,
-      phone: lead.phone,
+      phone: cleanPhone(lead.phone),
       email: lead.email ?? '',
       ...(lead.propertyId && lead.propertyId !== v.propertyId ? { propertyId: lead.propertyId, bedId: '' } : {}),
     }))
@@ -183,7 +185,7 @@ export function NewBookingButton({
     event.preventDefault()
     const errs: Record<string, string> = {}
     if (values.name.trim().length < 2) errs.name = 'Enter their name'
-    if (!/^(\+?91[-\s]?)?[6-9]\d{9}$/.test(values.phone.replace(/\s/g, ''))) errs.phone = 'Enter a valid 10-digit mobile number'
+    if (!INDIA.mobile.test(values.phone)) errs.phone = INDIA_MESSAGE.mobile
     if (values.confirm && !values.bedId) errs.bedId = 'Pick a free bed to hold'
     if (!(Number(values.rent) > 0)) errs.rent = 'Rent must be greater than zero'
     if (values.tokenReceived && !(Number(values.tokenAmount) > 0)) errs.tokenAmount = 'Enter the token amount'
@@ -243,7 +245,7 @@ export function NewBookingButton({
                   <Input value={values.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
                 </Field>
                 <Field label="Mobile number" required error={errors.phone}>
-                  <Input inputMode="tel" value={values.phone} onChange={(e) => set('phone', e.target.value)} placeholder="10-digit number" />
+                  <PhoneInput value={values.phone} onChange={(e) => set('phone', e.target.value)} />
                 </Field>
                 <Field label="Email" className="sm:col-span-2">
                   <Input type="email" value={values.email} onChange={(e) => set('email', e.target.value)} placeholder="Optional" />

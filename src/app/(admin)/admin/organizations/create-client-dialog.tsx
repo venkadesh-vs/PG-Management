@@ -7,6 +7,7 @@ import { Building2, Plus } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { Field, Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -132,11 +133,15 @@ export function CreateClientDialog({
                     required={field.required}
                     className={field.half ? undefined : 'sm:col-span-2'}
                   >
-                    <Input
-                      type={field.type ?? 'text'}
-                      value={values[field.name]}
-                      onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
-                    />
+                    {field.type === 'tel' ? (
+                      <PhoneInput value={values[field.name]} onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))} />
+                    ) : (
+                      <Input
+                        type={field.type ?? 'text'}
+                        value={values[field.name]}
+                        onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
+                      />
+                    )}
                   </Field>
                 ))}
                 {error && <p className="text-xs font-medium text-rose-600 sm:col-span-2">{error}</p>}

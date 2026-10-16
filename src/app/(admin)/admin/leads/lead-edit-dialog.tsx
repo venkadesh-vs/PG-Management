@@ -7,6 +7,7 @@ import { api } from '@/lib/client'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import {
   Dialog,
   DialogContent,
@@ -187,10 +188,10 @@ export function LeadEditDialog({
                 <Input value={values.pgName} onChange={set('pgName')} />
               </Field>
               <Field label="Phone" required>
-                <Input type="tel" value={values.phone} onChange={set('phone')} required />
+                <PhoneInput value={values.phone} onChange={set('phone')} required />
               </Field>
               <Field label="WhatsApp" hint="Leave empty if same as phone">
-                <Input type="tel" value={values.whatsapp} onChange={set('whatsapp')} />
+                <PhoneInput value={values.whatsapp} onChange={set('whatsapp')} />
               </Field>
               <Field label="Email">
                 <Input type="email" value={values.email} onChange={set('email')} />

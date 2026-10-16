@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput, PincodeInput } from '@/components/ui/india-inputs'
 import { Switch } from '@/components/ui/primitives'
 
 type Values = z.infer<typeof propertySchema>
@@ -269,7 +270,7 @@ export function PropertyForm({
                 <Input {...form.register('state')} />
               </Field>
               <Field label="PIN code" required error={form.formState.errors.pincode?.message}>
-                <Input inputMode="numeric" maxLength={6} {...form.register('pincode')} />
+                <PincodeInput {...form.register('pincode')} />
               </Field>
             </div>
 
@@ -278,7 +279,7 @@ export function PropertyForm({
                 <Input {...form.register('contactName')} />
               </Field>
               <Field label="Contact number" error={form.formState.errors.contactPhone?.message}>
-                <Input inputMode="tel" {...form.register('contactPhone')} />
+                <PhoneInput {...form.register('contactPhone')} />
               </Field>
             </div>
 

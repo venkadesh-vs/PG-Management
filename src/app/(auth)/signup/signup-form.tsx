@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { Eye, EyeOff, Gift, Rocket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { Checkbox } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/toast'
 import { api, ApiError } from '@/lib/client'
@@ -107,7 +108,7 @@ export function SignupForm({
           <Input id="email" type="email" autoComplete="email" placeholder="you@example.com" {...form.register('email')} />
         </Field>
         <Field label="Mobile number" required error={errors.phone?.message} htmlFor="phone">
-          <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="98765 43210" {...form.register('phone')} />
+          <PhoneInput id="phone" {...form.register('phone')} />
         </Field>
       </div>
       <Field label="City" required error={errors.city?.message} htmlFor="city">

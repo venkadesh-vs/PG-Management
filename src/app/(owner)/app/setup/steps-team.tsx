@@ -4,11 +4,13 @@ import * as React from 'react'
 import Link from 'next/link'
 import { CheckCircle2, ExternalLink, FileSpreadsheet, MessageCircle, RefreshCw, UserPlus, Users } from 'lucide-react'
 import { api } from '@/lib/client'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { toISODate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Field, Input, Select } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { Button } from '@/components/ui/button'
-import { Note, PHONE_RE, StepFooter, StepHeading, hasErrors, toInt, type Errors, type StepContext } from './ui'
+import { Note, StepFooter, StepHeading, hasErrors, toInt, type Errors, type StepContext } from './ui'
 
 function useAdvance(ctx: StepContext, action: string) {
   const toast = useToast()
@@ -133,7 +135,7 @@ function InviteManager({ ctx, onAdded }: { ctx: StepContext; onAdded: (name: str
     const e: Errors = {
       name: v.name.trim().length < 2 ? 'Enter their name' : undefined,
       email: !/^\S+@\S+\.\S+$/.test(v.email.trim()) ? 'Enter a valid email' : undefined,
-      phone: !PHONE_RE.test(v.phone.trim()) ? 'Enter a valid 10-digit mobile number' : undefined,
+      phone: !INDIA.mobile.test(v.phone.trim()) ? INDIA_MESSAGE.mobile : undefined,
     }
     setErrors(e)
     if (hasErrors(e)) return
@@ -180,7 +182,7 @@ function InviteManager({ ctx, onAdded }: { ctx: StepContext; onAdded: (name: str
           <Input type="email" autoCapitalize="none" value={v.email} onChange={set('email')} aria-invalid={Boolean(errors.email)} />
         </Field>
         <Field label="Mobile" error={errors.phone}>
-          <Input inputMode="tel" value={v.phone} onChange={set('phone')} aria-invalid={Boolean(errors.phone)} />
+          <PhoneInput value={v.phone} onChange={set('phone')} aria-invalid={Boolean(errors.phone)} />
         </Field>
       </div>
       <Button variant="outline" size="sm" onClick={invite} loading={busy}>
@@ -204,7 +206,7 @@ function AddStaff({ ctx, onAdded }: { ctx: StepContext; onAdded: (name: string) 
     const e: Errors = {
       name: v.name.trim().length < 2 ? 'Enter the name' : undefined,
       role: !v.role ? 'Choose a job title' : undefined,
-      phone: !PHONE_RE.test(v.phone.trim()) ? 'Enter a valid 10-digit mobile number' : undefined,
+      phone: !INDIA.mobile.test(v.phone.trim()) ? INDIA_MESSAGE.mobile : undefined,
       salary: salary !== undefined && (Number.isNaN(salary) || salary < 0) ? 'Enter a whole rupee amount' : undefined,
     }
     setErrors(e)
@@ -251,7 +253,7 @@ function AddStaff({ ctx, onAdded }: { ctx: StepContext; onAdded: (name: string) 
           </Select>
         </Field>
         <Field label="Mobile" error={errors.phone}>
-          <Input inputMode="tel" value={v.phone} onChange={set('phone')} aria-invalid={Boolean(errors.phone)} />
+          <PhoneInput value={v.phone} onChange={set('phone')} aria-invalid={Boolean(errors.phone)} />
         </Field>
         <Field label="Monthly salary (₹)" hint="Optional" error={errors.salary}>
           <Input type="number" inputMode="numeric" value={v.salary} onChange={set('salary')} />

@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { CheckCircle2, CreditCard, ExternalLink, QrCode } from 'lucide-react'
 import { api } from '@/lib/client'
 import { formatMoney } from '@/lib/utils'
+import { INDIA } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Field, Input } from '@/components/ui/input'
+import { UpiIdInput } from '@/components/ui/india-inputs'
 import { Switch } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
 import { Choice, Note, StepFooter, StepHeading, hasErrors, toInt, type Errors, type StepContext } from './ui'
@@ -262,8 +264,6 @@ export function FoodStep({ ctx }: { ctx: StepContext }) {
 
 // ------------------------------------------------------------ payments ----
 
-const UPI_RE = /^[\w.-]{2,}@[A-Za-z]{2,}$/
-
 export function PaymentsStep({ ctx }: { ctx: StepContext }) {
   const toast = useToast()
   const { settings, facts, isOwner, owner } = ctx.snapshot
@@ -275,7 +275,7 @@ export function PaymentsStep({ ctx }: { ctx: StepContext }) {
   async function save(how: 'complete' | 'skip') {
     const id = upiId.trim()
     if (how === 'complete') {
-      if (id && !UPI_RE.test(id)) {
+      if (id && !INDIA.upi.test(id)) {
         setError('That doesn’t look like a UPI ID — e.g. name@okhdfcbank')
         return
       }
@@ -308,7 +308,7 @@ export function PaymentsStep({ ctx }: { ctx: StepContext }) {
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="UPI ID" error={error} htmlFor="upi">
-            <Input id="upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="yourname@okhdfcbank" autoCapitalize="none" aria-invalid={Boolean(error)} />
+            <UpiIdInput id="upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} aria-invalid={Boolean(error)} />
           </Field>
           <Field label="Payee name" hint="Shown in the UPI app" htmlFor="payee">
             <Input id="payee" value={payee} onChange={(e) => setPayee(e.target.value)} />

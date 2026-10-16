@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { ok, parseBody, route } from '@/lib/api-helpers'
 import {
   getPlatformPaymentDetails,
@@ -21,7 +22,7 @@ const schema = z.object({
         .string()
         .trim()
         .max(100)
-        .refine((v) => v === '' || /^[\w.-]{2,}@[\w.-]{2,}$/.test(v), 'Enter a UPI ID like stayflow@okhdfcbank')
+        .refine((v) => v === '' || INDIA.upi.test(v), 'Enter a UPI ID like stayflow@okhdfcbank')
         .default(''),
       payeeName: text(100),
       bankName: text(100),
@@ -30,15 +31,20 @@ const schema = z.object({
         .string()
         .trim()
         .max(30)
-        .refine((v) => v === '' || /^\d{6,20}$/.test(v), 'Account number should be 6–20 digits')
+        .refine((v) => v === '' || INDIA.accountNumber.test(v), INDIA_MESSAGE.accountNumber)
         .default(''),
       ifsc: z
         .string()
         .trim()
         .toUpperCase()
-        .refine((v) => v === '' || /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v), 'Enter a valid IFSC (e.g. HDFC0001234)')
+        .refine((v) => v === '' || INDIA.ifsc.test(v), 'Enter a valid IFSC (e.g. HDFC0001234)')
         .default(''),
-      supportWhatsapp: text(20),
+      supportWhatsapp: z
+        .string()
+        .trim()
+        .transform((v) => v.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, ''))
+        .refine((v) => v === '' || INDIA.mobile.test(v), INDIA_MESSAGE.mobile)
+        .default(''),
       supportEmail: z.union([z.literal(''), z.string().trim().email('Enter a valid email')]).default(''),
     })
     .optional(),

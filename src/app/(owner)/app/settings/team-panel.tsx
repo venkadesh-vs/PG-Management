@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Ban, RotateCcw, Smartphone, UserPlus, Users } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
 import { cn, formatDateTime, relativeTime } from '@/lib/utils'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input, Select } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { Checkbox } from '@/components/ui/primitives'
 import {
   Dialog,
@@ -335,6 +337,10 @@ function InviteManagerDialog({
       setError('Name, email and mobile number are all needed')
       return
     }
+    if (!INDIA.mobile.test(values.phone)) {
+      setError(INDIA_MESSAGE.mobile)
+      return
+    }
     if (!allPgs && selected.length === 0) {
       setError('Choose at least one PG, or give access to all PGs')
       return
@@ -390,9 +396,7 @@ function InviteManagerDialog({
               />
             </Field>
             <Field label="Mobile number" required>
-              <Input
-                type="tel"
-                inputMode="tel"
+              <PhoneInput
                 value={values.phone}
                 onChange={(e) => setValues((v) => ({ ...v, phone: e.target.value }))}
               />

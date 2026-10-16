@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
 import { OwnerAutopayCard } from './owner-autopay-card'
+import { PaidClaimForm } from '@/app/(auth)/paywall/paywall-actions'
 import { ownerAutopayStatus } from '@/server/services/owner-autopay'
 import { PayInvoiceButton } from './pay-invoice-button'
 import { DueDayPicker } from './due-day-picker'
@@ -239,6 +240,10 @@ export default async function SubscriptionPage() {
                       </li>
                     )}
                   </ul>
+                  {/* Paid outside the app (GPay / UPI / bank transfer): report it and StayFlow verifies it. */}
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <PaidClaimForm canPay invoices={[{ id: bill.anchor.id, number: `Bill due ${formatDate(bill.dueDate)}`, balance: bill.due }]} />
+                  </div>
                 </div>
               ))
             )}

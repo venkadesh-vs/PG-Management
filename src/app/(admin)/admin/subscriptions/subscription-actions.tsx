@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { MoreHorizontal } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, toISODate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select } from '@/components/ui/input'
@@ -22,7 +22,7 @@ type Action = 'EXTEND_TRIAL' | 'APPLY_CREDIT' | 'MARK_PAID' | 'CANCEL' | 'REACTI
 const LABEL: Record<Action, string> = {
   EXTEND_TRIAL: 'Extend trial',
   APPLY_CREDIT: 'Apply credit',
-  MARK_PAID: 'Mark invoice paid',
+  MARK_PAID: 'Record a payment',
   CANCEL: 'Cancel subscription',
   REACTIVATE: 'Reactivate',
 }
@@ -53,6 +53,7 @@ export function SubscriptionAdminActions({
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
   const [method, setMethod] = React.useState('BANK_TRANSFER')
+  const [paidOn, setPaidOn] = React.useState(() => toISODate(new Date()))
   const [busy, setBusy] = React.useState(false)
 
   const available: Action[] = []
@@ -68,7 +69,7 @@ export function SubscriptionAdminActions({
     try {
       const body =
         action === 'MARK_PAID'
-          ? { action, invoiceId: openInvoice?.id, method, reference: note || undefined }
+          ? { action, invoiceId: openInvoice?.id, method, reference: note || undefined, amount: amount ? Number(amount) : undefined, paidOn }
           : action === 'EXTEND_TRIAL'
             ? { action, subscriptionId, days: Number(days) }
             : action === 'APPLY_CREDIT'
@@ -141,10 +142,23 @@ export function SubscriptionAdminActions({
                 <Field label="Paid by">
                   <Select value={method} onChange={(e) => setMethod(e.target.value)}>
                     <option value="BANK_TRANSFER">Bank transfer</option>
-                    <option value="UPI">UPI</option>
+                    <option value="UPI">UPI / GPay</option>
                     <option value="CASH">Cash</option>
                     <option value="CARD">Card</option>
                   </Select>
+                </Field>
+                <Field label="Amount received" hint="Leave empty for the full bill">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={amount}
+                    placeholder="Full bill"
+                    onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                  />
+                </Field>
+                <Field label="Received on">
+                  <Input type="date" value={paidOn} max={toISODate(new Date())} onChange={(e) => setPaidOn(e.target.value)} />
                 </Field>
                 <Field label="Reference">
                   <Input value={note} maxLength={60} onChange={(e) => setNote(e.target.value)} />

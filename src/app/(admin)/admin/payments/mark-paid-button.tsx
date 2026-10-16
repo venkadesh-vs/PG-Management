@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/client'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, toISODate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,6 +32,8 @@ export function MarkPaidButton({
   const [open, setOpen] = React.useState(false)
   const [method, setMethod] = React.useState('BANK_TRANSFER')
   const [reference, setReference] = React.useState('')
+  const [received, setReceived] = React.useState('')
+  const [paidOn, setPaidOn] = React.useState(() => toISODate(new Date()))
   const [busy, setBusy] = React.useState(false)
 
   async function submit() {
@@ -42,8 +44,11 @@ export function MarkPaidButton({
         invoiceId,
         method,
         reference: reference || undefined,
+        amount: received ? Number(received) : undefined,
+        paidOn,
       })
-      toast.success('Invoice settled', result.message)
+      toast.success('Payment recorded', result.message)
+      setReceived('')
       setOpen(false)
       router.refresh()
     } catch (error) {
@@ -59,26 +64,40 @@ export function MarkPaidButton({
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Mark paid
+        Record payment
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
           <DialogHeader>
-            <DialogTitle>Mark {number} as paid</DialogTitle>
+            <DialogTitle>Record a payment for {number}</DialogTitle>
             <DialogDescription>
-              For {formatMoney(amount)} received outside the gateway — a bank transfer or UPI
-              payment made directly to you.
+              Money received outside the gateway — cash, GPay / UPI or a bank transfer. It clears
+              the owner&apos;s whole bill (all PGs due that day), oldest first; a part payment leaves
+              the rest due.
             </DialogDescription>
           </DialogHeader>
 
           <Field label="How was it paid?" required>
             <Select value={method} onChange={(e) => setMethod(e.target.value)}>
               <option value="BANK_TRANSFER">Bank transfer</option>
-              <option value="UPI">UPI</option>
+              <option value="UPI">UPI / GPay</option>
               <option value="CASH">Cash</option>
               <option value="CARD">Card</option>
             </Select>
+          </Field>
+          <Field label="Amount received" hint={`Leave empty for the full bill · this PG: ${formatMoney(amount)}`}>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={received}
+              onChange={(e) => setReceived(e.target.value.replace(/\D/g, ''))}
+              placeholder="Full bill"
+            />
+          </Field>
+          <Field label="Received on" required>
+            <Input type="date" value={paidOn} max={toISODate(new Date())} onChange={(e) => setPaidOn(e.target.value)} />
           </Field>
           <Field label="Reference">
             <Input
@@ -94,7 +113,7 @@ export function MarkPaidButton({
             </Button>
             <Button variant="success" loading={busy} onClick={submit}>
               <CheckCircle2 className="size-4" />
-              Mark paid
+              {received ? `Record ${formatMoney(Number(received))}` : 'Mark bill paid'}
             </Button>
           </DialogFooter>
         </DialogContent>

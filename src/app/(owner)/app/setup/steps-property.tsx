@@ -3,10 +3,12 @@
 import * as React from 'react'
 import { BadgeCheck, Clock, MailWarning, Rocket } from 'lucide-react'
 import { api } from '@/lib/client'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { useToast } from '@/components/ui/toast'
 import { Field, Input } from '@/components/ui/input'
+import { cleanPhone, PhoneInput, PincodeInput } from '@/components/ui/india-inputs'
 import { Button } from '@/components/ui/button'
-import { Choice, Note, PHONE_RE, StepFooter, StepHeading, hasErrors, type Errors, type StepContext } from './ui'
+import { Choice, Note, StepFooter, StepHeading, hasErrors, type Errors, type StepContext } from './ui'
 import { SHARING_OPTIONS } from './steps'
 
 type Draft = {
@@ -231,7 +233,7 @@ export function AddressStep({ ctx }: { ctx: StepContext }) {
     state: draft.state ?? '',
     pincode: draft.pincode ?? '',
     contactName: draft.contactName ?? ctx.snapshot.owner.name,
-    contactPhone: draft.contactPhone ?? ctx.snapshot.owner.phone ?? '',
+    contactPhone: cleanPhone(draft.contactPhone ?? ctx.snapshot.owner.phone ?? ''),
   })
   const [errors, setErrors] = React.useState<Errors>({})
   const [busy, setBusy] = React.useState(false)
@@ -242,8 +244,8 @@ export function AddressStep({ ctx }: { ctx: StepContext }) {
       addressLine: v.addressLine.trim().length < 5 ? 'Enter the street address' : undefined,
       city: v.city.trim().length < 2 ? 'Enter the city' : undefined,
       state: v.state.trim().length < 2 ? 'Enter the state' : undefined,
-      pincode: !/^\d{6}$/.test(v.pincode.trim()) ? 'PIN code must be 6 digits' : undefined,
-      contactPhone: v.contactPhone.trim() && !PHONE_RE.test(v.contactPhone.trim()) ? 'Enter a valid 10-digit mobile number' : undefined,
+      pincode: !INDIA.pincode.test(v.pincode.trim()) ? INDIA_MESSAGE.pincode : undefined,
+      contactPhone: v.contactPhone.trim() && !INDIA.mobile.test(v.contactPhone.trim()) ? INDIA_MESSAGE.mobile : undefined,
     }
     setErrors(e)
     if (hasErrors(e)) return
@@ -273,7 +275,7 @@ export function AddressStep({ ctx }: { ctx: StepContext }) {
           <Input id="state" value={v.state} onChange={set('state')} placeholder="Karnataka" aria-invalid={Boolean(errors.state)} />
         </Field>
         <Field label="PIN code" required error={errors.pincode} htmlFor="pin">
-          <Input id="pin" value={v.pincode} onChange={set('pincode')} inputMode="numeric" maxLength={6} placeholder="560102" aria-invalid={Boolean(errors.pincode)} />
+          <PincodeInput id="pin" value={v.pincode} onChange={set('pincode')} aria-invalid={Boolean(errors.pincode)} />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -281,7 +283,7 @@ export function AddressStep({ ctx }: { ctx: StepContext }) {
           <Input id="cname" value={v.contactName} onChange={set('contactName')} />
         </Field>
         <Field label="Contact phone" error={errors.contactPhone} hint="Optional" htmlFor="cphone">
-          <Input id="cphone" value={v.contactPhone} onChange={set('contactPhone')} inputMode="tel" placeholder="98765 43210" aria-invalid={Boolean(errors.contactPhone)} />
+          <PhoneInput id="cphone" value={v.contactPhone} onChange={set('contactPhone')} aria-invalid={Boolean(errors.contactPhone)} />
         </Field>
       </div>
       <StepFooter onBack={ctx.back} onNext={next} busy={busy} />

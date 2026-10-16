@@ -1,3 +1,5 @@
+import { ValidationError } from '@/lib/tenancy'
+import { idNumberProblem } from '@/lib/india'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ok, parseBody, route } from '@/lib/api-helpers'
@@ -9,6 +11,8 @@ import { checkInResident } from '@/server/services/residents'
 export const POST = route(
   async ({ user, request }) => {
     const body = await parseBody(request, checkInSchema)
+    const idProblem = idNumberProblem(body.idType, body.idNumber)
+    if (idProblem) throw new ValidationError(idProblem)
     await assertPropertyAccess(user, body.propertyId)
     // checkInResident re-checks the bed and food plan against propertyId.
 

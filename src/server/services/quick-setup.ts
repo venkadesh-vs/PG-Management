@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { z } from 'zod'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import { prisma } from '@/lib/prisma'
 import type { SessionUser } from '@/lib/auth'
 import { ValidationError } from '@/lib/tenancy'
@@ -38,7 +39,7 @@ export const quickSetupSchema = z.object({
   type: z.enum(['MENS', 'WOMENS', 'COLIVE']),
   addressLine: z.string().trim().min(3, 'Enter the area or street').max(200),
   city: z.string().trim().min(2, 'Enter the city').max(80),
-  pincode: z.string().trim().regex(/^\d{6}$/, 'PIN code must be 6 digits'),
+  pincode: z.string().trim().regex(INDIA.pincode, INDIA_MESSAGE.pincode),
   /** One row per room group: a floor can have several (e.g. 6 two-sharing + 4 three-sharing). */
   groups: z
     .array(

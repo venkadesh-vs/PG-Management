@@ -11,6 +11,7 @@ import { api } from '@/lib/client'
 import { publicEnv, whatsappLink } from '@/lib/public-env'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import { useToast } from '@/components/ui/toast'
 import { Reveal } from '@/components/motion/reveal'
 import { Eyebrow } from './kit'
@@ -123,11 +124,11 @@ export function DemoForm() {
           <Input id="lead-name" autoComplete="name" placeholder="Ramesh Krishnan" {...form.register('name')} />
         </Field>
         <Field label="Phone number" required htmlFor="lead-phone" error={errors.phone?.message}>
-          <Input id="lead-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="98400 12345" {...form.register('phone')} />
+          <PhoneInput id="lead-phone" placeholder="98400 12345" {...form.register('phone')} />
         </Field>
 
         <Field label="WhatsApp number" htmlFor="lead-wa" hint="Leave blank if it is the same" error={errors.whatsapp?.message}>
-          <Input id="lead-wa" type="tel" inputMode="tel" {...form.register('whatsapp')} />
+          <PhoneInput id="lead-wa" autoComplete="off" {...form.register('whatsapp')} />
         </Field>
         <Field label="Email" htmlFor="lead-email" error={errors.email?.message}>
           <Input id="lead-email" type="email" autoComplete="email" placeholder="you@example.com" {...form.register('email')} />

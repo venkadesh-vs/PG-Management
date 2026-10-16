@@ -6,8 +6,10 @@ import { Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input } from '@/components/ui/input'
+import { AccountNumberInput, cleanPhone, IfscInput, PhoneInput, UpiIdInput } from '@/components/ui/india-inputs'
 import { useToast } from '@/components/ui/toast'
 import { api, ApiError } from '@/lib/client'
+import { INDIA, INDIA_MESSAGE } from '@/lib/india'
 import type { PlatformPaymentDetails, ReminderSchedule } from '@/lib/owner-billing'
 
 const toList = (v: string) =>
@@ -15,6 +17,16 @@ const toList = (v: string) =>
     .split(/[,\s]+/)
     .map((x) => Number(x))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 30)
+
+/** First problem with the payee details, or null. Empty fields are allowed. */
+function paymentDetailsProblem(d: PlatformPaymentDetails) {
+  const filled = (v: string) => v.trim()
+  if (filled(d.upiId) && !INDIA.upi.test(filled(d.upiId))) return INDIA_MESSAGE.upi
+  if (filled(d.accountNumber) && !INDIA.accountNumber.test(filled(d.accountNumber))) return INDIA_MESSAGE.accountNumber
+  if (filled(d.ifsc) && !INDIA.ifsc.test(filled(d.ifsc).toUpperCase())) return INDIA_MESSAGE.ifsc
+  if (filled(d.supportWhatsapp) && !INDIA.mobile.test(cleanPhone(filled(d.supportWhatsapp)))) return INDIA_MESSAGE.mobile
+  return null
+}
 
 /**
  * StayFlow's own payee details (shown on the owner paywall for UPI / bank
@@ -41,6 +53,11 @@ export function BillingSettingsForm({
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    const problem = paymentDetailsProblem(d)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -72,7 +89,7 @@ export function BillingSettingsForm({
         <form onSubmit={save} className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Your UPI ID" htmlFor="pb-upi" hint="e.g. stayflow@okhdfcbank">
-              <Input id="pb-upi" value={d.upiId} onChange={set('upiId')} />
+              <UpiIdInput id="pb-upi" value={d.upiId} onChange={set('upiId')} />
             </Field>
             <Field label="Payee name" htmlFor="pb-name" hint="Shown in the owner's UPI app">
               <Input id="pb-name" value={d.payeeName} onChange={set('payeeName')} />
@@ -84,13 +101,13 @@ export function BillingSettingsForm({
               <Input id="pb-acname" value={d.accountName} onChange={set('accountName')} />
             </Field>
             <Field label="Account number" htmlFor="pb-acno">
-              <Input id="pb-acno" inputMode="numeric" value={d.accountNumber} onChange={set('accountNumber')} />
+              <AccountNumberInput id="pb-acno" value={d.accountNumber} onChange={set('accountNumber')} />
             </Field>
             <Field label="IFSC" htmlFor="pb-ifsc">
-              <Input id="pb-ifsc" value={d.ifsc} onChange={set('ifsc')} />
+              <IfscInput id="pb-ifsc" value={d.ifsc} onChange={set('ifsc')} />
             </Field>
             <Field label="Support WhatsApp number" htmlFor="pb-wa" hint="Owners can tap “Contact support” on the paywall">
-              <Input id="pb-wa" inputMode="tel" value={d.supportWhatsapp} onChange={set('supportWhatsapp')} />
+              <PhoneInput id="pb-wa" autoComplete="off" value={d.supportWhatsapp} onChange={set('supportWhatsapp')} />
             </Field>
             <Field label="Support email" htmlFor="pb-email">
               <Input id="pb-email" type="email" value={d.supportEmail} onChange={set('supportEmail')} />

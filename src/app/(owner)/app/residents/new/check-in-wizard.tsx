@@ -24,6 +24,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { checkInSchema, type CheckInValues } from '@/lib/validation'
+import { idNumberProblem, idNumberFormat, idNumberRule } from '@/lib/india'
 import { api, ApiError } from '@/lib/client'
 import { cn, formatMoney, toISODate } from '@/lib/utils'
 import { defaultDueDay, firstMonthSuggestion } from '@/lib/first-month'
@@ -32,6 +33,7 @@ import { BED_STATUS_STYLE, themeFor } from '@/lib/theme'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { PhoneInput, PincodeInput } from '@/components/ui/india-inputs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox, Progress, Switch } from '@/components/ui/primitives'
 import { EmptyState } from '@/components/ui/feedback'
@@ -207,6 +209,9 @@ export function CheckInWizard({
   })
 
   const values = form.watch()
+  const idRule = idNumberRule(values.idType)
+  const idBox = idNumberFormat(values.idType)
+  const idNumberField = form.register('idNumber')
   const property = properties.find((p) => p.id === values.propertyId) ?? defaultProperty
   // First month: the prorated suggestion until the owner types their own amount.
   const [firstMonthEdited, setFirstMonthEdited] = React.useState(false)
@@ -273,7 +278,14 @@ export function CheckInWizard({
 
   async function next() {
     const fields = STEP_FIELDS[step]
-    const valid = fields.length ? await form.trigger(fields) : true
+    let valid = fields.length ? await form.trigger(fields) : true
+    if (fields.includes('idNumber')) {
+      const problem = idNumberProblem(form.getValues('idType'), form.getValues('idNumber'))
+      if (problem) {
+        form.setError('idNumber', { message: problem })
+        valid = false
+      }
+    }
     if (!valid) {
       toast.error('Check the highlighted fields', 'A few details still need filling in.')
       return
@@ -460,14 +472,14 @@ export function CheckInWizard({
                     <Input placeholder="As on the ID proof" {...form.register('fullName')} />
                   </Field>
                   <Field label="Mobile number" required error={form.formState.errors.phone?.message}>
-                    <Input placeholder="10-digit number" inputMode="tel" {...form.register('phone')} />
+                    <PhoneInput {...form.register('phone')} />
                   </Field>
                   <Field
                     label="WhatsApp number"
                     hint="Rent reminders go here. Leave blank to use the mobile number."
                     error={form.formState.errors.whatsappPhone?.message}
                   >
-                    <Input placeholder="Same as mobile" inputMode="tel" {...form.register('whatsappPhone')} />
+                    <PhoneInput placeholder="Same as mobile" {...form.register('whatsappPhone')} />
                   </Field>
                   <Field label="Email" error={form.formState.errors.email?.message} hint="Used as their app login">
                     <Input type="email" placeholder="name@example.com" {...form.register('email')} />
@@ -511,7 +523,7 @@ export function CheckInWizard({
                     error={form.formState.errors.guardianPhone?.message}
                     hint="Called only in an emergency"
                   >
-                    <Input inputMode="tel" {...form.register('guardianPhone')} />
+                    <PhoneInput {...form.register('guardianPhone')} />
                   </Field>
                   <Field label="City" error={form.formState.errors.city?.message}>
                     <Input placeholder="Home town" {...form.register('city')} />
@@ -523,7 +535,7 @@ export function CheckInWizard({
                     <Input {...form.register('state')} />
                   </Field>
                   <Field label="PIN code" error={form.formState.errors.pincode?.message}>
-                    <Input inputMode="numeric" maxLength={6} {...form.register('pincode')} />
+                    <PincodeInput {...form.register('pincode')} />
                   </Field>
                 </div>
               )}
@@ -541,8 +553,22 @@ export function CheckInWizard({
                         ))}
                       </Select>
                     </Field>
-                    <Field label="ID number" hint="Stored masked in lists and receipts">
-                      <Input placeholder="XXXX XXXX 1234" {...form.register('idNumber')} />
+                    <Field
+                      label="ID number"
+                      hint={idRule?.message ?? 'Stored masked in lists and receipts'}
+                      error={form.formState.errors.idNumber?.message}
+                    >
+                      <Input
+                        placeholder={idBox?.placeholder ?? 'XXXX XXXX 1234'}
+                        maxLength={idBox?.maxLength}
+                        inputMode={idBox?.numeric ? 'numeric' : undefined}
+                        className={idBox ? 'tracking-wide' : undefined}
+                        {...idNumberField}
+                        onChange={(e) => {
+                          if (idRule) e.target.value = idRule.clean(e.target.value)
+                          void idNumberField.onChange(e)
+                        }}
+                      />
                     </Field>
                   </div>
 

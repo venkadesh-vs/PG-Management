@@ -15,6 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
+import { cleanPhone, PhoneInput, PincodeInput } from '@/components/ui/india-inputs'
+import { INDIA, INDIA_MESSAGE, idNumberProblem, idNumberFormat, idNumberRule } from '@/lib/india'
 import { Switch } from '@/components/ui/primitives'
 
 export type EditResidentValues = {
@@ -106,6 +108,8 @@ export function EditResident({
     setValues((v) => ({ ...v, [key]: value }))
     if (error?.field === key) setError(null)
   }
+  const idRule = idNumberRule(values.idType)
+  const idBox = idNumberFormat(values.idType)
   const err = (key: keyof EditResidentValues) => (error?.field === key ? error.message : undefined)
 
   function openForm() {
@@ -117,8 +121,20 @@ export function EditResident({
   async function save(event: React.FormEvent) {
     event.preventDefault()
     if (values.fullName.trim().length < 2) return setError({ field: 'fullName', message: 'Enter the full name' })
-    if (!/^(\+?91[-\s]?)?[6-9]\d{9}$/.test(values.phone.trim())) {
-      return setError({ field: 'phone', message: 'Enter a valid 10-digit mobile number' })
+    if (!INDIA.mobile.test(cleanPhone(values.phone))) {
+      return setError({ field: 'phone', message: INDIA_MESSAGE.mobile })
+    }
+    // Optional numbers are checked only when edited, so an old value never blocks a save.
+    const changed = (key: keyof EditResidentValues) => values[key] !== initial[key] && String(values[key]).trim() !== ''
+    for (const key of ['whatsappPhone', 'guardianPhone'] as const) {
+      if (changed(key) && !INDIA.mobile.test(cleanPhone(values[key]))) return setError({ field: key, message: INDIA_MESSAGE.mobile })
+    }
+    if (changed('pincode') && !INDIA.pincode.test(values.pincode.trim())) {
+      return setError({ field: 'pincode', message: INDIA_MESSAGE.pincode })
+    }
+    if (can.kyc && (changed('idNumber') || (changed('idType') && values.idNumber))) {
+      const problem = idNumberProblem(values.idType, values.idNumber)
+      if (problem) return setError({ field: 'idNumber', message: problem })
     }
     // Send only what changed, so a field this person may not edit is never touched.
     const body: Record<string, unknown> = {}
@@ -180,10 +196,10 @@ export function EditResident({
                 <Input value={values.fullName} onChange={(e) => set('fullName', e.target.value)} />
               </Field>
               <Field label="Mobile" required error={err('phone')}>
-                <Input type="tel" inputMode="tel" value={values.phone} onChange={(e) => set('phone', e.target.value)} />
+                <PhoneInput value={values.phone} onChange={(e) => set('phone', e.target.value)} />
               </Field>
               <Field label="WhatsApp" hint="Empty = same as mobile" error={err('whatsappPhone')}>
-                <Input type="tel" inputMode="tel" value={values.whatsappPhone} onChange={(e) => set('whatsappPhone', e.target.value)} />
+                <PhoneInput value={values.whatsappPhone} onChange={(e) => set('whatsappPhone', e.target.value)} />
               </Field>
               <Field label="Email" error={err('email')}>
                 <Input type="email" value={values.email} onChange={(e) => set('email', e.target.value)} />
@@ -224,7 +240,7 @@ export function EditResident({
                 </Select>
               </Field>
               <Field label="Guardian mobile" error={err('guardianPhone')}>
-                <Input type="tel" inputMode="tel" value={values.guardianPhone} onChange={(e) => set('guardianPhone', e.target.value)} />
+                <PhoneInput value={values.guardianPhone} onChange={(e) => set('guardianPhone', e.target.value)} />
               </Field>
               <Field label="Guardian address">
                 <Input value={values.guardianAddress} onChange={(e) => set('guardianAddress', e.target.value)} />
@@ -242,7 +258,7 @@ export function EditResident({
                   <Input value={values.state} onChange={(e) => set('state', e.target.value)} />
                 </Field>
                 <Field label="PIN code" error={err('pincode')}>
-                  <Input inputMode="numeric" maxLength={6} value={values.pincode} onChange={(e) => set('pincode', e.target.value)} />
+                  <PincodeInput value={values.pincode} onChange={(e) => set('pincode', e.target.value)} />
                 </Field>
               </div>
 
@@ -273,10 +289,17 @@ export function EditResident({
               </Field>
               <Field
                 label="ID number"
-                hint={can.kyc ? undefined : 'Only someone with full ID access can change this'}
+                hint={can.kyc ? idRule?.message : 'Only someone with full ID access can change this'}
                 error={err('idNumber')}
               >
-                <Input value={values.idNumber} disabled={!can.kyc} onChange={(e) => set('idNumber', e.target.value)} />
+                <Input
+                  value={values.idNumber}
+                  disabled={!can.kyc}
+                  placeholder={idBox?.placeholder}
+                  maxLength={idBox?.maxLength}
+                  inputMode={idBox?.numeric ? 'numeric' : undefined}
+                  onChange={(e) => set('idNumber', idRule ? idRule.clean(e.target.value) : e.target.value)}
+                />
               </Field>
               <Field label="KYC status" className="sm:col-span-2">
                 <Select value={values.kycStatus} onChange={(e) => set('kycStatus', e.target.value)}>

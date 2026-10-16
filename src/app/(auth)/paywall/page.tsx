@@ -160,7 +160,7 @@ export default async function PaywallPage() {
             </Link>
             {(d.supportEmail || d.supportWhatsapp) && (
               <a
-                href={d.supportWhatsapp ? `https://wa.me/${d.supportWhatsapp.replace(/\D/g, '')}` : `mailto:${d.supportEmail}`}
+                href={d.supportWhatsapp ? `https://wa.me/${d.supportWhatsapp.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}` : `mailto:${d.supportEmail}`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
               >
                 <LifeBuoy className="size-4" /> Contact support

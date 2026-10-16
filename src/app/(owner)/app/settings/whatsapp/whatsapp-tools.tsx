@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Field, Input, Select } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/india-inputs'
 import {
   Dialog,
   DialogContent,
@@ -67,10 +68,7 @@ export function TestMessageForm({ templates, mode }: { templates: TemplateInfo[]
     <form onSubmit={send} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Send to (mobile number)" hint="Use your own number">
-          <Input
-            type="tel"
-            inputMode="tel"
-            placeholder="98765 43210"
+          <PhoneInput
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             required

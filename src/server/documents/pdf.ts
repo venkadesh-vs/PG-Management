@@ -340,7 +340,7 @@ export async function renderReport(spec: ReportSpec): Promise<Uint8Array> {
 
   const cells = spec.rows.map((r) => r.map((v) => (v === null || v === undefined ? '' : typeof v === 'number' ? new Intl.NumberFormat('en-IN').format(v) : String(v))))
   // Amounts and counts align right; phone numbers and long ids (6+ plain digits) stay left.
-  const numeric = spec.columns.map((_, i) => cells.length > 0 && cells.every((r) => r[i] === '' || (/^-?[\d,]+(\.\d+)?$/.test(r[i]) && !/^\d{6,}$/.test(r[i]))))
+  const numeric = spec.columns.map((_, i) => cells.some((r) => r[i] !== '') && cells.every((r) => r[i] === '' || (/^-?[\d,]+(\.\d+)?$/.test(r[i]) && !/^\d{6,}$/.test(r[i]))))
 
   // Column widths from content, scaled to the page; long text is truncated.
   const size = spec.columns.length > 12 ? 6.8 : spec.columns.length > 8 ? 7.5 : 8.5

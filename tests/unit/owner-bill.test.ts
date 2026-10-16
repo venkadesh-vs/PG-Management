@@ -28,20 +28,20 @@ describe('owner due day', () => {
     expect(nextBillDate(5, d('2026-10-06'))).toEqual(d('2026-11-05'))
     expect(nextBillDate(10, d('2026-12-20'))).toEqual(d('2027-01-10'))
   })
-  it('changing the due day back and forth never pushes the bill months ahead', () => {
-    // Trial ends 29 Oct; the owner clicks day 5, 1, 10, 1, 7, 1 in a row.
-    let sub = { nextBillingDate: d('2026-10-29'), alignedFrom: null as Date | null }
-    for (const day of [5, 1, 10, 1, 7, 1]) {
-      const target = alignedBillDate(day, sub, d('2026-10-16'))
-      sub = { nextBillingDate: target, alignedFrom: sub.alignedFrom ?? sub.nextBillingDate }
-    }
-    expect(sub.nextBillingDate).toEqual(d('2026-11-01'))
-    // A date that already drifted is pulled back once the original is known.
-    expect(alignedBillDate(1, { nextBillingDate: d('2027-06-01'), alignedFrom: d('2026-10-29') }, d('2026-10-16'))).toEqual(d('2026-11-01'))
-    // Never inside a trial, even when the stored start is older (trial extended).
-    expect(alignedBillDate(1, { nextBillingDate: d('2027-06-01'), alignedFrom: d('2026-10-29'), trialEndsAt: d('2027-04-23') }, d('2026-10-16'))).toEqual(d('2027-05-01'))
+  it('the next bill never drifts: it follows the trial end or the paid period', () => {
+    const today = d('2026-10-16')
+    // Trial ends 22 Apr 2027, bill day 1: first bill 1 May 2027, whatever was stored.
+    const trial = { status: 'TRIALING', trialEndsAt: d('2027-04-22'), currentPeriodEnd: d('2026-11-10') }
+    for (const day of [5, 1, 10, 1, 7, 1]) alignedBillDate(day, trial, today)
+    expect(alignedBillDate(1, trial, today)).toEqual(d('2027-05-01'))
+    // Trial ending 1 Nov with bill day 1: billed 1 Nov.
+    expect(alignedBillDate(1, { ...trial, trialEndsAt: d('2026-11-01') }, today)).toEqual(d('2026-11-01'))
+    // Paid up to 13 Nov, bill day 9: next bill 9 Dec 2026 (not 2099).
+    const active = { status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: d('2026-11-13') }
+    expect(alignedBillDate(9, active, today)).toEqual(d('2026-12-09'))
+    expect(alignedBillDate(1, active, today)).toEqual(d('2026-12-01'))
     // Never a date in the past.
-    expect(alignedBillDate(1, { nextBillingDate: d('2026-12-01'), alignedFrom: d('2026-10-29') }, d('2026-11-03'))).toEqual(d('2026-12-01'))
+    expect(alignedBillDate(1, { ...active, currentPeriodEnd: d('2026-09-20') }, today)).toEqual(d('2026-11-01'))
   })
 })
 

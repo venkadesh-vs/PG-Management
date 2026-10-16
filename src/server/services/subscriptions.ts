@@ -144,16 +144,18 @@ export async function alignOwnerBilling(organizationId: string, db: Prisma.Trans
   const dueDay = await ownerDueDay(organizationId, db)
   const subs = await db.subscription.findMany({
     where: { organizationId, status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'GRACE'] } },
-    select: { id: true, status: true, nextBillingDate: true, alignedFrom: true, trialEndsAt: true, gatewaySubscriptionId: true, mandateStatus: true, autopayEnabled: true },
+    select: { id: true, status: true, nextBillingDate: true, alignedFrom: true, trialEndsAt: true, currentPeriodEnd: true, gatewaySubscriptionId: true, mandateStatus: true, autopayEnabled: true },
   })
   let moved = 0
   for (const sub of subs) {
     if (sub.gatewaySubscriptionId && sub.autopayEnabled && sub.mandateStatus === 'ACTIVE') continue
-    // A trial still running is never billed before it ends.
-    const trial = sub.status === 'TRIALING' ? sub.trialEndsAt : null
-    const base = billingBase({ ...sub, trialEndsAt: trial })
+    // Counted from the trial end or the end of the billed period, never from
+    // the stored date, so a date that drifted is pulled back here.
+    const base = billingBase(sub)
     const target = nextBillDate(dueDay, base)
-    const alignedFrom = base.getTime() === target.getTime() ? null : base
+    // Pro rata from where billing really starts (even if that day has passed).
+    const start = startOfDay(sub.status === 'TRIALING' && sub.trialEndsAt ? sub.trialEndsAt : sub.currentPeriodEnd)
+    const alignedFrom = start.getTime() < target.getTime() ? start : null
     if (startOfDay(sub.nextBillingDate).getTime() === target.getTime() && (sub.alignedFrom?.getTime() ?? null) === (alignedFrom?.getTime() ?? null)) continue
     await db.subscription.update({ where: { id: sub.id }, data: { nextBillingDate: target, alignedFrom } })
     moved++

@@ -14,6 +14,14 @@ import {
   startInvoiceCheckout,
 } from '@/server/services/subscriptions'
 import { RazorpayError } from '@/server/integrations/razorpay'
+import { platformRazorpay } from '@/server/integrations/payments'
+import {
+  cancelOwnerMandate,
+  confirmOwnerMandate,
+  ownerAutopayStatus,
+  startOwnerMandate,
+  syncOwnerMandate,
+} from '@/server/services/owner-autopay'
 
 const schema = z.discriminatedUnion('action', [
   z.object({
@@ -25,6 +33,16 @@ const schema = z.discriminatedUnion('action', [
     maskedRef: z.string().max(80).optional(),
   }),
   z.object({ action: z.literal('CANCEL_AUTOPAY'), subscriptionId: z.string().min(1) }),
+  // One AutoPay for the owner's whole combined bill.
+  z.object({ action: z.literal('OWNER_AUTOPAY_START'), method: z.enum(['UPI', 'EMANDATE', 'CARD']) }),
+  z.object({
+    action: z.literal('OWNER_AUTOPAY_CONFIRM'),
+    orderId: z.string().min(1),
+    paymentId: z.string().min(1),
+    signature: z.string().min(1),
+  }),
+  z.object({ action: z.literal('OWNER_AUTOPAY_SYNC') }),
+  z.object({ action: z.literal('OWNER_AUTOPAY_CANCEL') }),
   z.object({ action: z.literal('PAY_INVOICE_START'), invoiceId: z.string().min(1) }),
   z.object({
     action: z.literal('PAY_INVOICE_VERIFY'),
@@ -83,6 +101,35 @@ export const POST = route(
         // Every PG's next bill moves to the new day; days in between are pro-rated.
         const { moved } = await alignOwnerBilling(organizationId)
         return ok({ message: `Your StayFlow bill is now due on day ${body.day} of every month${moved ? ' for all your PGs' : ''}.` })
+      }
+      if (body.action === 'OWNER_AUTOPAY_START') {
+        return ok(
+          await startOwnerMandate({
+            organizationId,
+            method: body.method,
+            actor: { id: user.id, name: user.name, email: user.email },
+          }),
+        )
+      }
+      if (body.action === 'OWNER_AUTOPAY_CONFIRM') {
+        const mandate = await confirmOwnerMandate({ organizationId, orderId: body.orderId, paymentId: body.paymentId, signature: body.signature })
+        return ok({
+          status: mandate?.status ?? 'PENDING',
+          message:
+            mandate?.status === 'ACTIVE'
+              ? 'AutoPay is on'
+              : 'Approval received — your bank is confirming it. This can take a few days for a bank account.',
+        })
+      }
+      if (body.action === 'OWNER_AUTOPAY_SYNC') {
+        const status = await ownerAutopayStatus(organizationId)
+        const creds = platformRazorpay()
+        if (status.mandate?.status === 'PENDING' && creds) await syncOwnerMandate(status.mandate.id, creds)
+        return ok(await ownerAutopayStatus(organizationId))
+      }
+      if (body.action === 'OWNER_AUTOPAY_CANCEL') {
+        await cancelOwnerMandate({ organizationId, actor: { id: user.id, name: user.name } })
+        return ok({ message: 'AutoPay switched off' })
       }
       if (body.action === 'PAY_INVOICE_START') {
         return ok(
@@ -182,7 +229,7 @@ export const POST = route(
       // Every PG is now billed together on one monthly bill whose amount
       // changes (PGs added, referral credit, late fee), so a fixed per-PG
       // mandate no longer fits. Existing mandates can still be switched off.
-      throw new ConflictError('AutoPay per PG is no longer used. Your PGs are on one monthly bill: pay it with Pay now or UPI.')
+      throw new ConflictError('AutoPay per PG is no longer used. Set up one AutoPay for your whole monthly bill at the top of this page.')
     } catch (error) {
       // Gateway errors carry a readable reason; surface it instead of a 500.
       if (error instanceof RazorpayError) throw new ConflictError(error.message)

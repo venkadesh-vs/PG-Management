@@ -517,6 +517,7 @@ model Organization {
   electricityBills  RoomElectricityBill[]
 
   residentMandates ResidentMandate[]
+  ownerMandates    OwnerMandate[]
 
   @@index([status])
 }
@@ -2730,4 +2731,64 @@ model Referral {
   invoices SubscriptionInvoice[]
 
   @@index([referrerOrgId, status])
+}
+
+/// The owner's one AutoPay for their combined StayFlow bill, on the PLATFORM
+/// Razorpay account (recurring payments, debited "as presented" each month).
+model OwnerMandate {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider       String                @default("razorpay")
+  /// Razorpay customer (empty for a demo mandate).
+  customerId     String                @default("")
+  tokenId        String?
+  authOrderId    String?               @unique
+  authPaymentId  String?
+  /// UPI | EMANDATE | CARD
+  method         String
+  /// The most one debit may take, as approved by the owner.
+  maxAmount      Int
+  status         ResidentMandateStatus @default(PENDING)
+  isDemo         Boolean               @default(false)
+  authorizedAt   DateTime?
+  cancelledAt    DateTime?
+  cancelledBy    String?
+  cancelReason   String?
+  lastChargeAt   DateTime?
+  failureCount   Int                   @default(0)
+  lastError      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  attempts       OwnerAutopayAttempt[]
+
+  @@index([organizationId, status])
+}
+
+/// One debit of an owner's combined bill (the bill = every unpaid line due on `dueDate`).
+model OwnerAutopayAttempt {
+  id             String               @id @default(cuid())
+  organizationId String
+  mandateId      String
+  mandate        OwnerMandate         @relation(fields: [mandateId], references: [id], onDelete: Cascade)
+  /// The combined bill's due day.
+  dueDate        DateTime
+  attemptNumber  Int
+  /// Amount stated in the pre-debit notice; the charge never exceeds it.
+  amount         Int
+  chargeDate     DateTime
+  status         AutopayAttemptStatus @default(NOTIFIED)
+  orderId        String?
+  paymentId      String?              @unique
+  notifiedAt     DateTime?
+  attemptedAt    DateTime?
+  completedAt    DateTime?
+  error          String?
+  alertedAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([organizationId, dueDate, attemptNumber])
+  @@index([status, chargeDate])
+  @@index([mandateId])
 }

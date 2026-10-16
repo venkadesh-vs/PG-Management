@@ -84,16 +84,23 @@ export const GET = route(
       title: registered && invoice.tax > 0 ? 'Tax Invoice' : 'Invoice',
       reference: invoice.number,
       issuer: {
+        label: 'From',
         name: platformEnv.legalName,
         lines: [
           ...(platformEnv.address ? platformEnv.address.split('|').map((l) => l.trim()) : []),
           ...(registered ? [`GSTIN ${platformEnv.gstin}`] : ['Not registered under GST']),
         ],
       },
+      business: {
+        label: 'For PG',
+        name: invoice.subscription.property.name,
+        lines: [[invoice.subscription.property.addressLine, invoice.subscription.property.city].filter(Boolean).join(', ')],
+      },
       billTo: {
         label: 'Billed to',
         name: org.legalName || org.name,
         lines: [
+          ...(org.legalName && org.legalName !== org.name ? [org.name] : []),
           ...(org.gstin ? [`GSTIN ${org.gstin}`] : ['Unregistered (B2C)']),
           [org.addressLine, org.city, org.state].filter(Boolean).join(', '),
           org.contactEmail,
@@ -129,7 +136,7 @@ export const GET = route(
         ...(isDemo ? ['Demo record - no money was charged.'] : []),
         ...(invoice.discountLabel ? [invoice.discountLabel.replace(/[‘’]/g, "'")] : []),
       ],
-      footer: `Computer-generated invoice from StayFlow on ${formatDate(new Date())}. No signature required.`,
+      footer: `Computer-generated invoice · ${formatDate(new Date())} · no signature required`,
     })
 
     return new NextResponse(Buffer.from(pdf), {

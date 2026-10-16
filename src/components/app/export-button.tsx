@@ -1,8 +1,9 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { Download } from 'lucide-react'
+import { ChevronDown, Download, FileSpreadsheet, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown'
 
 export type ExportKind =
   | 'residents'
@@ -24,7 +25,7 @@ export type ExportKind =
   | 'activity'
 
 /**
- * Downloads a CSV of the current list. Carries the page's PG filter (and a
+ * Downloads the current list as Excel (CSV) or a designed PDF report. Carries the page's PG filter (and a
  * date range when the page has one) so the file matches what is on screen.
  * `carry` adds more query keys (e.g. the audit log's filters); `href`
  * replaces the endpoint (the Super Admin audit export lives elsewhere).
@@ -46,14 +47,46 @@ export function ExportButton({
     const value = params.get(key)
     if (value) query.set(key, value)
   }
-  const base = endpoint ?? `/api/exports/${kind}.csv`
-  const href = `${base}${query.size ? `?${query}` : ''}`
+  const qs = query.size ? `?${query}` : ''
+  // A custom endpoint (the Super Admin audit log) is CSV only.
+  if (endpoint || !kind) {
+    return (
+      <Button variant="outline" asChild>
+        <a href={`${endpoint}${qs}`} download>
+          <Download className="size-4" />
+          {label}
+        </a>
+      </Button>
+    )
+  }
+  return <ExportMenu label={label} csv={`/api/exports/${kind}.csv${qs}`} pdf={`/api/exports/${kind}.pdf${qs}`} />
+}
+
+/** "Export ▾" → Excel (CSV) or PDF. Also used by pages that build their own export URLs. */
+export function ExportMenu({ label = 'Export', csv, pdf }: { label?: string; csv: string; pdf: string }) {
   return (
-    <Button variant="outline" asChild>
-      <a href={href} download>
-        <Download className="size-4" />
-        {label}
-      </a>
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">
+          <Download className="size-4" />
+          {label}
+          <ChevronDown className="size-3.5 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem asChild>
+          <a href={pdf} download>
+            <FileText className="size-4 text-rose-600" />
+            PDF report
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={csv} download>
+            <FileSpreadsheet className="size-4 text-emerald-600" />
+            Excel (CSV)
+          </a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

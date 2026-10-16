@@ -18,6 +18,7 @@ import { dailyCollectionReport } from '@/server/services/billing'
 import { profitAndLoss } from '@/server/services/analytics'
 import type { PnlFigures } from '@/server/services/pnl'
 import { toCsv } from '@/lib/csv'
+import { renderReport } from '@/server/documents/pdf'
 import { AUDIT_CSV_HEADER, parseAuditFilters } from '@/lib/audit-filters'
 import { auditCsvRows, orgAuditWhere } from '@/server/services/audit-log'
 import { ELECTRICITY_EXPORT_HEADER, electricityExportRows } from '@/server/services/electricity'
@@ -31,6 +32,8 @@ import { ELECTRICITY_EXPORT_HEADER, electricityExportRows } from '@/server/servi
  *        daily-collection (?date=YYYY-MM-DD), pnl (?from=YYYY-MM&to=YYYY-MM — month range),
  *        complaints, maintenance, assets, visitors, staff, enquiries, bookings, deposits, charges,
  *        rent-revisions, activity (same filters as /app/activity: q, event, group, actor, entity, range)
+ * GET /api/exports/<kind>.pdf — the same rows as a designed PDF report (company, PG,
+ *        period, page numbers and © on every page).
  * GET /api/exports/all — owner only: every area as one Excel workbook.
  */
 
@@ -449,6 +452,66 @@ const ALL_DATA_SHEETS: [Kind, string][] = [
   ['activity', 'Activity log'],
 ]
 
+const REPORT_TITLE: Record<Kind, string> = {
+  residents: 'Residents',
+  invoices: 'Rent invoices',
+  payments: 'Payments received',
+  expenses: 'Expenses',
+  outstanding: 'Outstanding dues',
+  'daily-collection': 'Daily collection',
+  pnl: 'Profit & loss',
+  complaints: 'Complaints',
+  maintenance: 'Maintenance',
+  assets: 'Assets',
+  visitors: 'Visitors',
+  staff: 'Staff',
+  enquiries: 'Enquiries',
+  bookings: 'Bookings',
+  deposits: 'Security deposits',
+  charges: 'Charges & discounts',
+  'rent-revisions': 'Rent revisions',
+  activity: 'Activity log',
+  electricity: 'Electricity',
+}
+
+/** The owner's business, for the report letterhead. */
+async function businessOf(organizationId: string) {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { name: true, legalName: true, contactPhone: true, contactEmail: true, gstin: true },
+  })
+  return {
+    label: 'Business',
+    name: org?.legalName || org?.name || 'Your business',
+    lines: [
+      [org?.contactPhone ? `+91 ${org.contactPhone.replace(/\D/g, '').slice(-10)}` : '', org?.contactEmail].filter(Boolean).join(' · '),
+      org?.gstin ? `GSTIN ${org.gstin}` : '',
+    ],
+  }
+}
+
+/** "Sri Balaji Men's PG" for one PG, else the PGs it covers. */
+async function pgLabelOf(scope: PropertyScope) {
+  const ids = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
+  const pgs = await prisma.property.findMany({ where: { id: { in: ids } }, select: { name: true, city: true }, orderBy: { name: 'asc' } })
+  if (pgs.length === 1) return `${pgs[0].name}${pgs[0].city ? `, ${pgs[0].city}` : ''}`
+  if (pgs.length <= 3) return pgs.map((p) => p.name).join(' · ') || 'All PGs'
+  return `All PGs (${pgs.length})`
+}
+
+/** Period and filters, as printed under the PG name. */
+function reportContext(kind: Kind, url: URL) {
+  const p = url.searchParams
+  const fmt = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : v)
+  const lines: string[] = []
+  if (kind === 'daily-collection') lines.push(`Date: ${fmt(p.get('date') || toISODate(new Date()))}`)
+  else if (p.get('from') || p.get('to')) lines.push(`Period: ${p.get('from') ? fmt(p.get('from')!) : 'start'} to ${p.get('to') ? fmt(p.get('to')!) : 'today'}`)
+  else lines.push('Period: all dates')
+  const filters = ['status', 'category', 'vendor', 'event', 'q'].filter((k) => p.get(k)).map((k) => `${k} ${p.get(k)}`)
+  if (filters.length) lines.push(`Filters: ${filters.join(', ')}`)
+  return lines
+}
+
 const canExportKind = (user: SessionUser, kind: Kind) =>
   user.modules.includes(KIND_ACCESS[kind].module) && hasPermission(user, KIND_ACCESS[kind].permission)
 
@@ -501,13 +564,33 @@ export const GET = route(
       })
     }
 
-    const kind = name.replace(/\.csv$/, '') as Kind
+    const asPdf = name.endsWith('.pdf')
+    const kind = name.replace(/\.(csv|pdf)$/, '') as Kind
     if (!KINDS.includes(kind)) return fail('Unknown export', 404)
     requireModule(user, KIND_ACCESS[kind].module)
     requirePermission(user, KIND_ACCESS[kind].permission)
 
     const scope = await resolveScope(user, url.searchParams.get('property'))
     const { header, rows } = await buildExport(kind, { user, url, scope })
+
+    if (asPdf) {
+      const pdf = await renderReport({
+        title: REPORT_TITLE[kind],
+        business: await businessOf(scope.organizationId),
+        pgLabel: await pgLabelOf(scope),
+        context: reportContext(kind, url),
+        columns: header,
+        rows,
+        generatedBy: user.name,
+      })
+      return new NextResponse(Buffer.from(pdf), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="stayflow-${kind}-${toISODate(new Date())}.pdf"`,
+          'Cache-Control': 'private, no-store',
+        },
+      })
+    }
 
     const filename = `stayflow-${kind}-${kind === 'daily-collection' ? (/^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') ?? '') ? url.searchParams.get('date') : toISODate(new Date())) : toISODate(new Date())}.csv`
     return new NextResponse(toCsv(header, rows), {

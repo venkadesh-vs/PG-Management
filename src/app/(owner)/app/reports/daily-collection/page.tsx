@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import { ExportMenu } from '@/components/app/export-button'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Download, Equal, Minus, Plus } from 'lucide-react'
+import { Equal, Minus, Plus } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { prisma } from '@/lib/prisma'
@@ -9,7 +10,6 @@ import { cn, formatDateLong, formatMoney, toISODate } from '@/lib/utils'
 import { dailyCollectionReport } from '@/server/services/billing'
 import { PageHeader } from '@/components/app/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/feedback'
 import { FilterBar, FilterSelect } from '@/components/app/filters'
 import { DayPicker } from './day-picker'
@@ -78,12 +78,7 @@ export default async function DailyCollectionPage({
         ]}
         actions={
           canExport ? (
-            <Button variant="outline" asChild>
-              <a href={`/api/exports/daily-collection.csv?${exportQuery}`} download>
-                <Download className="size-4" />
-                Export CSV
-              </a>
-            </Button>
+            <ExportMenu csv={`/api/exports/daily-collection.csv?${exportQuery}`} pdf={`/api/exports/daily-collection.pdf?${exportQuery}`} />
           ) : undefined
         }
       />

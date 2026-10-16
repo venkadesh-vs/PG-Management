@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import { ExportMenu } from '@/components/app/export-button'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Download, Info, Printer } from 'lucide-react'
+import { Info, Printer } from 'lucide-react'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
 import { themeFor } from '@/lib/theme'
@@ -11,7 +12,6 @@ import { monthKey, REVENUE_LABEL, type PnlFigures } from '@/server/services/pnl'
 import { PageHeader, SectionHeader } from '@/components/app/page-header'
 import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
   Table,
@@ -52,6 +52,11 @@ export default async function ProfitAndLossPage({
   const toMonth = parseMonth(params.month, now)
   const span = SPANS.includes(Number(params.span)) ? Number(params.span) : 1
   const fromMonth = startOfMonth(addMonths(toMonth, -(span - 1)))
+  const pnlQuery = new URLSearchParams({
+    from: monthKey(fromMonth),
+    to: monthKey(toMonth),
+    ...(scope.propertyId ? { property: scope.propertyId } : {}),
+  })
 
   const header = (
     <PageHeader
@@ -65,19 +70,10 @@ export default async function ProfitAndLossPage({
             <PeriodPicker month={monthKey(toMonth)} span={span} max={monthKey(now)} />
           </Suspense>
           {canSeeRent && user.permissions.includes('reports.export') && (
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/exports/pnl.csv?${new URLSearchParams({
-                  from: monthKey(fromMonth),
-                  to: monthKey(toMonth),
-                  ...(scope.propertyId ? { property: scope.propertyId } : {}),
-                })}`}
-                download
-              >
-                <Download className="size-4" />
-                Export
-              </a>
-            </Button>
+            <ExportMenu
+              csv={`/api/exports/pnl.csv?${pnlQuery}`}
+              pdf={`/api/exports/pnl.pdf?${pnlQuery}`}
+            />
           )}
         </>
       }

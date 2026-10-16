@@ -328,10 +328,14 @@ export default async function SubscriptionPage() {
         <StatCard label="Paid to date" value={paidToDate} format="money" icon="check" tone="emerald" />
         <StatCard
           label="Account status"
-          value={subscriptions.filter((s) => s.status === 'ACTIVE').length}
+          value={subscriptions.filter((s) => s.status === 'ACTIVE' || s.status === 'TRIALING').length}
           icon="shield"
-          tone={organization?.status === 'ACTIVE' ? 'emerald' : 'amber'}
-          hint={`${organization?.status.replace('_', ' ').toLowerCase()} · ${subscriptions.length} subscriptions`}
+          tone={organization?.status === 'ACTIVE' || organization?.status === 'TRIAL' ? 'emerald' : 'amber'}
+          hint={(() => {
+            const trials = subscriptions.filter((s) => s.status === 'TRIALING').length
+            const paid = subscriptions.filter((s) => s.status === 'ACTIVE').length
+            return [paid ? `${paid} active` : '', trials ? `${trials} in free trial` : ''].filter(Boolean).join(' · ') || `${organization?.status.replace('_', ' ').toLowerCase()}`
+          })()}
         />
       </StatGrid>
 

@@ -38,6 +38,8 @@ describe('owner due day', () => {
     expect(sub.nextBillingDate).toEqual(d('2026-11-01'))
     // A date that already drifted is pulled back once the original is known.
     expect(alignedBillDate(1, { nextBillingDate: d('2027-06-01'), alignedFrom: d('2026-10-29') }, d('2026-10-16'))).toEqual(d('2026-11-01'))
+    // Never inside a trial, even when the stored start is older (trial extended).
+    expect(alignedBillDate(1, { nextBillingDate: d('2027-06-01'), alignedFrom: d('2026-10-29'), trialEndsAt: d('2027-04-23') }, d('2026-10-16'))).toEqual(d('2027-05-01'))
     // Never a date in the past.
     expect(alignedBillDate(1, { nextBillingDate: d('2026-12-01'), alignedFrom: d('2026-10-29') }, d('2026-11-03'))).toEqual(d('2026-12-01'))
   })

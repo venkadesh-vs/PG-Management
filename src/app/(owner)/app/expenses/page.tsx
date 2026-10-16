@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import { ExportMenu } from '@/components/app/export-button'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Download, Paperclip, Repeat } from 'lucide-react'
+import { Paperclip, Repeat } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { requireAccess } from '@/lib/auth'
 import { resolveScope } from '@/lib/tenancy'
@@ -30,7 +31,6 @@ import { PageHeader } from '@/components/app/page-header'
 import { StatCard, StatGrid } from '@/components/app/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { EmptyState, TableSkeleton } from '@/components/ui/feedback'
 import {
   Table,
@@ -283,12 +283,7 @@ export default async function ExpensesPage({
         actions={
           <>
             {user.permissions.includes('reports.export') && (
-              <Button variant="outline" asChild>
-                <a href={`/api/exports/expenses.csv?${exportQuery}`} download>
-                  <Download className="size-4" />
-                  Export
-                </a>
-              </Button>
+              <ExportMenu csv={`/api/exports/expenses.csv?${exportQuery}`} pdf={`/api/exports/expenses.pdf?${exportQuery}`} />
             )}
             {canManage && properties.length > 0 && (
               <ExpenseForm

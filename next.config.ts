@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   // project documents itself in README.md instead.
   agentRules: false,
   serverExternalPackages: ['@prisma/client', 'bcryptjs'],
+  // PDFs embed Noto Sans (for ₹ and ©); ship the font files with the routes that read them.
+  outputFileTracingIncludes: {
+    '/api/documents/**': ['./src/server/documents/fonts/**'],
+    '/api/exports/**': ['./src/server/documents/fonts/**'],
+  },
   // next/image is not used for remote files; an open pattern would turn the
   // optimizer into a free image proxy. Add the storage host here when needed.
   images: { remotePatterns: [] },

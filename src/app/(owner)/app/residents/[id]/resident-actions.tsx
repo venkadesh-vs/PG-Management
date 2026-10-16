@@ -690,7 +690,7 @@ function CheckoutDialog({
   const today = toISODate(new Date())
   const [step, setStep] = React.useState(0)
   const [exitDate, setExitDate] = React.useState(
-    resident.exitDate ? resident.exitDate.slice(0, 10) : today,
+    resident.exitDate ? toISODate(new Date(resident.exitDate)) : today,
   )
   const [reason, setReason] = React.useState('')
   const [rows, setRows] = React.useState<DeductionRow[]>([])

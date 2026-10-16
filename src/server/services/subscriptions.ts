@@ -61,6 +61,7 @@ import {
   lateFee as lateFeeFor,
   LATE_FEE_AFTER_DAYS,
   LATE_FEE_PERCENT,
+  alignedBillDate,
   nextBillDate,
   PAUSE_AFTER_DAYS,
   prorated,
@@ -148,11 +149,13 @@ export async function alignOwnerBilling(organizationId: string, db: Prisma.Trans
   let moved = 0
   for (const sub of subs) {
     if (sub.gatewaySubscriptionId && sub.autopayEnabled && sub.mandateStatus === 'ACTIVE') continue
-    const target = nextBillDate(dueDay, sub.nextBillingDate)
+    const target = alignedBillDate(dueDay, sub)
     if (startOfDay(sub.nextBillingDate).getTime() === target.getTime()) continue
+    const original = sub.alignedFrom ?? sub.nextBillingDate
     await db.subscription.update({
       where: { id: sub.id },
-      data: { nextBillingDate: target, alignedFrom: sub.alignedFrom ?? sub.nextBillingDate },
+      // Back on its original date: nothing to pro-rate any more.
+      data: { nextBillingDate: target, alignedFrom: startOfDay(original).getTime() === target.getTime() ? null : original },
     })
     moved++
   }

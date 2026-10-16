@@ -7,7 +7,7 @@ import { resolveScope } from '@/lib/tenancy'
 import { AutopayPanel } from './autopay-panel'
 import { prisma } from '@/lib/prisma'
 import { INVOICE_STATUS_STYLE, themeFor } from '@/lib/theme'
-import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, startOfMonth } from '@/lib/utils'
+import { cn, daysBetween, formatDate, formatMoney, formatMonth, startOfDay, startOfMonth, toISODate } from '@/lib/utils'
 import { collectionBreakdown } from '@/server/services/analytics'
 import { PageHeader } from '@/components/app/page-header'
 import { ExportButton } from '@/components/app/export-button'
@@ -58,7 +58,13 @@ export default async function RentPage({
     organizationId: scope.organizationId,
     propertyId: { in: propertyIds },
     ...(status ? { status } : {}),
-    ...(month ? { periodStart: new Date(month) } : {}),
+    // "YYYY-MM-DD" is an Indian calendar day: match that whole day.
+    ...(month && /^\d{4}-\d{2}-\d{2}$/.test(month)
+      ? (() => {
+          const [y, m, d] = month.split('-').map(Number)
+          return { periodStart: { gte: new Date(y, m - 1, d), lt: new Date(y, m - 1, d + 1) } }
+        })()
+      : {}),
     ...(q
       ? {
           OR: [
@@ -179,7 +185,7 @@ export default async function RentPage({
             paramKey="month"
             placeholder="All months"
             options={months.map((m) => ({
-              value: m.periodStart.toISOString().slice(0, 10),
+              value: toISODate(m.periodStart),
               label: formatMonth(m.periodStart),
             }))}
           />

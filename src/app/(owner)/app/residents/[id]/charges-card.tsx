@@ -76,7 +76,7 @@ export function ChargesCard({
 
   const live = charges.filter((c) => !c.voidedAt)
   const voided = charges.filter((c) => c.voidedAt)
-  const isEnded = (c: ChargeItem) => c.kind !== 'ONE_TIME' && c.endDate !== null && c.endDate.slice(0, 10) < today
+  const isEnded = (c: ChargeItem) => c.kind !== 'ONE_TIME' && c.endDate !== null && toISODate(new Date(c.endDate)) < today
   const list = showVoided ? charges : live
 
   return (

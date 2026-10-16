@@ -48,7 +48,7 @@ export function AttendanceGrid({
   const [busy, setBusy] = React.useState(false)
 
   const today = toISODate(new Date())
-  const byDate = new Map(days.map((d) => [d.date.slice(0, 10), d.status]))
+  const byDate = new Map(days.map((d) => [toISODate(new Date(d.date)), d.status]))
 
   // Oldest first, so the strip reads left to right like a calendar.
   const cells = Array.from({ length: 30 }, (_, i) => {

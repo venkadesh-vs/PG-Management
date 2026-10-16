@@ -21,7 +21,10 @@ const schema = z.discriminatedUnion('action', [
     action: z.literal('MARK_PAID'),
     invoiceId: z.string().min(1),
     method: z.enum(['BANK_TRANSFER', 'UPI', 'CASH', 'CARD']).optional(),
-    reference: z.string().optional(),
+    reference: z.string().trim().max(60).optional(),
+    // Part payment; empty = the whole bill.
+    amount: z.coerce.number().int().min(1).max(10_000_000).optional(),
+    paidOn: z.coerce.date().optional(),
   }),
   z.object({ action: z.literal('REPRICE'), subscriptionId: z.string().min(1) }),
   z.object({
@@ -96,10 +99,15 @@ export const POST = route(
         invoiceId: body.invoiceId,
         method: body.method,
         reference: body.reference,
+        amount: body.amount,
+        paidOn: body.paidOn,
         actor: { id: user.id, name: user.name, role: user.role },
       })
       return ok({
-        message: `${invoice.number} marked paid — ${formatMoney(invoice.total)}`,
+        message:
+          invoice.remaining > 0
+            ? `${formatMoney(invoice.received)} recorded — ${formatMoney(invoice.remaining)} still due on this bill`
+            : `Bill paid — ${formatMoney(invoice.received)} recorded`,
       })
     }
 

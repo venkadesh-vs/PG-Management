@@ -1381,9 +1381,14 @@ export async function markSubscriptionInvoicePaid(params: {
   invoiceId: string
   method?: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CARD'
   reference?: string
+  /** Part payment: what was received. Defaults to the whole bill. */
+  amount?: number
+  /** The day the money arrived. Defaults to now. */
+  paidOn?: Date
   actor: { id?: string; name: string }
 }) {
   let due = 0
+  let received = 0
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.subscriptionInvoice.findUnique({
       where: { id: params.invoiceId },
@@ -1394,18 +1399,32 @@ export async function markSubscriptionInvoicePaid(params: {
     const lines = await billLines(tx, invoice.subscription.organizationId, params.invoiceId)
     due = lines.reduce((sum, l) => sum + lineDue(l), 0)
     if (!lines.length || due <= 0) throw new ConflictError('This bill is already paid')
-    // Same settle + reactivation path as Pay now and AutoPay charges.
-    return settleBill(tx, {
+    received = params.amount ?? due
+    if (!Number.isInteger(received) || received <= 0) throw new ValidationError('Enter the amount received')
+    if (received > due) throw new ValidationError(`Only ${formatMoney(due)} is due on this bill`)
+    if (params.paidOn && startOfDay(params.paidOn) > startOfDay(new Date())) throw new ValidationError('The payment date cannot be in the future')
+    // Same settle + reactivation path as Pay now and AutoPay charges; a part
+    // payment clears the oldest lines first.
+    const started = new Date()
+    const settled = await settleBill(tx, {
       lineIds: lines.map((l) => l.id),
-      amount: due,
+      amount: received,
       method: params.method ?? 'BANK_TRANSFER',
       provider: params.reference ? `manual:${params.reference.slice(0, 60)}` : 'manual',
       isDemo: paymentMode() === 'demo',
       actor: params.actor,
     })
+    // Back-date the receipt to when the money arrived. Settlement itself runs
+    // as of today so overdue checks and reactivation stay correct.
+    if (params.paidOn) {
+      const lineIds = lines.map((l) => l.id)
+      await tx.subscriptionPayment.updateMany({ where: { invoiceId: { in: lineIds }, createdAt: { gte: started } }, data: { paidAt: params.paidOn } })
+      await tx.subscriptionInvoice.updateMany({ where: { id: { in: lineIds }, paidAt: { gte: started } }, data: { paidAt: params.paidOn } })
+    }
+    return settled
   })
-  if (!result.alreadyPaid) await notifyPaid(result.invoice, due, result.reactivated)
-  return result.invoice
+  if (!result.alreadyPaid) await notifyPaid(result.invoice, received, result.reactivated)
+  return { ...result.invoice, received, remaining: due - received }
 }
 
 /** Platform-wide MRR and subscription health, for the Super Admin dashboard. */
@@ -2785,6 +2804,8 @@ export async function adminMarkInvoicePaid(params: {
   invoiceId: string
   method?: 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CARD'
   reference?: string
+  amount?: number
+  paidOn?: Date
   actor: Actor
 }) {
   const before = await prisma.subscriptionInvoice.findUnique({
@@ -2810,7 +2831,9 @@ export async function adminMarkInvoicePaid(params: {
     event: 'ADMIN_ACTION',
     entityType: 'SubscriptionInvoice',
     entityId: before.id,
-    summary: `${before.number} marked paid by StayFlow (${params.method ?? 'BANK_TRANSFER'}${params.reference ? ` · ${params.reference}` : ''})`,
+    summary: `${formatMoney(invoice.received)} received by StayFlow for ${before.number} (${params.method ?? 'BANK_TRANSFER'}${params.reference ? ` · ${params.reference}` : ''})${
+      invoice.remaining > 0 ? ` · ${formatMoney(invoice.remaining)} still due` : ''
+    }`,
     meta: { action: 'MARK_PAID' },
     before: {
       invoiceStatus: before.status,
@@ -2818,8 +2841,8 @@ export async function adminMarkInvoicePaid(params: {
       subscriptionStatus: before.subscription.status,
     },
     after: {
-      invoiceStatus: 'PAID',
-      amountPaid: invoice.total,
+      invoiceStatus: invoice.remaining > 0 ? 'PARTIALLY_PAID' : 'PAID',
+      amountPaid: invoice.amountPaid,
       subscriptionStatus: sub?.status ?? null,
     },
   })

@@ -42,7 +42,7 @@ export const POST = route(
     return ok(
       {
         claim: { id: claim.id, status: claim.status },
-        message: 'Thanks — we are checking your payment. Your account is restored as soon as it is verified.',
+        message: 'Thanks — we are checking your payment and will mark your bill paid once it is verified.',
       },
       { status: 201 },
     )

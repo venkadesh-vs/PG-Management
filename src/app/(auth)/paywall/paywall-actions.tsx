@@ -80,7 +80,7 @@ export function PaidClaimForm({
   if (!open) {
     return (
       <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(true)}>
-        I&apos;ve paid by UPI / bank transfer
+        I&apos;ve paid by GPay / UPI / bank transfer
       </Button>
     )
   }

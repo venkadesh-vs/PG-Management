@@ -44,7 +44,7 @@ export function RentRevisionCard({
 }) {
   const [open, setOpen] = React.useState(false)
   const today = toISODate(new Date())
-  const scheduled = revisions.find((r) => r.effectiveFrom.slice(0, 10) > today)
+  const scheduled = revisions.find((r) => toISODate(new Date(r.effectiveFrom)) > today)
 
   return (
     <Card>
@@ -104,7 +104,7 @@ export function RentRevisionCard({
         <ReviseDialog
           residentId={residentId}
           rentAmount={rentAmount}
-          minDate={revisions.length ? revisions[0].effectiveFrom.slice(0, 10) : undefined}
+          minDate={revisions.length ? toISODate(new Date(revisions[0].effectiveFrom)) : undefined}
           onClose={() => setOpen(false)}
         />
       )}

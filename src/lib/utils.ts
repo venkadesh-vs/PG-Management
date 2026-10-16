@@ -68,6 +68,8 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   return new Intl.DateTimeFormat('en-IN', {
     day: '2-digit',
     month: 'short',
+    // The year only when it is not this year, so older entries are never ambiguous.
+    ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}),
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,

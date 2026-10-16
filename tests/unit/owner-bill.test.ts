@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  alignedBillDate,
   allocate,
   applyCredit,
   billStage,
@@ -26,6 +27,19 @@ describe('owner due day', () => {
     expect(nextBillDate(5, d('2026-10-05'))).toEqual(d('2026-10-05'))
     expect(nextBillDate(5, d('2026-10-06'))).toEqual(d('2026-11-05'))
     expect(nextBillDate(10, d('2026-12-20'))).toEqual(d('2027-01-10'))
+  })
+  it('changing the due day back and forth never pushes the bill months ahead', () => {
+    // Trial ends 29 Oct; the owner clicks day 5, 1, 10, 1, 7, 1 in a row.
+    let sub = { nextBillingDate: d('2026-10-29'), alignedFrom: null as Date | null }
+    for (const day of [5, 1, 10, 1, 7, 1]) {
+      const target = alignedBillDate(day, sub, d('2026-10-16'))
+      sub = { nextBillingDate: target, alignedFrom: sub.alignedFrom ?? sub.nextBillingDate }
+    }
+    expect(sub.nextBillingDate).toEqual(d('2026-11-01'))
+    // A date that already drifted is pulled back once the original is known.
+    expect(alignedBillDate(1, { nextBillingDate: d('2027-06-01'), alignedFrom: d('2026-10-29') }, d('2026-10-16'))).toEqual(d('2026-11-01'))
+    // Never a date in the past.
+    expect(alignedBillDate(1, { nextBillingDate: d('2026-12-01'), alignedFrom: d('2026-10-29') }, d('2026-11-03'))).toEqual(d('2026-12-01'))
   })
 })
 

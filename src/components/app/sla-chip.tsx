@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { AlarmClock, CheckCircle2, Timer } from 'lucide-react'
 import { slaState, type SlaTone } from '@/lib/sla'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 
 /** PRD §11 tones: critical red, high orange, medium amber, resolved green. */
 const TONE: Record<SlaTone, string> = {
@@ -53,7 +53,7 @@ export function SlaChip({
         state.overdue && 'animate-[pulse_2.5s_ease-in-out_infinite]',
         className,
       )}
-      title={slaDueAt ? `SLA due ${new Date(slaDueAt).toLocaleString()}` : undefined}
+      title={slaDueAt ? `SLA due ${formatDateTime(slaDueAt)}` : undefined}
     >
       <Icon className={size === 'lg' ? 'size-4' : 'size-3'} />
       {state.label}

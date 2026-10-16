@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { toISODate } from '@/lib/utils'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toCsv } from '@/lib/csv'
@@ -114,7 +115,7 @@ export async function jobResultsCsv(organizationId: string, jobId: string) {
     outcomes.map((o) => [o.row, o.status, o.title, o.message ?? '']),
   )
   const kind = (KIND_LABELS[job.kind as ImportKind]?.nounPlural ?? job.kind).replace(/\s+/g, '-')
-  const stamp = job.createdAt.toISOString().slice(0, 10)
+  const stamp = toISODate(job.createdAt)
   return { csv, fileName: `stayflow-import-${kind}-${stamp}-results.csv` }
 }
 

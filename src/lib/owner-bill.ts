@@ -39,6 +39,18 @@ export function nextBillDate(dueDay: number, from: Date): Date {
   return thisMonth >= start ? thisMonth : new Date(start.getFullYear(), start.getMonth() + 1, day)
 }
 
+/**
+ * Where a subscription's next bill goes when the owner's due day is applied.
+ * Always counted from the date it had before any move (`alignedFrom`), so
+ * changing the due day back and forth never pushes the bill months ahead.
+ */
+export function alignedBillDate(dueDay: number, sub: { nextBillingDate: Date; alignedFrom: Date | null }, today = new Date()): Date {
+  const original = dateOnly(sub.alignedFrom ?? sub.nextBillingDate)
+  // Never into the past: the days since then are charged pro rata on the first bill.
+  const from = original < dateOnly(today) ? dateOnly(today) : original
+  return nextBillDate(dueDay, from)
+}
+
 export type BillStage = 'upcoming' | 'due' | 'warning' | 'late' | 'paused'
 
 /** Where an unpaid bill stands on `now`. */

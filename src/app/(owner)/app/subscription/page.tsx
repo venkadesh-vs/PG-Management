@@ -20,6 +20,8 @@ import {
   TableWrap,
 } from '@/components/ui/table'
 import { AutopayPanel } from './autopay-panel'
+import { OwnerAutopayCard } from './owner-autopay-card'
+import { ownerAutopayStatus } from '@/server/services/owner-autopay'
 import { PayInvoiceButton } from './pay-invoice-button'
 import { DueDayPicker } from './due-day-picker'
 import { LATE_FEE_AFTER_DAYS, LATE_FEE_PERCENT } from '@/lib/owner-bill'
@@ -152,6 +154,7 @@ export default async function SubscriptionPage() {
     .filter((i) => i.status === 'PAID')
     .reduce((sum, i) => sum + i.total, 0)
   const demo = paymentMode() === 'demo'
+  const autopay = await ownerAutopayStatus(user.organizationId)
   // No platform gateway and not a demo deployment: nothing can be paid online yet.
   const payUnavailable = demo && !demoPaymentsAllowed()
   const atRisk = subscriptions.some((s) => s.status === 'GRACE' || s.status === 'PAST_DUE')
@@ -242,6 +245,16 @@ export default async function SubscriptionPage() {
           </div>
         </CardContent>
       </Card>
+
+      {subscriptions.some((s) => s.status !== 'CANCELLED') && (
+        <OwnerAutopayCard
+          view={{
+            ...autopay,
+            dueDay,
+            upcoming: autopay.upcoming ? { ...autopay.upcoming, chargeDate: autopay.upcoming.chargeDate.toISOString() } : null,
+          }}
+        />
+      )}
 
       {payUnavailable && (
         <Card className="border-amber-200 bg-amber-50/50">

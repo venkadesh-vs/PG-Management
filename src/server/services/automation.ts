@@ -19,6 +19,7 @@ import {
   runSubscriptionBilling,
 } from './subscriptions'
 import { runOwnerBillingReminders } from './owner-billing'
+import { runOwnerAutopay } from './owner-autopay'
 import { expectedMealCount, MEAL_TYPES } from './kitchen'
 import { retryFailedWhatsApp } from '../integrations/whatsapp'
 import { orgsWithModuleOff } from './org-modules'
@@ -276,6 +277,8 @@ async function runSteps(
       report.subscriptions.failed += retries.failed
       report.subscriptions.billed += retries.recovered
     }
+    // Owner AutoPay: notices the day before, debits on the due day, retries.
+    await runOwnerAutopay({ now, organizationId: options?.organizationId, errors })
     await applyLateFees(now)
     const grace = await enforceGracePeriods(now)
     report.subscriptions.suspended = grace.suspended

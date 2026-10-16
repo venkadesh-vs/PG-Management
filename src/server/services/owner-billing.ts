@@ -376,7 +376,10 @@ export async function runOwnerBillingReminders(now = new Date(), organizationId?
     const balance = bill.lines.reduce((sum, l) => sum + Math.max(0, l.total - l.amountPaid), 0)
     const graced = bill.subs.filter((s) => s.status === 'GRACE' && s.graceEndsAt)
     const lead = graced[0] ?? bill.subs[0]
-    const autopay = bill.subs.every((s) => s.autopayEnabled && s.mandateStatus === 'ACTIVE')
+    const autopay =
+      bill.subs.every((s) => s.autopayEnabled && s.mandateStatus === 'ACTIVE') || Boolean(
+        await prisma.ownerMandate.findFirst({ where: { organizationId: bill.organizationId, status: 'ACTIVE', maxAmount: { gte: balance } }, select: { id: true } }),
+      )
     const propertyName = bill.subs.length > 1 ? `your ${bill.subs.length} PGs` : bill.subs[0].property.name
     const due = remindersDue({
       today,

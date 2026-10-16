@@ -1933,6 +1933,11 @@ export async function handlePlatformWebhook(event: RazorpayWebhookEvent): Promis
   const remote = event.payload?.subscription?.entity
   const payment = event.payload?.payment?.entity
 
+  // Owner AutoPay for the combined bill (mandate approvals, tokens, debits).
+  const { handleOwnerAutopayWebhook } = await import('./owner-autopay')
+  const ownerAutopay = await handleOwnerAutopayWebhook(event, creds)
+  if (ownerAutopay) return ownerAutopay
+
   if (name.startsWith('subscription.')) {
     if (!remote?.id) return { handled: false, note: 'no subscription entity' }
     switch (name) {

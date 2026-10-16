@@ -62,8 +62,9 @@ export function ExportButton({
   return <ExportMenu label={label} csv={`/api/exports/${kind}.csv${qs}`} pdf={`/api/exports/${kind}.pdf${qs}`} />
 }
 
-/** "Export ▾" → Excel (CSV) or PDF. Also used by pages that build their own export URLs. */
+/** "Export ▾" → PDF report, Excel (.xlsx) or raw CSV. Also used by pages that build their own export URLs. */
 export function ExportMenu({ label = 'Export', csv, pdf }: { label?: string; csv: string; pdf: string }) {
+  const xlsx = csv.replace(/\.csv(\?|$)/, '.xlsx$1')
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -73,17 +74,32 @@ export function ExportMenu({ label = 'Export', csv, pdf }: { label?: string; csv
           <ChevronDown className="size-3.5 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="min-w-[14rem]">
         <DropdownMenuItem asChild>
           <a href={pdf} download>
             <FileText className="size-4 text-rose-600" />
-            PDF report
+            <span className="flex flex-col">
+              <span className="font-medium">PDF report</span>
+              <span className="text-xs text-slate-500">Print-ready, key columns and totals</span>
+            </span>
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={xlsx} download>
+            <FileSpreadsheet className="size-4 text-emerald-600" />
+            <span className="flex flex-col">
+              <span className="font-medium">Excel (.xlsx)</span>
+              <span className="text-xs text-slate-500">Every column, formatted, with filters</span>
+            </span>
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <a href={csv} download>
-            <FileSpreadsheet className="size-4 text-emerald-600" />
-            Excel (CSV)
+            <FileSpreadsheet className="size-4 text-slate-400" />
+            <span className="flex flex-col">
+              <span className="font-medium">CSV</span>
+              <span className="text-xs text-slate-500">Raw data for other software</span>
+            </span>
           </a>
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -18,7 +18,9 @@ import { dailyCollectionReport } from '@/server/services/billing'
 import { profitAndLoss } from '@/server/services/analytics'
 import type { PnlFigures } from '@/server/services/pnl'
 import { toCsv } from '@/lib/csv'
-import { renderReport } from '@/server/documents/pdf'
+import { platformCompany, renderReport } from '@/server/documents/pdf'
+import { addReportSheet, type SheetMeta } from '@/server/documents/xlsx'
+import { pdfTable } from '@/lib/report-format'
 import { AUDIT_CSV_HEADER, parseAuditFilters } from '@/lib/audit-filters'
 import { auditCsvRows, orgAuditWhere } from '@/server/services/audit-log'
 import { ELECTRICITY_EXPORT_HEADER, electricityExportRows } from '@/server/services/electricity'
@@ -32,8 +34,10 @@ import { ELECTRICITY_EXPORT_HEADER, electricityExportRows } from '@/server/servi
  *        daily-collection (?date=YYYY-MM-DD), pnl (?from=YYYY-MM&to=YYYY-MM — month range),
  *        complaints, maintenance, assets, visitors, staff, enquiries, bookings, deposits, charges,
  *        rent-revisions, activity (same filters as /app/activity: q, event, group, actor, entity, range)
- * GET /api/exports/<kind>.pdf — the same rows as a designed PDF report (company, PG,
- *        period, page numbers and © on every page).
+ * GET /api/exports/<kind>.pdf — a designed PDF report (key columns, readable dates and
+ *        statuses, totals; company, PG, period, page numbers and © on every page).
+ * GET /api/exports/<kind>.xlsx — a designed Excel sheet with every column (title block,
+ *        styled header, filters, ₹ and date formats, totals).
  * GET /api/exports/all — owner only: every area as one Excel workbook.
  */
 
@@ -490,13 +494,25 @@ async function businessOf(organizationId: string) {
   }
 }
 
-/** "Sri Balaji Men's PG" for one PG, else the PGs it covers. */
+/** The PG heading: the PG for one, "All PGs (n)" plus their names for several. */
 async function pgLabelOf(scope: PropertyScope) {
   const ids = scope.propertyId ? [scope.propertyId] : scope.allowedPropertyIds
   const pgs = await prisma.property.findMany({ where: { id: { in: ids } }, select: { name: true, city: true }, orderBy: { name: 'asc' } })
-  if (pgs.length === 1) return `${pgs[0].name}${pgs[0].city ? `, ${pgs[0].city}` : ''}`
-  if (pgs.length <= 3) return pgs.map((p) => p.name).join(' · ') || 'All PGs'
-  return `All PGs (${pgs.length})`
+  if (pgs.length === 1) return { label: `${pgs[0].name}${pgs[0].city ? `, ${pgs[0].city}` : ''}`, lines: [] as string[] }
+  return { label: `All PGs (${pgs.length})`, lines: pgs.length ? [`PGs: ${pgs.map((p) => p.name).join(', ')}`] : [] }
+}
+
+/** Everything a designed export prints around the table. */
+async function reportMeta(kind: Kind, user: SessionUser, scope: PropertyScope, url: URL): Promise<SheetMeta> {
+  const [business, pg, company] = await Promise.all([businessOf(scope.organizationId), pgLabelOf(scope), platformCompany()])
+  return {
+    title: REPORT_TITLE[kind],
+    pgLabel: pg.label,
+    business,
+    context: [...pg.lines, ...reportContext(kind, url)],
+    generatedBy: user.name,
+    company: company.name,
+  }
 }
 
 /** Period and filters, as printed under the PG name. */
@@ -536,10 +552,7 @@ async function allDataWorkbook(user: SessionUser) {
   for (const [kind, name] of ALL_DATA_SHEETS) {
     if (!canExportKind(user, kind)) continue
     const { header, rows } = await buildExport(kind, { user, url, scope })
-    const sheet = workbook.addWorksheet(name)
-    sheet.addRow(header).font = { bold: true }
-    for (const row of rows) sheet.addRow(row.map((v) => (v === null || v === undefined ? '' : v)))
-    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+    addReportSheet(workbook, name, kind, header, rows, await reportMeta(kind, user, scope, url))
     summary.addRow([name, rows.length])
   }
   summary.getColumn(1).width = 24
@@ -564,8 +577,8 @@ export const GET = route(
       })
     }
 
-    const asPdf = name.endsWith('.pdf')
-    const kind = name.replace(/\.(csv|pdf)$/, '') as Kind
+    const format = name.endsWith('.pdf') ? 'pdf' : name.endsWith('.xlsx') ? 'xlsx' : 'csv'
+    const kind = name.replace(/\.(csv|pdf|xlsx)$/, '') as Kind
     if (!KINDS.includes(kind)) return fail('Unknown export', 404)
     requireModule(user, KIND_ACCESS[kind].module)
     requirePermission(user, KIND_ACCESS[kind].permission)
@@ -573,20 +586,28 @@ export const GET = route(
     const scope = await resolveScope(user, url.searchParams.get('property'))
     const { header, rows } = await buildExport(kind, { user, url, scope })
 
-    if (asPdf) {
-      const pdf = await renderReport({
-        title: REPORT_TITLE[kind],
-        business: await businessOf(scope.organizationId),
-        pgLabel: await pgLabelOf(scope),
-        context: reportContext(kind, url),
-        columns: header,
-        rows,
-        generatedBy: user.name,
-      })
+    const stamp = toISODate(new Date())
+    if (format === 'pdf') {
+      const meta = await reportMeta(kind, user, scope, url)
+      const pdf = await renderReport({ ...meta, table: pdfTable(kind, header, rows) })
       return new NextResponse(Buffer.from(pdf), {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="stayflow-${kind}-${toISODate(new Date())}.pdf"`,
+          'Content-Disposition': `attachment; filename="stayflow-${kind}-${stamp}.pdf"`,
+          'Cache-Control': 'private, no-store',
+        },
+      })
+    }
+    if (format === 'xlsx') {
+      const ExcelJS = (await import('exceljs')).default
+      const workbook = new ExcelJS.Workbook()
+      workbook.creator = 'StayFlow'
+      workbook.created = new Date()
+      addReportSheet(workbook, REPORT_TITLE[kind], kind, header, rows, await reportMeta(kind, user, scope, url))
+      return new NextResponse(new Uint8Array(await workbook.xlsx.writeBuffer()), {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="stayflow-${kind}-${stamp}.xlsx"`,
           'Cache-Control': 'private, no-store',
         },
       })

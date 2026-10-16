@@ -6,6 +6,7 @@ import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage, type RGB } from 'pdf-lib'
 import { platformEnv } from '@/lib/platform-env'
 import { getPlatformPaymentDetails } from '@/server/services/owner-billing'
+import type { ReportTable } from '@/lib/report-format'
 
 /**
  * StayFlow's PDF documents (invoices, receipts, settlements) and PDF reports
@@ -315,16 +316,35 @@ export type ReportSpec = {
   title: string
   /** The owner's business. */
   business: Party
-  /** Which PG(s) the report covers, e.g. "Sri Balaji Men's PG" or "All PGs (3)". */
+  /** Heading: the PG, or "All PGs (3)". */
   pgLabel: string
-  /** Extra context lines: period, filters. */
+  /** Extra context lines: PG names, period, filters. */
   context: string[]
-  columns: string[]
-  rows: (string | number | null | undefined)[][]
+  table: ReportTable
   generatedBy: string
 }
 
 const LANDSCAPE = { w: A4.h, h: A4.w }
+
+/** Splits text into lines that fit `width`; at most `max` lines, the last one ellipsed. */
+function wrap(c: Canvas, text: string, width: number, size: number, font: PDFFont, max = 3): string[] {
+  const words = c.clean(text).split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word
+    if (c.width(next, size, font) <= width) {
+      line = next
+      continue
+    }
+    if (line) lines.push(line)
+    line = c.width(word, size, font) <= width ? word : c.fit(word, width, size, font)
+    if (lines.length === max) break
+  }
+  if (line && lines.length < max) lines.push(line)
+  if (lines.length === max && words.join(' ') !== lines.join(' ')) lines[max - 1] = c.fit(`${lines[max - 1]} …`, width, size, font)
+  return lines.length ? lines : ['']
+}
 
 export async function renderReport(spec: ReportSpec): Promise<Uint8Array> {
   const pdf = await PDFDocument.create()
@@ -337,65 +357,95 @@ export async function renderReport(spec: ReportSpec): Promise<Uint8Array> {
   const company = await platformCompany()
   const { font, bold } = fonts
   const { w } = c
+  const { columns, rows, totals } = spec.table
 
-  const cells = spec.rows.map((r) => r.map((v) => (v === null || v === undefined ? '' : typeof v === 'number' ? new Intl.NumberFormat('en-IN').format(v) : String(v))))
-  // Amounts and counts align right; phone numbers and long ids (6+ plain digits) stay left.
-  const numeric = spec.columns.map((_, i) => cells.some((r) => r[i] !== '') && cells.every((r) => r[i] === '' || (/^-?[\d,]+(\.\d+)?$/.test(r[i]) && !/^\d{6,}$/.test(r[i]))))
-
-  // Column widths from content, scaled to the page; long text is truncated.
-  const size = spec.columns.length > 12 ? 6.8 : spec.columns.length > 8 ? 7.5 : 8.5
+  const size = columns.length > 10 ? 7.6 : columns.length > 7 ? 8.2 : 9
+  const headSize = size - 0.6
+  const pad = 6
   const avail = w - 2 * M
-  const natural = spec.columns.map((col, i) => {
-    const sample = cells.slice(0, 300).map((r) => c.width(r[i] ?? '', size))
-    const longest = Math.max(c.width(col, size - 0.5, bold), ...sample, 20)
-    return Math.min(longest + 10, avail * 0.32)
+  const right = columns.map((col) => col.kind === 'money' || col.kind === 'number')
+
+  // Widths: dates, amounts and statuses get what they need; text columns share the rest by content.
+  const need = columns.map((col, i) => {
+    const longest = Math.max(...rows.slice(0, 400).map((r) => c.width(r[i] ?? '', size)), totals ? c.width(totals[i] ?? '', size, bold) : 0)
+    const head = Math.min(c.width(col.label.toUpperCase(), headSize, bold), 70)
+    return Math.max(longest, head, 24) + 2 * pad
   })
-  const total = natural.reduce((s, x) => s + x, 0)
-  const widths = natural.map((x) => (x * avail) / total)
+  // Dates, amounts, statuses and numbers keep their full width on one line;
+  // only text columns (names, titles, PG) give up room, down to a minimum.
+  const fixed = columns.map((col) => col.kind !== 'text')
+  const fixedW = need.reduce((s, x, i) => s + (fixed[i] ? Math.min(x, 140) : 0), 0)
+  const textIdx = columns.map((_, i) => i).filter((i) => !fixed[i])
+  const textNeed = textIdx.reduce((s, i) => s + need[i], 0)
+  const textRoom = avail - fixedW
+  let widths = need.map((x, i) => (fixed[i] ? Math.min(x, 140) : x))
+  if (textIdx.length) {
+    const minText = 56
+    if (textNeed > textRoom) {
+      // Shrink text columns towards their share of the room, never below minText.
+      for (const i of textIdx) widths[i] = Math.max(minText, (need[i] / textNeed) * textRoom)
+    } else {
+      // Spare room: text columns grow in proportion to their content.
+      for (const i of textIdx) widths[i] = need[i] + ((textRoom - textNeed) * need[i]) / textNeed
+    }
+  }
+  // Still too wide (very many columns): scale everything as a last resort.
+  const sum = widths.reduce((s, x) => s + x, 0)
+  if (sum > avail) widths = widths.map((x) => (x * avail) / sum)
+  else if (!textIdx.length && sum < avail) widths = widths.map((x) => x + (avail - sum) / widths.length)
 
   let page = pdf.addPage([LANDSCAPE.w, LANDSCAPE.h])
   const head = () =>
     letterhead(c, page, {
-      issuer: { label: 'PG', name: spec.pgLabel, lines: spec.context },
+      issuer: { label: spec.pgLabel.startsWith('All PGs') ? 'Report for' : 'PG', name: spec.pgLabel, lines: spec.context },
       business: spec.business,
       title: spec.title,
-      reference: `${cells.length} ${cells.length === 1 ? 'record' : 'records'}`,
+      reference: `${rows.length} ${rows.length === 1 ? 'record' : 'records'}`,
     })
   let y = head()
   const tableHeader = () => {
-    const hh = 20
-    page.drawRectangle({ x: M, y: y - hh + 13, width: avail, height: hh, color: INK })
+    const labels = columns.map((col, i) => wrap(c, col.label.toUpperCase(), widths[i] - 2 * pad, headSize, bold, 2))
+    const hh = Math.max(...labels.map((l) => l.length)) * (headSize + 2.5) + 10
+    page.drawRectangle({ x: M, y: y - hh, width: avail, height: hh, color: INK })
     let x = M
-    spec.columns.forEach((col, i) => {
-      const label = c.fit(col.toUpperCase(), widths[i] - 8, size - 0.8, bold)
-      if (numeric[i]) c.right(page, label, x + widths[i] - 4, y, size - 0.8, bold, rgb(1, 1, 1))
-      else c.text(page, label, x + 4, y, size - 0.8, bold, rgb(1, 1, 1))
+    labels.forEach((lines, i) => {
+      lines.forEach((t, li) => {
+        const ty = y - 6 - headSize - li * (headSize + 2.5)
+        if (right[i]) c.right(page, t, x + widths[i] - pad, ty, headSize, bold, rgb(1, 1, 1))
+        else c.text(page, t, x + pad, ty, headSize, bold, rgb(1, 1, 1))
+      })
       x += widths[i]
     })
-    y -= hh + 2
+    y -= hh
   }
   tableHeader()
-  const rowH = size + 8
-  if (!cells.length) {
-    c.text(page, 'No records for this selection.', M + 4, y - 4, 10, font, MUTED)
-  }
-  cells.forEach((row, r) => {
-    if (y - rowH < FOOTER_H + 16) {
+  const lineH = size + 3
+  const drawRow = (cells: string[], opts: { zebra: boolean; strong?: boolean }) => {
+    const f = opts.strong ? bold : font
+    const lines = cells.map((cell, i) => (columns[i].kind === 'text' ? wrap(c, cell, widths[i] - 2 * pad, size, f) : [c.fit(cell, widths[i] - 2 * pad, size, f)]))
+    const rh = Math.max(...lines.map((l) => l.length)) * lineH + 8
+    if (y - rh < FOOTER_H + 14) {
       page = pdf.addPage([LANDSCAPE.w, LANDSCAPE.h])
       y = head()
       tableHeader()
     }
-    if (r % 2 === 1) page.drawRectangle({ x: M, y: y - rowH + size + 3, width: avail, height: rowH, color: SOFT })
+    if (opts.strong) page.drawRectangle({ x: M, y: y - rh, width: avail, height: rh, color: BRAND_SOFT })
+    else if (opts.zebra) page.drawRectangle({ x: M, y: y - rh, width: avail, height: rh, color: SOFT })
     let x = M
-    row.forEach((cell, i) => {
-      const t = c.fit(cell, widths[i] - 8, size)
-      if (numeric[i]) c.right(page, t, x + widths[i] - 4, y, size, font)
-      else c.text(page, t, x + 4, y, size, font)
+    lines.forEach((ls, i) => {
+      ls.forEach((t, li) => {
+        const ty = y - 4 - size - li * lineH
+        if (right[i]) c.right(page, t, x + widths[i] - pad, ty, size, f, opts.strong ? BRAND : INK)
+        else c.text(page, t, x + pad, ty, size, f, columns[i].kind === 'status' || columns[i].kind === 'date' ? MUTED : INK)
+      })
       x += widths[i]
     })
-    y -= rowH
-  })
-  page.drawLine({ start: { x: M, y: y + size + 3 }, end: { x: w - M, y: y + size + 3 }, thickness: 0.8, color: LINE })
+    y -= rh
+    page.drawLine({ start: { x: M, y }, end: { x: w - M, y }, thickness: 0.4, color: LINE })
+  }
+  if (!rows.length) c.text(page, 'No records for this selection.', M + pad, y - 18, 10, font, MUTED)
+  rows.forEach((row, r) => drawRow(row, { zebra: r % 2 === 1 }))
+  if (totals) drawRow(totals, { zebra: false, strong: true })
 
   footers(c, company, `${spec.title} · generated by ${spec.generatedBy} on ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })} · StayFlow`)
   return pdf.save()

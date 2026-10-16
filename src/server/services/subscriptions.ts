@@ -4,7 +4,7 @@ import type { BillingCycle, PaymentMethodKind, Plan, Prisma, Property, UserRole 
 import { prisma } from '@/lib/prisma'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/tenancy'
 import { notifyOrgAdmins, notifySuperAdmins, recordActivity } from '../events'
-import { addDays, addMonths, formatMoney, startOfDay } from '@/lib/utils'
+import { addDays, addMonths, formatDate, formatMoney, startOfDay } from '@/lib/utils'
 import { computeGst, financialYear } from '@/lib/gst'
 import { platformEnv } from '@/lib/platform-env'
 import {
@@ -2613,6 +2613,8 @@ export async function resumeSubscription(params: {
 
 export type AdminSubscriptionAction =
   | { action: 'EXTEND_TRIAL'; days: number }
+  /** Sets the trial end to an exact day (earlier or later); billing starts on the owner's due day after it. */
+  | { action: 'SET_TRIAL_END'; date: string; allPgs?: boolean }
   | { action: 'APPLY_CREDIT'; amount: number; note?: string }
   | { action: 'CANCEL'; reason?: string }
   | { action: 'REACTIVATE' }
@@ -2670,6 +2672,26 @@ export async function adminSubscriptionAction(params: {
       await reactivateOrganizationIfClear(tx, subscription.organizationId, now)
     })
     message = `Trial extended to ${trialEndsAt.toLocaleDateString('en-IN')}`
+  } else if (input.action === 'SET_TRIAL_END') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new ValidationError('Choose the day the trial ends')
+    const [y, m, d] = input.date.split('-').map(Number)
+    const trialEndsAt = new Date(y, m - 1, d)
+    if (trialEndsAt < startOfDay(now)) throw new ValidationError('The trial cannot end in the past')
+    if (trialEndsAt > addDays(now, 365)) throw new ValidationError('A trial can run for a year at most')
+    if (subscription.status !== 'TRIALING') throw new ConflictError('This PG is not on a free trial')
+    const targets = input.allPgs
+      ? await prisma.subscription.findMany({ where: { organizationId: subscription.organizationId, status: 'TRIALING' }, select: { id: true } })
+      : [{ id: subscription.id }]
+    const firstBill = nextBillDate(await ownerDueDay(subscription.organizationId), trialEndsAt)
+    await prisma.subscription.updateMany({
+      where: { id: { in: targets.map((t) => t.id) } },
+      data: {
+        trialEndsAt,
+        nextBillingDate: firstBill,
+        alignedFrom: firstBill.getTime() > trialEndsAt.getTime() ? trialEndsAt : null,
+      },
+    })
+    message = `Trial ${targets.length > 1 ? `of ${targets.length} PGs ` : ''}now ends on ${formatDate(trialEndsAt)}; first bill due ${formatDate(firstBill)}`
   } else if (input.action === 'APPLY_CREDIT') {
     const open = await prisma.subscriptionInvoice.findMany({
       where: {
@@ -2789,6 +2811,7 @@ export async function adminSubscriptionAction(params: {
     meta: {
       action: input.action,
       ...('days' in input ? { days: input.days } : {}),
+      ...('date' in input ? { trialEndsOn: input.date, allPgs: Boolean(input.allPgs) } : {}),
       ...('amount' in input ? { amount: input.amount } : {}),
     },
     before,

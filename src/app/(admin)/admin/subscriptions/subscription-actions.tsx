@@ -17,10 +17,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-type Action = 'EXTEND_TRIAL' | 'APPLY_CREDIT' | 'MARK_PAID' | 'CANCEL' | 'REACTIVATE'
+type Action = 'EXTEND_TRIAL' | 'SET_TRIAL_END' | 'APPLY_CREDIT' | 'MARK_PAID' | 'CANCEL' | 'REACTIVATE'
 
 const LABEL: Record<Action, string> = {
   EXTEND_TRIAL: 'Extend trial',
+  SET_TRIAL_END: 'Change trial end date',
   APPLY_CREDIT: 'Apply credit',
   MARK_PAID: 'Record a payment',
   CANCEL: 'Cancel subscription',
@@ -53,11 +54,14 @@ export function SubscriptionAdminActions({
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
   const [method, setMethod] = React.useState('BANK_TRANSFER')
+  const [trialEnd, setTrialEnd] = React.useState(() => toISODate(new Date()))
+  const [allPgs, setAllPgs] = React.useState(true)
   const [paidOn, setPaidOn] = React.useState(() => toISODate(new Date()))
   const [busy, setBusy] = React.useState(false)
 
   const available: Action[] = []
   if (status !== 'CANCELLED') available.push('EXTEND_TRIAL')
+  if (status === 'TRIALING') available.push('SET_TRIAL_END')
   if (owed > 0) available.push('APPLY_CREDIT')
   if (openInvoice) available.push('MARK_PAID')
   if (status !== 'CANCELLED') available.push('CANCEL')
@@ -72,6 +76,8 @@ export function SubscriptionAdminActions({
           ? { action, invoiceId: openInvoice?.id, method, reference: note || undefined, amount: amount ? Number(amount) : undefined, paidOn }
           : action === 'EXTEND_TRIAL'
             ? { action, subscriptionId, days: Number(days) }
+            : action === 'SET_TRIAL_END'
+              ? { action, subscriptionId, date: trialEnd, allPgs }
             : action === 'APPLY_CREDIT'
               ? { action, subscriptionId, amount: Number(amount), note: note || undefined }
               : action === 'CANCEL'
@@ -123,6 +129,17 @@ export function SubscriptionAdminActions({
               <Field label="Extra days" hint="A lapsed, never-paid trial is restarted and its open invoices withdrawn">
                 <Input type="number" inputMode="numeric" min={1} max={180} value={days} onChange={(e) => setDays(e.target.value)} />
               </Field>
+            )}
+            {action === 'SET_TRIAL_END' && (
+              <>
+                <Field label="Trial ends on" hint="Earlier or later than now. The first bill is on the owner's bill day after this date.">
+                  <Input type="date" value={trialEnd} min={toISODate(new Date())} onChange={(e) => setTrialEnd(e.target.value)} />
+                </Field>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" className="size-4 accent-blue-600" checked={allPgs} onChange={(e) => setAllPgs(e.target.checked)} />
+                  All this owner&apos;s PGs on a free trial
+                </label>
+              </>
             )}
             {action === 'APPLY_CREDIT' && (
               <>

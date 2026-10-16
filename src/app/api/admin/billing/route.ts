@@ -33,6 +33,12 @@ const schema = z.discriminatedUnion('action', [
     days: z.coerce.number().int().min(1).max(180),
   }),
   z.object({
+    action: z.literal('SET_TRIAL_END'),
+    subscriptionId: z.string().min(1),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the day the trial ends'),
+    allPgs: z.boolean().optional(),
+  }),
+  z.object({
     action: z.literal('APPLY_CREDIT'),
     subscriptionId: z.string().min(1),
     amount: z.coerce.number().int().min(1).max(10_000_000, 'Amount is too large'),
@@ -113,6 +119,7 @@ export const POST = route(
 
     if (
       body.action === 'EXTEND_TRIAL' ||
+      body.action === 'SET_TRIAL_END' ||
       body.action === 'APPLY_CREDIT' ||
       body.action === 'CANCEL' ||
       body.action === 'REACTIVATE'
